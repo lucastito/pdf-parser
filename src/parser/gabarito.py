@@ -13,6 +13,7 @@ relatório declara isso; esconder seria vender rigor que não existe.
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -121,12 +122,30 @@ def _identificador(linha: dict) -> str:
     return f"{(linha.get('numero') or '').strip()} {(linha.get('descricao') or '').strip()}".strip()
 
 
+def _numero_do_item(identificador: str) -> str | None:
+    """Extrai o número que abre o identificador, se houver.
+
+    Alinhar pelo número, não pelo nome completo, tem uma razão medida: algumas
+    ferramentas fragmentam o texto no meio da palavra
+    (``"Arroz, integra l, cozido"``), e casar por nome descartaria itens cujos
+    **valores** estão corretos. O número é inequívoco e suficiente para alinhar.
+    """
+    correspondencia = re.match(r"^\s*(\d+)\b", identificador)
+    return correspondencia.group(1) if correspondencia else None
+
+
 def _indexar(registros: list[Registro]) -> dict[str, Registro]:
-    indice = {}
+    """Indexa registros pelo identificador, e também só pelo número do item."""
+    indice: dict[str, Registro] = {}
     for registro in registros:
         campo = registro.campos.get("identificador")
-        if campo and campo.valor:
-            indice[str(campo.valor).strip()] = registro
+        if not campo or not campo.valor:
+            continue
+        texto = str(campo.valor).strip()
+        indice[texto] = registro
+        numero = _numero_do_item(texto)
+        if numero:
+            indice.setdefault(f"#{numero}", registro)
     return indice
 
 
@@ -144,8 +163,15 @@ def medir_acuracia(
     tê-lo encontrado.
     """
     obtidos = _indexar(registros)
-    esperados = {
-        chave: {campo: valor for campo, valor in valores.items()}
-        for chave, valores in gabarito.itens.items()
-    }
+    esperados = {}
+    for chave, valores in gabarito.itens.items():
+        # Prefere o identificador completo; recorre ao número quando a ferramenta
+        # fragmentou o nome. Sem esse recuo, valores corretos seriam descartados
+        # por causa de um espaço no lugar errado.
+        if chave in obtidos:
+            esperados[chave] = dict(valores)
+            continue
+        numero = _numero_do_item(chave)
+        esperados[f"#{numero}" if numero and f"#{numero}" in obtidos else chave] = dict(valores)
+
     return avaliar(estrategia, obtidos, esperados, tolerancia=tolerancia)

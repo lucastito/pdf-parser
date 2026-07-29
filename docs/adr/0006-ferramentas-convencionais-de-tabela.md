@@ -1,76 +1,83 @@
 # ADR-0006 — Ferramentas convencionais de extração de tabela
 
-**Status:** aceito · **Data:** 2026-07-29
+**Status:** aceito · **Data:** 2026-07-29 · **Revisado:** 2026-07-29 (correção material)
+
+> **Retificação.** A primeira versão deste documento registrou 0% de acurácia para
+> pdfplumber e Camelot e concluiu que produziam "volume sem conteúdo". **Estava
+> errado.** O 0% era artefato do nosso código de adaptação, não das bibliotecas.
+> Com o tratamento correto, ambas alcançam ~100%. O erro e sua correção ficam
+> registrados porque são parte do método.
 
 ## Contexto
 
 Antes de defender uma reconstrução própria, é preciso medir as ferramentas que uma
-equipe usaria por padrão. Argumento perde para evidência quando alguém pergunta
-"mas vocês tentaram?".
+equipe usaria por padrão. Argumento perde para evidência.
 
-Foram avaliadas as três ferramentas de extração de tabela mais citadas para este
-tipo de trabalho, cada uma na configuração adequada ao documento — vencer contra
-uma versão mal configurada não provaria nada.
+## O erro inicial, e o que o revelou
 
-## Medição
+A primeira medição deu 0% para pdfplumber e Camelot, com 133 e 104 registros. A
+leitura tentadora era: *"produzem volume convincente e acertam nada"*.
 
-Duas páginas do documento-caso, mesmo documento canônico, mesma normalização,
-acurácia contra gabarito conferido à mão (40 itens × 5 campos):
+A pergunta que desfez isso: **por que a rotação da página afetaria apenas o OCR?**
+A página declara `rotation=90`, e isso muda o que cada ferramenta enxerga.
 
-| Estratégia | Acurácia | Registros | Tempo | Configuração |
+Três defeitos nossos, encadeados:
+
+1. **Rotação não tratada.** Com `rotation=90` ativa, `extract_tables` encontra
+   **zero** tabelas. Desrotacionada, encontra uma com 67 linhas — e os dados estão
+   íntegros.
+2. **Alinhamento por cabeçalho.** O cabeçalho detectado é lixo (rotacionado, partido
+   em várias linhas), mas as **linhas de dados** estão corretas e na ordem. Insistir
+   no cabeçalho descartava dado bom por causa de metadado ruim.
+3. **Alinhamento de item por nome.** As ferramentas fragmentam texto no meio da
+   palavra (`"Arroz, integra l, cozido"`). Casar por nome descartava itens cujos
+   valores estavam perfeitos. O número do item é inequívoco e basta.
+
+## Medição corrigida
+
+Duas páginas, mesmo documento canônico, mesma normalização, acurácia contra gabarito
+conferido à mão (40 itens × 5 campos):
+
+| Estratégia | Acurácia | Itens | Tempo | Observação |
 |---|---|---|---|---|
-| **Reconstrução posicional** | **100%** | 64 | 0,1 s | layout declarado |
-| pdfplumber | **0%** | **133** | 0,9 s | estratégia `text` (sem grade) |
-| Camelot | **0%** | **104** | 1,0 s | modo `stream` (sem grade) |
-| Detector de borda | 0% | 4 | 0,4 s | padrão |
-| OCR + reconstrução | 0% | 2 | 4,9 s | 200 dpi |
-| Leitura linear | 0% | 0 | 0,0 s | — |
-
-## O achado que importa
-
-**pdfplumber e Camelot produziram mais registros que a estratégia vencedora — 133 e
-104 contra 64 — e acertaram nenhum.**
-
-Inspeção do que produziram:
-
-```
-campos:  ['Carbo-', 'Fibra']
-valores: {'Carbo-': 'idrato', 'Fibra': 'Alimentar'}
-```
-
-Ambas interpretaram o **cabeçalho partido em duas linhas** como se fosse dados:
-tomaram `"Carbo-"` por nome de coluna e `"idrato"` — a continuação da mesma palavra —
-por valor. Dos 237 registros somados, **zero** contêm um item identificável.
-
-Isso confirma, com número, o princípio declarado na especificação: *um extrator que
-roda sem erro e grava lixo é pior do que um que falha alto*. Se a avaliação olhasse
-apenas cobertura ou volume, estas ferramentas pareceriam as melhores.
-
-## Verificação de que o resultado não é artefato
-
-Zero de acurácia pode ter duas causas: a ferramenta lê errado, ou lê certo e o
-mapeamento de campo não reconhece. A segunda acusaria injustamente.
-
-Descartada por inspeção direta: nenhum dos 237 registros tem o campo identificador,
-e nenhum contém o padrão "número + nome" que todo item do documento exibe. Não há
-o que mapear — a estrutura extraída não corresponde à do documento.
+| Reconstrução posicional | **100,0%** | 64 | **0,1 s** | tautológico — gerou o gabarito |
+| **pdfplumber** | **100,0%** | 63 | 0,8 s | desrotacionado, alinhado por posição |
+| OCR (350 dpi) | 99,5% | 64 | 6,9 s | ver ADR-0007 |
+| **Camelot** (stream) | **99,0%** | 94 | 0,4 s | idem pdfplumber |
+| Detector de borda | 0% | 4 | 0,4 s | sem grade, nada a detectar |
+| Leitura linear | 0% | 0 | 0,0 s | ordem de leitura não corresponde à estrutura |
 
 ## Decisão
 
-Manter a reconstrução posicional como estratégia principal, e **manter as demais no
-código** como régua permanente. Não são código morto: sem elas, a escolha da
-principal volta a ser opinião.
+**As ferramentas convencionais resolvem este documento.** A reconstrução posicional
+deixa de se justificar por acurácia — empata — e passa a se justificar por:
 
-## Consequências
+- **velocidade**: 0,1 s contra 0,4–0,8 s, sem escrever arquivo temporário;
+- **independência de arquivo**: opera sobre o formato canônico, não sobre o PDF, o
+  que a torna a única estratégia plenamente substituível na arquitetura;
+- **evidência por campo**: devolve a coordenada de cada valor, não só a linha.
 
-- A defesa da reconstrução própria deixa de ser argumento e passa a ser medição.
-- Fica documentado **por que** a rota convencional falha aqui: cabeçalho rotacionado
-  e partido, mais ausência de linhas de grade. Não é limitação das bibliotecas em
-  geral — é incompatibilidade com esta classe de documento.
-- OCR entra com resultado próprio: reconhece os caracteres (verificado: encontra
-  valores e rótulos numa página renderizada) mas a reconstrução a partir de
-  coordenadas de imagem produziu apenas 2 registros. Merece investigação separada
-  antes de qualquer conclusão sobre a rota por imagem.
-- Um conjunto de reserva transcrito às cegas, fora dos 40 itens do gabarito, está
-  pendente. Até que exista, a acurácia de 100% da estratégia posicional é
-  **tautológica** — ela gerou o material que foi conferido.
+Nenhuma dessas é razão para descartar as bibliotecas. Elas ficam no código como
+alternativas de primeira classe, e **para quem começa de novo, adotá-las é escolha
+defensável.**
+
+## O que este ADR passa a sustentar
+
+Não sustenta mais "as ferramentas prontas falham". Sustenta algo mais útil:
+
+> Documento com página rotacionada, cabeçalho partido e nomes fragmentados exige
+> **camada de adaptação** — desrotação, alinhamento posicional, casamento por
+> identificador. Com ela, ferramentas maduras funcionam. Sem ela, produzem volume
+> que parece dado e não é.
+
+O valor está na camada de adaptação, não em substituir a biblioteca.
+
+## Lição de método
+
+O 0% inicial era plausível: havia diagnóstico coerente (cabeçalho partido virando
+dado), evidência aparente (`{'Carbo-': 'idrato'}`) e conclusão alinhada à hipótese
+que se queria confirmar. **Faltou testar a hipótese contrária.**
+
+O que expôs o erro foi uma pergunta externa — *por que a rotação afetaria só o OCR?*
+— não a análise interna. Registrar isso é parte do rigor: a conclusão anterior teria
+sido apresentada como resultado, e qualquer verificação de terceiro a derrubaria.

@@ -1,6 +1,14 @@
 # ADR-0002 — Reconstrução posicional de tabela
 
-**Status:** aceito · **Data:** 2026-07-29
+**Status:** aceito · **Data:** 2026-07-29 · **Revisado:** 2026-07-29
+
+> **Atenção.** Os números de comparação abaixo mediam **cobertura**, não acurácia, e
+> foram obtidos antes da camada de adaptação (desrotação + alinhamento posicional).
+> Com essa camada, pdfplumber e Camelot alcançam 100% e 99% de acurácia — ver
+> [ADR-0006](0006-ferramentas-convencionais-de-tabela.md). A decisão desta ADR
+> continua válida, mas **a justificativa mudou**: não é acurácia superior, é
+> velocidade (0,1 s contra 0,4–0,8 s), independência do arquivo original e evidência
+> por coordenada de campo.
 
 ## Contexto
 

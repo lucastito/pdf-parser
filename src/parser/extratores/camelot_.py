@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from parser.extratores._tabular import registros_de_matriz
+from parser.extratores._tabular import registros_por_posicao
+from parser.extratores.pdfplumber_ import CAMPOS_NA_ORDEM
 from parser.modelo import Registro
 from parser.portas import DocumentoCanonico
 
@@ -31,10 +32,12 @@ class ExtratorCamelot:
         *,
         paginas: range | None = None,
         modo: str = "stream",
+        campos: list[str] | None = None,
     ) -> None:
         self.caminho_pdf = caminho_pdf
         self.paginas = paginas
         self.modo = modo
+        self.campos = campos or CAMPOS_NA_ORDEM
 
     def extrair(self, documento: DocumentoCanonico) -> list[Registro]:
         import camelot
@@ -63,7 +66,11 @@ class ExtratorCamelot:
             matriz = tabela.df.values.tolist()
             if not matriz:
                 continue
+            # Alinhamento por posição, e não por cabeçalho: o cabeçalho detectado
+            # vem rotacionado e partido, mas as linhas de dados estão na ordem.
             registros.extend(
-                registros_de_matriz(matriz, int(tabela.page), documento.identificador)
+                registros_por_posicao(
+                    matriz, int(tabela.page), documento.identificador, self.campos
+                )
             )
         return registros

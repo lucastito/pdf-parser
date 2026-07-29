@@ -16,8 +16,8 @@ vale mais que argumento.
 | [0003](0003-rota-deterministica-como-padrao.md) | Rota determinística como padrão | 164 páginas em 1,55 s — ~190× dentro do alvo de referência |
 | [0004](0004-proveniencia-por-campo.md) | Proveniência por campo desde o início | Retrofitar exigiria reescrever todo consumidor |
 | [0005](0005-comparabilidade-como-requisito.md) | Comparabilidade como requisito | Sem régua comum, a diferença medida é artefato do pipeline |
-| [0006](0006-ferramentas-convencionais-de-tabela.md) | Ferramentas convencionais avaliadas e descartadas | 133 e 104 registros extraídos, **0% de acurácia** — volume sem conteúdo |
-| [0007](0007-ocr-e-resolucao.md) | Rota por OCR a 350 dpi | 84,5% de acurácia; curva de resolução não monotônica (400 dpi colapsa para 29%) |
+| [0006](0006-ferramentas-convencionais-de-tabela.md) | Ferramentas convencionais **funcionam** com camada de adaptação | pdfplumber 100%, Camelot 99% após desrotação e alinhamento posicional |
+| [0007](0007-ocr-e-resolucao.md) | Rota por OCR a 350 dpi | 99,5% de acurácia; curva de resolução não monotônica (400 dpi colapsa) |
 
 ## Em aberto
 
