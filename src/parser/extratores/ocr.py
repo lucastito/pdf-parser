@@ -25,7 +25,16 @@ from parser.modelo import Registro
 from parser.normalizacao import parse_numero  # noqa: F401 — normalização compartilhada
 from parser.portas import DocumentoCanonico, Pagina, Palavra
 
-__all__ = ["ExtratorOCR"]
+__all__ = ["DPI_OCR", "ExtratorOCR"]
+
+DPI_OCR = 350
+"""Resolução ótima medida para esta rota (ADR-0007).
+
+A curva não é monotônica: abaixo disto o reconhecedor perde a vírgula decimal e
+produz valores dez vezes maiores; acima, a leitura da vírgula melhora mas o
+alinhamento de colunas quebra, e o número de campos não localizados salta de 30
+para 142. Otimizar só o reconhecimento pioraria o resultado final.
+"""
 
 CAMINHOS_CONHECIDOS = (
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
@@ -60,7 +69,7 @@ class ExtratorOCR:
         *,
         layout: LayoutTabela | None = None,
         paginas: range | None = None,
-        dpi: int = 200,
+        dpi: int = DPI_OCR,
         idioma: str = "eng",
     ) -> None:
         _validar_dpi(dpi)
@@ -97,7 +106,12 @@ class ExtratorOCR:
                     )
                 )
             )
-            paginas.append(Pagina(numero=numero, palavras=self._palavras(imagem, pytesseract)))
+            paginas.append(
+                Pagina(
+                    numero=numero,
+                    palavras=self._palavras(imagem, pytesseract, self._rotacao(numero)),
+                )
+            )
 
         canonico = DocumentoCanonico(identificador=documento.identificador, paginas=paginas)
 
@@ -107,17 +121,36 @@ class ExtratorOCR:
             return []
         return ExtratorPosicional(self.layout).extrair(canonico)
 
-    def _palavras(self, imagem, pytesseract) -> list[Palavra]:
+    def _rotacao(self, pagina: int) -> int:
+        """Rotação que a página declara no documento.
+
+        Importa porque a renderização **aplica** essa rotação, enquanto a extração
+        direta de texto devolve coordenadas no espaço **não rotacionado**. Ignorar
+        isso faz os dois sistemas de coordenadas divergirem, e o layout calibrado
+        para um não encontra nada no outro — foi o que reduziu esta rota a dois
+        registros antes da correção.
+        """
+        import fitz
+
+        documento = fitz.open(self.caminho_pdf)
+        try:
+            return documento[pagina - 1].rotation % 360
+        finally:
+            documento.close()
+
+    def _palavras(self, imagem, pytesseract, rotacao: int = 0) -> list[Palavra]:
         """Converte a saída do OCR em palavras com coordenadas.
 
-        As coordenadas vêm em pixels da imagem renderizada; convertê-las de volta
-        para pontos tipográficos permite reusar o mesmo layout da rota direta —
-        sem isso, comparar as duas exigiria dois conjuntos de coordenadas.
+        As coordenadas vêm em pixels da imagem renderizada; convertê-las para
+        pontos tipográficos **no mesmo espaço da extração direta** é o que permite
+        reusar o layout já calibrado, e é o que torna as duas rotas comparáveis.
         """
         dados = pytesseract.image_to_data(
             imagem, lang=self.idioma, output_type=pytesseract.Output.DICT
         )
         escala = 72.0 / self.dpi
+        largura_pt = imagem.width * escala
+        altura_pt = imagem.height * escala
 
         palavras = []
         for i, texto in enumerate(dados["text"]):
@@ -125,6 +158,17 @@ class ExtratorOCR:
                 continue
             x, y = dados["left"][i], dados["top"][i]
             largura, altura = dados["width"][i], dados["height"][i]
+
+            if rotacao:
+                palavras.append(
+                    self._desrotacionar(
+                        x * escala, y * escala,
+                        (x + largura) * escala, (y + altura) * escala,
+                        texto, rotacao, largura_pt, altura_pt,
+                    )
+                )
+                continue
+
             palavras.append(
                 Palavra(
                     texto=texto,
@@ -135,3 +179,31 @@ class ExtratorOCR:
                 )
             )
         return palavras
+
+    @staticmethod
+    def _desrotacionar(
+        x0: float, y0: float, x1: float, y1: float,
+        texto: str, rotacao: int, largura: float, altura: float,
+    ) -> Palavra:
+        """Leva coordenadas da imagem renderizada de volta ao espaço do documento.
+
+        Só as rotações retas (90, 180, 270) são tratadas — as únicas que um PDF
+        declara na prática. Para 90°, o eixo horizontal da imagem corresponde ao
+        vertical do documento, e a origem muda de canto.
+        """
+        if rotacao == 90:
+            novo = (y0, largura - x1, y1, largura - x0)
+        elif rotacao == 180:
+            novo = (largura - x1, altura - y1, largura - x0, altura - y0)
+        elif rotacao == 270:
+            novo = (altura - y1, x0, altura - y0, x1)
+        else:
+            novo = (x0, y0, x1, y1)
+
+        return Palavra(
+            texto=texto,
+            x0=min(novo[0], novo[2]),
+            y0=min(novo[1], novo[3]),
+            x1=max(novo[0], novo[2]),
+            y1=max(novo[1], novo[3]),
+        )

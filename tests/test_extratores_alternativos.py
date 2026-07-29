@@ -89,6 +89,44 @@ class TestExtratorOcr:
             modulo.ExtratorOCR(str(pdf_exemplo)).extrair(doc)
 
 
+class TestRotacaoDePagina:
+    """Regressão: página com rotação declarada.
+
+    A renderização **aplica** a rotação; a extração direta de texto devolve
+    coordenadas no espaço **não rotacionado**. Sem a transformação inversa, os dois
+    sistemas divergem e o layout calibrado para um não encontra nada no outro —
+    o que reduziu esta rota de 64 para 2 registros antes da correção.
+    """
+
+    def test_sem_rotacao_preserva_coordenadas(self):
+        from parser.extratores.ocr import ExtratorOCR
+
+        p = ExtratorOCR._desrotacionar(10.0, 20.0, 30.0, 40.0, "x", 0, 600.0, 800.0)
+        assert (p.x0, p.y0, p.x1, p.y1) == (10.0, 20.0, 30.0, 40.0)
+
+    def test_rotacao_90_troca_os_eixos(self):
+        from parser.extratores.ocr import ExtratorOCR
+
+        p = ExtratorOCR._desrotacionar(10.0, 20.0, 30.0, 40.0, "x", 90, 600.0, 800.0)
+        # o que era horizontal na imagem passa a ser vertical no documento
+        assert p.y0 == pytest.approx(600.0 - 30.0)
+        assert p.x0 == pytest.approx(20.0)
+
+    @pytest.mark.parametrize("rotacao", [0, 90, 180, 270])
+    def test_coordenadas_permanecem_ordenadas(self, rotacao):
+        """x0 < x1 e y0 < y1 sempre — o modelo rejeita caixa invertida."""
+        from parser.extratores.ocr import ExtratorOCR
+
+        p = ExtratorOCR._desrotacionar(10.0, 20.0, 30.0, 40.0, "x", rotacao, 600.0, 800.0)
+        assert p.x0 < p.x1
+        assert p.y0 < p.y1
+
+    def test_le_a_rotacao_declarada_no_documento(self, pdf_exemplo):
+        from parser.extratores.ocr import ExtratorOCR
+
+        assert ExtratorOCR(str(pdf_exemplo))._rotacao(1) == 0
+
+
 class TestNormalizacaoCompartilhada:
     """Todos os extratores passam pela MESMA normalização.
 
