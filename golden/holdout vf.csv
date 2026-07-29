@@ -1,0 +1,11 @@
+numero,descricao,pagina_pdf,energia_kcal,proteina_g,lipideos_g,carboidrato_g,fibra_g
+1,"Pão, milho, forma",31,292,"8,3","3,1","58,4","4,3"
+2,"Pão, trigo, francês",31,300,8,"3,1","58,6","2,3"
+3,"Abóbora, menina brasileira, crua",33,14,"0,6",Tr,"3,3","1,2"
+4,"Aipo, cru",33,19,"0,8","0,1","4,3",1
+5,"Espinafre, Nova Zelândia, refogado",35,67,"2,7","5,4","4,2","2,5"
+6,"Pimentão, verde, cru",37,21,"1,1","0,2","4,9","2,6"
+7,"Banana, maçã, crua",39,87,"1,8","0,1","22,3","2,6"
+8,"Laranja, da terra, suco",41,41,"0,7","0,1","9,6",1
+9,"Pitanga, crua",43,41,173,"0,2","10,2","3,2"
+10,"Tangerina, Poncã, suco",45,36,"0,5",Tr,"8,8",Tr

@@ -38,8 +38,8 @@ O `git config` importa: os hooks de proteção **não viajam no clone**.
 
 ```powershell
 python -m parser.cli ambiente                              # o que a máquina tem
-python -m parser.cli extrair perfis/tabela-nutricional.json # extrai e grava
-python -m parser.cli comparar perfis/tabela-nutricional.json # compara, sem gravar
+python -m parser.cli extrair perfis/nutricional.json # extrai e grava
+python -m parser.cli comparar perfis/nutricional.json # compara, sem gravar
 python -m parser.cli experimento --documento X.pdf          # roda tudo e registra
 ```
 

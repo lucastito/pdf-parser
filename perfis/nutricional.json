@@ -1,0 +1,87 @@
+{
+  "nome": "nutricional",
+  "documento": "c:/Users/Lucas Tito/projetos/nutriflow/data/rag/sources/taco/raw/TACO.pdf",
+  "paginas": [28, 31, 2],
+  "gabarito": "golden/taco.csv",
+  "holdout": "golden/holdout.csv",
+  "tolerancia": 0.01,
+
+  "campos_na_ordem": [
+    "Umidade (%)",
+    "Energia (kcal)",
+    "Energia (kJ)",
+    "Proteína (g)",
+    "Lipídeos (g)",
+    "Colesterol (mg)",
+    "Carboidrato (g)",
+    "Fibra Alimentar (g)"
+  ],
+
+  "mapeamento": {
+    "energia_kcal": ["Energia (kcal)"],
+    "proteina_g": ["Proteína (g)"],
+    "lipideos_g": ["Lipídeos (g)"],
+    "carboidrato_g": ["Carboidrato (g)", "Carbo- idrato (g)"],
+    "fibra_g": ["Fibra Alimentar (g)", "Alimentar Fibra (g)"]
+  },
+
+  "rotas": {
+    "posicional": {
+      "layout": {
+        "x_rotulos": [110.0, 133.0],
+        "x_unidades": [133.0, 145.0],
+        "x_valores_min": 145.0,
+        "y_identificadores_min": 520.0,
+        "y_rotulo_max": 520.0,
+        "tolerancia_y": 6.0,
+        "tolerancia_x": 6.0
+      }
+    },
+
+    "pdfplumber": {
+      "desrotacionar": true
+    },
+
+    "camelot": {
+      "modo": "stream"
+    },
+
+    "ocr": {
+      "dpi": 350,
+      "idioma": "eng"
+    },
+
+    "linear": {},
+
+    "biblioteca": {},
+
+    "llm": {
+      "modelo": "qwen3:4b",
+      "prompt": "prompts/extracao-tabela-texto.md",
+      "timeout": 3600.0,
+      "campos": [
+        "identificador",
+        "energia_kcal",
+        "proteina_g",
+        "lipideos_g",
+        "carboidrato_g",
+        "fibra_g"
+      ]
+    },
+
+    "vlm": {
+      "modelo": "qwen3-vl:4b",
+      "dpi": 150,
+      "prompt": "prompts/extracao-tabela-visao.md",
+      "timeout": 3600.0,
+      "campos": [
+        "identificador",
+        "energia_kcal",
+        "proteina_g",
+        "lipideos_g",
+        "carboidrato_g",
+        "fibra_g"
+      ]
+    }
+  }
+}

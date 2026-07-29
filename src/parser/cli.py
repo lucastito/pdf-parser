@@ -292,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
     experimento.add_argument(
         "--perfil",
         type=Path,
-        default=Path("perfis/tabela-nutricional.json"),
+        default=Path("perfis/nutricional.json"),
         help="perfil que define o layout e as páginas",
     )
     experimento.add_argument("--destino", type=Path, default=Path("resultados"))
