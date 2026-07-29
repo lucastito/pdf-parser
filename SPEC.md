@@ -1,0 +1,207 @@
+# SPEC — pdf-parser
+
+> Especificação **antes** do código (SDD). Testes antes da implementação (TDD).
+> Esta spec descreve a **fatia 1**; o que está fora dela é marcado como *(fora da fatia 1)*.
+> Requisitos numerados em [REQUISITOS.md](REQUISITOS.md). Decisões em [docs/adr/](docs/adr/).
+
+## 1. Problema
+
+Extrair dados de documentos heterogêneos e entregá-los como **registros validados
+contra schema**, em destino configurável, sem parsing manual de texto solto.
+
+O núcleo é **agnóstico**: não conhece formato de entrada, domínio do documento, nem
+formato de saída. Formato e destino são *adapters*; o schema é *parâmetro*.
+
+### 1.1 Por que isso não é trivial
+
+O documento-caso da fatia 1 (tabela nutricional TACO, 164 páginas) exibe três
+patologias que quebram parsers genéricos, todas **medidas**, não supostas:
+
+| Patologia | Evidência medida | Consequência |
+|---|---|---|
+| Fontes CID / `Identity-H` com `ToUnicode` incompleto | 5 mapas para 31 fontes; extração ingênua produziu 89 palavras reais em 534k caracteres | Extração por regex sobre o stream **corrompe em silêncio** |
+| Tabela sem linhas de grade | `find_tables()` retorna **0 tabelas** nas páginas de dados | Detectores baseados em borda não servem |
+| Tabela rotacionada 90° | Cabeçalhos verticais; cada faixa de Y contém um nutriente para *todos* os alimentos | O que parece linha é coluna — exige transposição |
+
+Some-se: decimal com vírgula, valores sentinela (`Tr`, `NA`, `*`), energia em duas
+unidades (kJ e kcal).
+
+**A conclusão que orienta o desenho:** um extrator que "roda sem erro" e grava lixo é
+pior do que um que falha alto. Daí a validação obrigatória e a avaliação medida por campo.
+
+## 2. Escopo da fatia 1
+
+**Dentro:**
+- Entrada PDF de texto nativo, com reconstrução posicional de tabela
+- Schema declarativo por perfil, com proveniência por campo
+- Saída CSV (primária) e JSON
+- Golden set com métrica por campo
+- Arquitetura que permite trocar o extrator (determinístico | modelo) sem tocar no núcleo
+
+**Fora da fatia 1** (previsto na arquitetura, não implementado):
+- OCR para digitalizados (RF-2)
+- Extração por LLM/VLM (RF-4, RF-5) — a *porta* existe, a implementação vem depois
+- Inferência de campos ausentes
+- Adapters de outros formatos — entram como **stub que falha explicitamente**
+
+## 3. Arquitetura
+
+```
+   ENTRADA                      NÚCLEO                        SAÍDA
+   (adapters)              (agnóstico, estável)             (adapters)
+
+   PDF      ──┐                                            ┌──►  CSV
+   XLSX*    ──┤                                            ├──►  JSON
+   CSV*     ──┼──►  Documento  ──►  Extrator  ──►  Registro ┼──►  banco*
+   JSON*    ──┤     Canônico         (porta)      Validado  ├──►  API*
+   imagem*  ──┘                         ▲                   └──►  ...
+                                        │
+                            ┌───────────┴───────────┐
+                            │                       │
+                     determinístico            modelo*
+                     (fatia 1)              (LLM | VLM)
+
+                     * = stub ou fora da fatia 1
+```
+
+Três portas, três razões:
+
+- **`FonteDocumento`** — lê um arquivo e devolve `DocumentoCanônico`. Trocar formato de
+  entrada não toca no núcleo.
+- **`Extrator`** — recebe `DocumentoCanônico` + schema, devolve `RegistroValidado`.
+  **É a porta que torna a comparação possível:** determinístico, LLM e VLM são
+  implementações intercambiáveis, medidas pela mesma régua.
+- **`Destino`** — grava `RegistroValidado`. Trocar destino não toca no núcleo.
+
+### 3.1 Perfil: o que torna o sistema parametrizável
+
+Um perfil é um arquivo declarativo que reúne schema, mapeamento e destino. Trocar de
+contexto é trocar de perfil — sem alterar código.
+
+```yaml
+# perfis/exemplo.yaml
+nome: exemplo
+fonte:   { tipo: pdf, estrategia: posicional }
+schema:  campos/exemplo.py      # modelo Pydantic
+destino: { tipo: csv, caminho: saida/exemplo.csv }
+```
+
+## 4. Modelo de dados
+
+### 4.1 Proveniência por campo (decisão estruturante)
+
+Todo valor carrega **como foi obtido**. Não é enfeite: sem isso é impossível medir
+extração contra inferência, e retrofitar depois exigiria reescrever todo consumidor.
+
+```python
+class Origem(StrEnum):
+    EXTRAIDO = "extraido"    # lido diretamente do documento
+    DERIVADO = "derivado"    # calculado a partir de campos extraídos
+    INFERIDO = "inferido"    # estimado por modelo — fora da fatia 1
+    AUSENTE  = "ausente"     # não encontrado; nada foi inventado
+
+class Campo[T]:
+    valor: T | None
+    origem: Origem
+    confianca: float           # 1.0 para extração determinística
+    evidencia: Evidencia | None # página, bbox, texto bruto
+```
+
+Disso decorre uma métrica agregada — a **taxa de inferência** (proporção de campos não
+extraídos diretamente) — que serve tanto de indicador de qualidade quanto de gate.
+
+### 4.2 Valores sentinela
+
+O documento-caso usa `Tr` (traço), `NA` (não analisado) e `*`. **Não são zero e não são
+nulo.** Confundi-los corrompe qualquer cálculo a jusante. O schema os representa
+explicitamente, preservando o texto bruto na evidência.
+
+## 5. Requisitos verificáveis
+
+Cada item vira teste antes da implementação (TDD).
+
+| ID | Requisito | Como se verifica |
+|---|---|---|
+| **E1** | Extrair texto sem corrupção de encoding | Acentuação e caracteres especiais conferem com o gabarito |
+| **E2** | Reconstruir a tabela apesar da rotação e da ausência de grade | Valores por registro conferem com o gabarito conferido à mão |
+| **E3** | Distinguir sentinelas de zero e de nulo | `Tr`/`NA` nunca viram `0` nem `None` silenciosamente |
+| **E4** | Converter decimal com vírgula | `"3,86"` → `3.86` |
+| **V1** | Rejeitar registro fora do schema | Registro inválido falha alto, com mensagem localizável |
+| **V2** | Todo campo carrega origem e evidência | Nenhum campo sai com origem indefinida |
+| **S1** | Gravar CSV e JSON do mesmo registro validado | Round-trip preserva valores e sentinelas |
+| **S2** | Formato de saída é parâmetro | Trocar destino não altera o núcleo |
+| **A1** | Extrator é intercambiável | Um extrator alternativo roda o mesmo golden set sem mudar o núcleo |
+| **A2** | Formato não implementado falha explicitamente | Stub levanta erro claro; nunca simula sucesso |
+| **Q1** | Cobertura de teste ≥ 80% | `pytest --cov` |
+
+## 6. Avaliação
+
+**A avaliação não é etapa final: é requisito de arquitetura.** O objetivo é permitir
+afirmações defensáveis com número — inclusive negativas.
+
+### 6.1 Golden set
+
+- ~30–50 registros do documento-caso, **conferidos manualmente** contra o original.
+- Gabarito gerado por máquina mediria o extrator contra ele mesmo — inútil por construção.
+- Registrar página de origem por registro, para auditoria.
+- Fonte de licença permissiva, citada. Fontes que proíbem redistribuição ficam fora.
+
+### 6.2 Métricas
+
+| Métrica | Aplicação |
+|---|---|
+| Exact match | Identificadores, categóricos, sentinelas |
+| Erro relativo com tolerância | Campos numéricos (`"42"` vs `"42.0"` não é erro) |
+| Similaridade textual | Campos de texto livre |
+| Cobertura | Proporção de campos preenchidos |
+| Taxa de inferência | Proporção não extraída diretamente |
+| Latência e memória | Por página e por documento |
+
+Métrica **por campo**, nunca só agregada: um agregado alto esconde um campo sistematicamente
+errado.
+
+### 6.3 Comparação entre extratores
+
+Matriz `extrator × métrica` sobre o mesmo golden set. A pergunta a responder é
+literalmente: *o extrator mais sofisticado compensa, neste documento?* — e a resposta
+pode ser **não**. Um resultado negativo medido é resultado.
+
+Hipóteses registradas com status **validada / invalidada / em aberto**, incluindo as que
+falharem. Rerodar a matriz a cada troca de versão de componente: mudar o extrator no meio
+da avaliação invalida a comparação.
+
+### 6.4 Rigor
+
+O golden set usado para iterar **não é holdout**. Ajustar decisões olhando o mesmo conjunto
+enviesa; reservar um subconjunto não visto para o gate final.
+
+## 7. Restrições de ambiente
+
+O ambiente-alvo é modesto: **~2 GB de VRAM, 16 GB de RAM, CPU de baixo consumo**.
+A restrição é deliberada e informa o desenho — não é acidente a ser contornado depois.
+
+Consequências, com trade-off explícito em ADR:
+- Extração determinística é o **caminho padrão**, não o plano B.
+- Modelos grandes estão fora do envelope; só cabem modelos pequenos quantizados.
+- Processamento por modelo tende a ser **ordens de grandeza mais lento** que a rota
+  determinística — o que precisa ser medido, não assumido.
+
+Há também um alvo de desempenho de referência: **documento de porte médio em menos de
+5 minutos**. Serve de critério objetivo na matriz de comparação.
+
+## 8. Qualidade
+
+Python 3.10+ · `pytest` com cobertura ≥ 80% · PEP 8 · `black` · `flake8` ·
+ambiente isolado · logging estruturado · erros com mensagem acionável.
+
+## 9. Não-objetivos
+
+Não é um produto de UI. Não infere dado ausente (fatia 1). Não implementa regras de
+negócio de domínio algum — o domínio entra por schema, nunca por código. Não redistribui
+documentos de origem cuja licença não permita.
+
+## 10. Questões em aberto
+
+1. Formatos de entrada além de PDF: nomes e amostras a confirmar antes de investir.
+2. Schema do destino externo: não disponível nesta fase; mapeamento fica genérico.
+3. Alvo de 5 minutos: falta o volume de referência para dimensionar.
