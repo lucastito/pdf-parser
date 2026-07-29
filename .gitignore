@@ -50,3 +50,7 @@ Thumbs.db
 htmlcov/
 .githooks/allowlist.txt
 .githooks/.allowlist.tmp
+
+# Resultados de experimento — mantidos locais para que a execução em outra
+# máquina seja cega. Destravar quando a rodada dela chegar por PR.
+resultados/
