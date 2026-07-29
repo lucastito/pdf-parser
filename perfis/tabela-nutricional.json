@@ -3,7 +3,7 @@
   "documento": "c:/Users/Lucas Tito/projetos/nutriflow/data/rag/sources/taco/raw/TACO.pdf",
   "fonte": {
     "tipo": "pdf",
-    "paginas": [28, 35, 2]
+    "paginas": [28, 31, 2]
   },
   "extrator": {
     "tipo": "posicional",

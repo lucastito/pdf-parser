@@ -70,6 +70,22 @@ class ResultadoConcordancia:
         return self.concordantes / self.comparacoes if self.comparacoes else 0.0
 
     def relatorio(self) -> str:
+        if len(self.estrategias) < 2:
+            return (
+                "Sem base para comparar concordância: apenas "
+                f"{len(self.estrategias)} estratégia produziu dados "
+                f"({', '.join(self.estrategias) or 'nenhuma'})."
+            )
+
+        if not self.comparacoes:
+            return (
+                f"estratégias comparadas : {', '.join(self.estrategias)}\n"
+                f"itens em comum         : {self.itens_comuns}\n\n"
+                "Nenhum campo comparável. As estratégias produziram identificadores\n"
+                "ou nomes de campo que não se alinham — o que é informação sobre elas,\n"
+                "não concordância de 0%."
+            )
+
         linhas = [
             f"estratégias comparadas : {', '.join(self.estrategias)}",
             f"itens em comum         : {self.itens_comuns}",

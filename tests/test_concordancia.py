@@ -159,3 +159,29 @@ class TestRelatorio:
             "b": [_registro("X", v=1.0)],
         })
         assert "a × b" in r.relatorio()
+
+
+class TestSemBaseParaComparar:
+    """0% de concordância e "não havia o que comparar" são coisas diferentes.
+
+    Reportar 0% quando os campos não se alinham sugeriria discordância total —
+    conclusão errada a partir de ausência de dado.
+    """
+
+    def test_uma_estrategia_diz_que_falta_base(self):
+        r = comparar_estrategias({"a": [_registro("X", v=1.0)]})
+        texto = r.relatorio()
+        assert "Sem base para comparar" in texto
+        assert "0.0%" not in texto
+
+    def test_nenhuma_estrategia_diz_que_falta_base(self):
+        assert "Sem base para comparar" in comparar_estrategias({}).relatorio()
+
+    def test_campos_desalinhados_nao_reportam_zero_por_cento(self):
+        r = comparar_estrategias({
+            "a": [_registro("X", campo_a=1.0)],
+            "b": [_registro("Y", campo_b=1.0)],
+        })
+        texto = r.relatorio()
+        assert "Nenhum campo comparável" in texto
+        assert "concordância geral" not in texto
