@@ -1,0 +1,25 @@
+{
+  "nome": "tabela-nutricional",
+  "documento": "c:/Users/Lucas Tito/projetos/nutriflow/data/rag/sources/taco/raw/TACO.pdf",
+  "fonte": {
+    "tipo": "pdf",
+    "paginas": [28, 35, 2]
+  },
+  "extrator": {
+    "tipo": "posicional",
+    "layout": {
+      "x_rotulos": [110.0, 133.0],
+      "x_unidades": [133.0, 145.0],
+      "x_valores_min": 145.0,
+      "y_identificadores_min": 520.0,
+      "y_rotulo_max": 520.0,
+      "tolerancia_y": 6.0,
+      "tolerancia_x": 6.0
+    }
+  },
+  "destinos": [
+    { "tipo": "csv", "caminho": "saida/nutricional.csv" },
+    { "tipo": "json", "caminho": "saida/nutricional.json" }
+  ],
+  "triar_paginas": true
+}
