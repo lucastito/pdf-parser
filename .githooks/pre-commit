@@ -1,0 +1,23 @@
+#!/bin/sh
+# Guarda de confidencialidade — conteudo staged, nomes de arquivo e branch.
+#
+# A verificacao vive em verificar.py. Motivo: a versao anterior encadeava
+# 'grep -F -f', que abortava quando a lista de excecoes continha acentuacao —
+# a saida vinha vazia e NENHUM termo era verificado, sem aviso. Guarda que
+# falha em silencio e' pior que guarda nenhuma.
+#
+# Instalar:  git config core.hooksPath .githooks
+# Testar:    .githooks/selftest.sh
+
+set -u
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+for PY in python python3 py; do
+    if command -v "$PY" >/dev/null 2>&1; then
+        exec "$PY" "$REPO_ROOT/.githooks/verificar.py" conteudo
+    fi
+done
+
+printf '\033[31m[guarda] Python nao encontrado — commit bloqueado por precaucao.\033[0m\n' >&2
+exit 1

@@ -1,0 +1,18 @@
+#!/bin/sh
+# Guarda de confidencialidade — mensagem de commit.
+#
+# O pre-commit nao enxerga a mensagem; este cobre esse buraco.
+# Mesma denylist, mesmas excecoes, mesma implementacao.
+
+set -u
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+for PY in python python3 py; do
+    if command -v "$PY" >/dev/null 2>&1; then
+        exec "$PY" "$REPO_ROOT/.githooks/verificar.py" mensagem "$1"
+    fi
+done
+
+printf '\033[31m[guarda] Python nao encontrado — commit bloqueado por precaucao.\033[0m\n' >&2
+exit 1

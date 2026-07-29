@@ -15,6 +15,12 @@ env/
 .env.*
 !.env.example
 
+# Contexto local e material sob NDA (NUNCA versionar)
+CLAUDE.local.md
+docs/_private/
+*.private.md
+.githooks/denylist.txt
+
 # Modelos e pesos (pesados; fora do git)
 *.pt
 *.pth
@@ -26,6 +32,9 @@ models/
 samples/*.pdf
 !samples/.gitkeep
 *.out.json
+
+# Saídas de execução (regeráveis; poluem o diff)
+saida/
 
 # Ferramentas / IDE
 .vscode/
@@ -39,3 +48,5 @@ Thumbs.db
 .ruff_cache/
 .coverage
 htmlcov/
+.githooks/allowlist.txt
+.githooks/.allowlist.tmp
