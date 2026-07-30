@@ -1,27 +1,11 @@
 # pdf-parser
 
-Parser de documentos **agnóstico de domínio** que extrai conteúdo estruturado e
-entrega **saída validada contra schema**. O schema é parâmetro: o núcleo não presume
-o tipo de documento nem os campos.
+Lê documentos, extrai o que interessa e entrega **dados validados contra schema**.
+Aponte-o para uma pasta; ele consolida numa saída única e sinaliza o que precisa de
+atenção humana.
 
-Sobre isso, um segundo objetivo: **comparar estratégias de extração com número**.
-Determinística, por biblioteca pronta, por modelo de linguagem e por modelo de
-visão implementam a mesma interface e são medidas pela mesma régua — de modo que
-"esta abordagem é melhor" seja afirmação verificável, não preferência.
-
-## Por que não é trivial
-
-O documento-caso (tabela nutricional TACO, 164 páginas) tem três patologias
-**medidas**, não supostas:
-
-| Patologia | Evidência |
-|---|---|
-| Fontes CID com `ToUnicode` incompleto | extração ingênua rendeu 89 palavras reais em 534 mil caracteres |
-| Tabela sem linhas de grade | o detector de tabelas encontra **zero** |
-| Tabela rotacionada 90° | cada faixa horizontal traz *um nutriente de todos os alimentos* |
-
-Daí a conclusão que orienta o desenho: **um extrator que roda sem erro e grava lixo
-é pior do que um que falha alto.**
+O núcleo é **agnóstico**: não presume o tipo de documento nem os campos. O schema, o
+layout e o destino são configuração — não código.
 
 ## Instalação
 
@@ -32,116 +16,123 @@ git config core.hooksPath .githooks
 python -m pip install -e ".[dev]"
 ```
 
-O `git config` importa: os hooks de proteção **não viajam no clone**.
+O `git config` importa: os hooks de verificação não viajam no clone.
 
 ## Uso
 
+A ordem dos comandos é a ordem natural de adoção de um documento novo:
+
 ```powershell
-python -m parser.cli ambiente                              # o que a máquina tem
-python -m parser.cli extrair perfis/nutricional.json # extrai e grava
-python -m parser.cli comparar perfis/nutricional.json # compara, sem gravar
-python -m parser.cli experimento --documento X.pdf          # roda tudo e registra
+python -m parser.cli ambiente                    # esta máquina tem o necessário?
+python -m parser.cli diagnosticar doc.pdf        # há algo que sabota a leitura?
+python -m parser.cli calibrar doc.pdf --json     # qual o layout deste documento?
+python -m parser.cli ingerir ./entrada --saida ./saida/dados.csv
 ```
 
-Trocar de contexto é trocar de perfil, não de código:
+Os três primeiros são diagnóstico; o quarto é o trabalho.
+
+### Ingerir uma pasta
+
+```powershell
+python -m parser.cli ingerir ./entrada `
+    --perfil perfis/nutricional.json `
+    --saida ./saida/consolidado.csv
+```
+
+Gera três arquivos, porque servem a três leitores:
+
+| Arquivo | Para quem |
+|---|---|
+| `consolidado.csv` | o sistema de destino |
+| `consolidado.log` | quem acompanha a execução |
+| `consolidado.erros.json` | quem precisa corrigir a entrada |
+| `consolidado.pendencias.json` | quem vai revisar o que falta |
+
+**Um arquivo com problema não interrompe o lote.** Numa pasta de cem documentos,
+abortar no terceiro desperdiçaria os outros noventa e sete. Cada falha é registrada
+com o motivo e a ação recomendada.
+
+**O layout é decidido por arquivo:** calibração automática quando a confiança basta,
+perfil informado como alternativa, falha explícita se nenhum servir. Uma pasta com
+documentos de origens diferentes funciona sem configuração por arquivo.
+
+### Medir antes de confiar
+
+```powershell
+python -m parser.cli avaliar gabarito.csv --perfil perfis/X.json --documento doc.pdf
+python -m parser.cli comparar --perfil perfis/X.json --documento doc.pdf
+```
+
+`avaliar` mede acurácia por campo contra um gabarito conferido à mão. `comparar` mede
+concordância entre estratégias, sem gabarito — sinal útil, mas não prova:
+estratégias podem errar igual.
+
+## Configuração
+
+Trocar de contexto é trocar de perfil:
 
 ```json
 {
-  "fonte":    { "tipo": "pdf", "paginas": [28, 31, 2] },
-  "extrator": { "tipo": "posicional", "layout": { "...": "..." } },
-  "destinos": [{ "tipo": "csv", "caminho": "saida/dados.csv" }]
+  "nome": "exemplo",
+  "paginas": [28, 31, 2],
+  "mapeamento": { "campo_destino": ["Rótulo no documento"] },
+  "rotas": {
+    "posicional": { "layout": { "x_rotulos": [110, 133], "...": "..." } },
+    "ocr": { "dpi": 350 },
+    "vlm": { "modelo": "qwen3-vl:4b", "prompt": "prompts/extracao-tabela-visao.md" }
+  }
 }
 ```
 
-## Rodar o experimento em outra máquina
+Use `parser calibrar --json` para descobrir o layout de um documento novo — ele
+imprime o recorte pronto para colar.
 
-Dois comandos, em ordem:
+Os prompts ficam em [prompts/](prompts/), em arquivos com a instrução, os guardrails
+e a **justificativa de cada regra**. Sem a justificativa, a próxima pessoa remove uma
+regra por parecer redundante e reintroduz um problema resolvido.
 
-```powershell
-.\scripts\1-preparar-maquina.ps1
-.\scripts\2-rodar-experimento.ps1 -Documento "C:\caminho\do\documento.pdf"
-```
+## Por que documento não é trivial
 
-O primeiro instala Python, dependências, servidor de inferência e os três modelos
-(~7 GB) e roda os testes. O segundo executa todas as estratégias, grava em
-`resultados/<maquina>/`, cria a branch `experimento/<maquina>` e commita.
+Três características medidas em um documento real, que quebram ferramentas maduras:
 
-Depois:
-
-```powershell
-git push -u origin experimento/<maquina>
-```
-
-e abra o pull request. O push fica fora do script porque é o passo irreversível.
-
-### Execução cega, de propósito
-
-**Não consulte `resultados/` de outra máquina antes de rodar.** Saber o resultado
-esperado enviesa a leitura de uma falha ("deve ser normal") e a decisão de insistir
-num modelo lento. A comparação acontece depois, na revisão do pull request.
-
-### Por que cada máquina roda tudo
-
-Comparar estratégias executadas em hardwares diferentes mediria **hardware**, não
-estratégia. Cada máquina produz uma rodada completa e autocontida: dentro dela
-comparam-se estratégias; entre máquinas, compara-se velocidade.
-
-De graça, isso rende um teste de reprodutibilidade — a rota determinística deve dar
-resultado idêntico nas duas; as rotas com modelo podem não dar, e divergência ali é
-achado sobre confiabilidade.
-
-## Expectativas honestas de desempenho
-
-Medido num notebook de 4 núcleos, 15 W, sem GPU utilizável:
-
-| Estratégia | Tempo |
+| Característica | Efeito |
 |---|---|
-| posicional | **164 páginas em 1,55 s** |
-| modelo de texto pequeno | ~45 s **por página** |
-| modelo de visão | pode não completar uma página em 10 minutos |
+| Página com rotação declarada | detectores de tabela encontram **zero** tabelas |
+| Cabeçalho partido em duas linhas | lido como dado: `{"Carbo-": "idrato"}` |
+| Fontes com mapa de caracteres incompleto | leitura direta do fluxo produz texto corrompido |
 
-Em CPU modesta, a rota determinística é ordens de grandeza mais rápida e a rota por
-visão pode ser inviável. **Isso é resultado do experimento, não defeito dele.**
+O comando `diagnosticar` detecta essas e outras, **com a ação recomendada** — porque
+diagnóstico sem ação é só reclamação.
 
-Se o modelo de visão estourar o tempo, aumente o limite ou reduza a resolução — mas
-note que **resolução é variável do experimento**: duas rodadas com resoluções
-diferentes não são comparáveis, e o valor é registrado no resultado justamente para
-que isso não passe batido.
+A conclusão que orienta o desenho: **um extrator que roda sem erro e grava lixo é
+pior do que um que falha alto.**
 
-## Acurácia
+## Formatos
 
-O experimento mede velocidade, cobertura e **concordância entre estratégias**. Não
-mede acurácia: para isso é preciso um gabarito conferido à mão contra o documento
-original (ver [golden/README.md](golden/README.md)).
+Implementado: **PDF**.
 
-Concordância é sinal, não prova — estratégias podem errar igual, e uma estratégia
-isolada pode ser a única correta.
-
-Os dados brutos ficam salvos, então a acurácia é calculada **depois**, sobre os
-mesmos resultados, sem reexecutar. Rodar antes do gabarito não desperdiça trabalho.
+Declaráveis no perfil e ainda não implementados: XLSX, CSV, JSON, DOCX, imagem, ZIP.
+Eles falham alto quando usados, em vez de devolver resultado vazio — vazio parece
+sucesso.
 
 ## Estrutura
 
 ```
 pdf-parser/
 ├── src/parser/
-│   ├── modelo.py          # proveniência por campo, sentinelas
-│   ├── portas.py          # fonte, extrator, destino
-│   ├── normalizacao.py    # a mesma para todas as estratégias
-│   ├── fontes/            # pdf, render para imagem, stub
-│   ├── extratores/        # posicional, linear, biblioteca, vlm
-│   ├── destinos/          # csv, json
-│   ├── triagem.py         # dados | contexto | descartável
-│   ├── avaliacao.py       # métrica por campo, contra gabarito
-│   ├── concordancia.py    # entre estratégias, sem gabarito
-│   ├── experimento.py     # execução com procedência
+│   ├── fontes/            leitura por formato
+│   ├── extratores/        posicional, pdfplumber, camelot, ocr, llm, vlm
+│   ├── destinos/          csv, json
+│   ├── lote.py            uma pasta → uma saída
+│   ├── diagnostico.py     o que sabota a leitura
+│   ├── calibracao.py      descobre layout
+│   ├── configuracao.py    perfis e prompts
+│   ├── gabarito.py        acurácia contra valores conferidos
 │   └── cli.py
-├── perfis/                # configuração declarativa
-├── golden/                # gabarito de avaliação
-├── scripts/               # 1-preparar-maquina, 2-rodar-experimento
-├── docs/adr/              # decisões, com os números que as sustentam
-├── SPEC.md                # especificação (SDD)
-└── REQUISITOS.md          # requisitos numerados
+├── perfis/  prompts/      configuração
+├── entrada/  saida/       para uso
+├── experimentos/          validação das decisões (dispensável para operar)
+└── docs/adr/              decisões, com os números que as sustentam
 ```
 
 ## Qualidade
@@ -150,11 +141,18 @@ Python 3.10+ · `pytest` · PEP 8 · `black` · `flake8`.
 
 ```powershell
 python -m pytest --cov=src
-.\.githooks\selftest.sh      # guarda de confidencialidade
 ```
 
-## Fonte dos dados
+Alguns testes precisam de um documento de validação e são saltados sem ele:
 
-Tabela Brasileira de Composição de Alimentos (TACO), NEPA/UNICAMP, 4ª edição
-ampliada e revisada, Campinas, 2011 — cuja licença permite reprodução total ou
-parcial desde que citada a fonte.
+```powershell
+$env:PARSER_DOCUMENTO_CASO = "C:\caminho\documento.pdf"
+python -m pytest
+```
+
+## Decisões
+
+Cada decisão de arquitetura está em [docs/adr/](docs/adr/), com a medição que a
+sustenta. Vale a leitura de quem for evoluir o código: várias registram o número que
+resultaria de fazer diferente, incluindo casos em que a hipótese inicial se mostrou
+errada.
