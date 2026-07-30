@@ -46,11 +46,29 @@ não são comparáveis entre si, e o valor é registrado com cada resultado. Ver
 ADR-0007 para a curva medida na rota de reconhecimento óptico — que não é monotônica,
 e o mesmo pode valer aqui.
 
-**Esquema restringido pode colapsar.** Em modelo pequeno, impor um esquema JSON
-aninhado como gramática de decodificação pode tornar o caminho válido inalcançável:
-o modelo emite o token de parada e devolve resposta vazia. Medido no documento-caso —
-o mesmo modelo descreve a página corretamente sem o esquema e devolve vazio com ele.
-Ver a estratégia de degraus de saída.
+**Resposta vazia — a causa não é o esquema.** A hipótese inicial era que o esquema
+restringido tornava o caminho válido inalcançável. **A medição refutou.** Os três
+degraus de saída foram medidos com a mesma imagem e a mesma instrução:
+
+| Degrau | Segundos | `done_reason` | Tokens gerados | Resposta |
+|---|---|---|---|---|
+| esquema completo | 306,2 | `stop` | 153 | vazia |
+| `format: "json"` | 81,9 | `stop` | 152 | vazia |
+| texto livre, sem restrição | 1055,4 | `length` | 1844 | vazia |
+
+O texto livre, sem restrição alguma, também devolve vazio — logo a restrição não é a
+causa. Em todos os casos o modelo **gera tokens** e nada chega ao campo de resposta;
+no último, o orçamento inteiro é consumido.
+
+A hipótese em aberto é que o modelo gaste a geração no canal de raciocínio e não
+emita no canal de resposta. A verificar: desligar o raciocínio na chamada e ler o
+campo correspondente, além do campo de resposta.
+
+Os degraus de saída continuam justificados — impedem que resposta vazia vire "página
+sem dados" em silêncio —, mas **não** resolvem este problema.
+
+**Custo medido:** de 82 s a 1055 s por página, em processador. Confirma a rota por
+modelo como processamento em lote, nunca interativo.
 
 ## Histórico
 

@@ -149,15 +149,32 @@ Regras que a conversão obedece:
 
 ### 4.4 Degraus de saída do modelo (RF-4, RF-5)
 
-Impor um esquema JSON aninhado como gramática de decodificação é a forma mais
-segura de obter saída estruturada — **quando funciona**. Em modelo pequeno
-quantizado, pode tornar o caminho válido inalcançável: o modelo emite o token de
-parada e devolve resposta vazia, sem erro algum. O servidor responde `200`, a
-resposta é `""`, e o extrator recebe zero item como se a página estivesse em branco.
+Um modelo pequeno pode devolver **resposta vazia** sem erro algum: o servidor
+responde `200`, a resposta é `""`, e o extrator recebe zero item como se a página
+estivesse em branco.
 
 O que distingue esse modo de falha: **ele não se parece com falha**. Não há
 exceção, não há JSON malformado, não há timeout. Uma execução em lote registraria
 "processado, 0 registros" e seguiria.
+
+A hipótese inicial atribuía o vazio ao esquema restringido — a gramática de
+decodificação tornando o caminho válido inalcançável. **A medição refutou**, e o
+registro fica porque hipótese invalidada também é resultado:
+
+| Degrau | Segundos | `done_reason` | Tokens gerados | Resposta |
+|---|---|---|---|---|
+| esquema completo | 306,2 | `stop` | 153 | vazia |
+| `format: "json"` | 81,9 | `stop` | 152 | vazia |
+| texto livre, sem restrição | 1055,4 | `length` | 1844 | vazia |
+
+O texto livre, sem restrição alguma, também devolve vazio: a restrição não é a
+causa. Em todos os casos o modelo gera tokens e nada chega ao campo de resposta.
+Investigação em aberto — a suspeita recai sobre a geração ficar no canal de
+raciocínio do modelo.
+
+Os degraus permanecem, porque resolvem um problema **diferente e real**: impedem
+que resposta vazia vire "página sem dados" em silêncio, e registram sob qual
+restrição cada resultado foi obtido.
 
 A rota por modelo, portanto, tenta a saída em **degraus**, do mais restrito ao mais
 livre:
