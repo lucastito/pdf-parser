@@ -242,9 +242,29 @@ class ExtratorModelo(ExtratorBaseadoEmModelo):
     leitura — inclusive quando essa ordem não corresponde à estrutura visual. É
     exatamente essa dependência que a rota por visão não tem, e é o que as duas
     estratégias existem para comparar.
+
+    Usa os mesmos degraus de saída da rota por visão (SPEC §4.4). Não porque o
+    colapso do esquema tenha sido observado aqui, mas porque tratar as duas rotas
+    de modo diferente introduziria, na comparação entre elas, uma diferença que
+    não é a que se quer medir (ADR-0005).
     """
 
+    def __init__(
+        self,
+        cliente: ClienteOllama,
+        campos: list[str],
+        *,
+        instrucao: str | None = None,
+        degrau_maximo: Any = None,
+    ) -> None:
+        from parser.degraus import SaidaEmDegraus
+
+        super().__init__(cliente, campos, instrucao=instrucao)
+        self.saida = SaidaEmDegraus(cliente, campos, degrau_maximo=degrau_maximo)
+        self.degraus_usados: list[Any] = []
+        """O degrau que produziu cada página, na ordem."""
+
     def _consultar(self, pagina) -> Any:
-        return self.cliente.gerar(
-            f"{self._prompt()}\n\n{pagina.texto}", schema=self._schema()
-        )
+        resultado = self.saida.obter(f"{self._prompt()}\n\n{pagina.texto}")
+        self.degraus_usados.append(resultado.degrau)
+        return resultado.dados

@@ -140,7 +140,7 @@ class Perfil:
     """Coluna → declaração (``tipo``, ``minimo``, ``maximo``, ``obrigatorio``).
 
     Vazio por padrão: sem declaração, a saída não é verificada como conjunto e o
-    comportamento anterior fica intacto (SPEC §4.4).
+    comportamento anterior fica intacto (SPEC §4.5).
     """
 
     campos_na_ordem: list[str] = field(default_factory=list)

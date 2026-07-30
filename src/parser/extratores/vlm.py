@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from parser.degraus import Degrau, SaidaEmDegraus
 from parser.fontes.render import DPI_PADRAO, renderizar, _validar_dpi
 from parser.ollama import ClienteOllama, ExtratorBaseadoEmModelo
 from parser.portas import Pagina
@@ -44,6 +45,7 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
         *,
         instrucao: str | None = None,
         dpi: int = DPI_PADRAO,
+        degrau_maximo: Degrau | None = None,
     ) -> None:
         """
         Args:
@@ -53,14 +55,24 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
             dpi: resolução da imagem. **Registre-o junto do resultado**: é
                 variável do experimento, e duas execuções com DPI diferente não
                 são comparáveis.
+            degrau_maximo: o degrau de saída mais livre permitido (SPEC §4.4).
+                Fixá-lo torna uma bateria de execuções comparável entre si; deixá-lo
+                aberto maximiza a chance de obter saída de um modelo pequeno.
         """
         _validar_dpi(dpi)
         super().__init__(cliente, campos, instrucao=instrucao or INSTRUCAO_VISUAL)
         self.caminho_pdf = caminho_pdf
         self.dpi = dpi
+        self.saida = SaidaEmDegraus(cliente, campos, degrau_maximo=degrau_maximo)
+        self.degraus_usados: list[Degrau] = []
+        """O degrau que produziu cada página, na ordem.
+
+        Guardado porque só rodadas no mesmo degrau são comparáveis: sem este
+        registro, a matriz mediria também a diferença de restrição (ADR-0005).
+        """
 
     def _consultar(self, pagina: Pagina) -> Any:
         imagem = renderizar(self.caminho_pdf, pagina=pagina.numero, dpi=self.dpi)
-        return self.cliente.gerar(
-            self._prompt(), schema=self._schema(), imagens=[imagem]
-        )
+        resultado = self.saida.obter(self._prompt(), imagens=[imagem])
+        self.degraus_usados.append(resultado.degrau)
+        return resultado.dados

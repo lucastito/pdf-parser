@@ -164,3 +164,49 @@ class TestContrato:
 
         with pytest.raises(DpiInvalido):
             _extrator(TransporteFalso({}), pdf_exemplo, dpi=0)
+
+
+class TestDegraus:
+    """A rota tem de sobreviver ao colapso do esquema restringido (SPEC §4.4).
+
+    O modo de falha não se parece com falha: resposta vazia, `done_reason=stop`,
+    HTTP 200. Sem a descida de degrau, a página vira "sem dados" em silêncio.
+    """
+
+    class TransporteQueColapsa:
+        """Vazio no primeiro degrau, útil no segundo — o colapso observado."""
+
+        def __init__(self, resposta: object) -> None:
+            self.resposta = resposta
+            self.chamadas: list[dict] = []
+
+        def enviar(self, url: str, carga: dict, timeout: float) -> dict:
+            self.chamadas.append(carga)
+            if len(self.chamadas) == 1:
+                return {"response": "", "done_reason": "stop", "eval_count": 84}
+            return {"response": json.dumps(self.resposta)}
+
+    def test_esquema_vazio_nao_vira_pagina_sem_dados(self, pdf_exemplo):
+        transporte = self.TransporteQueColapsa({"itens": [{"proteina": 2.6}]})
+        registros = _extrator(transporte, pdf_exemplo).extrair(
+            _documento(pdf_exemplo.name)
+        )
+        assert registros, "o colapso do esquema virou página em branco"
+        assert registros[0].campos["proteina"].valor == 2.6
+
+    def test_degrau_usado_fica_registrado(self, pdf_exemplo):
+        """Só rodadas no mesmo degrau são comparáveis (ADR-0005)."""
+        from parser.degraus import Degrau
+
+        transporte = self.TransporteQueColapsa({"itens": [{"proteina": 2.6}]})
+        extrator = _extrator(transporte, pdf_exemplo)
+        extrator.extrair(_documento(pdf_exemplo.name))
+
+        assert extrator.degraus_usados == [Degrau.JSON_LIVRE]
+
+    def test_a_imagem_acompanha_a_descida(self, pdf_exemplo):
+        """Descer de degrau não pode transformar a rota de visão em rota de texto."""
+        transporte = self.TransporteQueColapsa({"itens": [{"proteina": 2.6}]})
+        _extrator(transporte, pdf_exemplo).extrair(_documento(pdf_exemplo.name))
+
+        assert all("images" in carga for carga in transporte.chamadas)

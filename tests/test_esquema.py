@@ -1,4 +1,4 @@
-"""Validação da saída tabular (SPEC §4.4).
+"""Validação da saída tabular (SPEC §4.5).
 
 O modelo valida campo a campo, na construção do `Registro`. O que ele não cobre é
 o **conjunto**: coluna ausente, tipo divergente entre registros, lote heterogêneo.

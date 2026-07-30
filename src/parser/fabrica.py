@@ -74,11 +74,39 @@ def _ocr(perfil: Perfil, rota: Rota) -> Extrator:
     )
 
 
+def _degrau_maximo(rota: Rota):
+    """Lê o degrau de saída mais livre permitido, declarado no perfil.
+
+    Fixá-lo é o que torna uma bateria de execuções comparável entre si (SPEC
+    §4.4). Omitido, a rota desce quanto for preciso para obter saída — o que
+    maximiza a chance de o modelo pequeno produzir algo, ao custo de rodadas
+    potencialmente em degraus diferentes.
+    """
+    from parser.configuracao import ConfiguracaoInvalida
+    from parser.degraus import Degrau
+
+    declarado = rota.extras.get("degrau_maximo")
+    if not declarado:
+        return None
+
+    try:
+        return Degrau(declarado)
+    except ValueError as erro:
+        conhecidos = ", ".join(d.value for d in Degrau)
+        raise ConfiguracaoInvalida(
+            f"rota {rota.nome!r}: degrau_maximo {declarado!r} desconhecido. "
+            f"Conhecidos: {conhecidos}"
+        ) from erro
+
+
 def _llm(perfil: Perfil, rota: Rota) -> Extrator:
     from parser.ollama import ClienteOllama, ExtratorModelo
 
     return ExtratorModelo(
-        _cliente(rota), _campos(rota), instrucao=_instrucao(rota)
+        _cliente(rota),
+        _campos(rota),
+        instrucao=_instrucao(rota),
+        degrau_maximo=_degrau_maximo(rota),
     )
 
 
@@ -91,6 +119,7 @@ def _vlm(perfil: Perfil, rota: Rota) -> Extrator:
         _documento(perfil),
         instrucao=_instrucao(rota),
         dpi=rota.dpi,
+        degrau_maximo=_degrau_maximo(rota),
     )
 
 

@@ -181,7 +181,7 @@ def ingerir(
     if saida:
         # Verifica o lote **inteiro** antes de gravar: coluna faltante e lote
         # heterogêneo só aparecem no conjunto, e o destino CSV monta o cabeçalho
-        # a partir do primeiro registro — a coluna sumiria calada (SPEC §4.4).
+        # a partir do primeiro registro — a coluna sumiria calada (SPEC §4.5).
         _validar_saida(resultado.registros, perfil)
         _gravar(resultado, Path(saida))
 

@@ -147,7 +147,40 @@ Regras que a conversão obedece:
 - Sem unidade-alvo declarada, o campo passa **intacto**, com origem `EXTRAIDO`
   preservada — de modo que nenhuma medição anterior mude de valor.
 
-### 4.4 Validação da saída tabular
+### 4.4 Degraus de saída do modelo (RF-4, RF-5)
+
+Impor um esquema JSON aninhado como gramática de decodificação é a forma mais
+segura de obter saída estruturada — **quando funciona**. Em modelo pequeno
+quantizado, pode tornar o caminho válido inalcançável: o modelo emite o token de
+parada e devolve resposta vazia, sem erro algum. O servidor responde `200`, a
+resposta é `""`, e o extrator recebe zero item como se a página estivesse em branco.
+
+O que distingue esse modo de falha: **ele não se parece com falha**. Não há
+exceção, não há JSON malformado, não há timeout. Uma execução em lote registraria
+"processado, 0 registros" e seguiria.
+
+A rota por modelo, portanto, tenta a saída em **degraus**, do mais restrito ao mais
+livre:
+
+| Degrau | Como restringe | Custo quando funciona |
+|---|---|---|
+| 1 | esquema completo como gramática | nenhum: a saída já é conforme |
+| 2 | `format: "json"` + validação em Python | uma validação a mais |
+| 3 | texto livre + extração do JSON embutido | validação e recorte do texto |
+
+Regras que a estratégia obedece:
+
+- **O degrau usado é registrado com o resultado.** Sem isso duas execuções não são
+  comparáveis, e a matriz de comparação passaria a medir também a diferença de
+  restrição — o mesmo erro que o ADR-0005 evita na normalização.
+- **A descida é registrada como achado**, não silenciosa: cair de degrau é
+  informação sobre o modelo, não detalhe de implementação.
+- **Resposta vazia é falha, não resultado vazio.** É a distinção que impede uma
+  página não lida de virar "página sem dados".
+- O degrau final ainda valida contra o schema. Degradar a *forma* da restrição
+  nunca degrada a **validação** — RF-7 vale nos três degraus.
+
+### 4.5 Validação da saída tabular
 
 O modelo valida **campo a campo** (Pydantic, na construção do `Registro`). Isso não
 cobre invariantes do conjunto: colunas ausentes, tipo divergente entre registros,
