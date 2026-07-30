@@ -18,6 +18,10 @@ vale mais que argumento.
 | [0005](0005-comparabilidade-como-requisito.md) | Comparabilidade como requisito | Sem régua comum, a diferença medida é artefato do pipeline |
 | [0006](0006-ferramentas-convencionais-de-tabela.md) | Ferramentas convencionais **funcionam** com camada de adaptação | pdfplumber 100%, Camelot 99% após desrotação e alinhamento posicional |
 | [0007](0007-ocr-e-resolucao.md) | Rota por OCR a 350 dpi | 99,5% de acurácia; curva de resolução não monotônica (400 dpi colapsa) |
+| [0008](0008-configuracao-declarativa.md) | Perfis e prompts fora do código | Sete parâmetros ajustáveis em sete arquivos, cinco deles em Python |
+| [0009](0009-avaliacao-como-ferramenta-de-produto.md) | O mecanismo de avaliação é produto; os dados de uma validação não | Quem aponta o parser para documentos próprios faz as mesmas perguntas |
+| [0010](0010-lote-e-diagnostico.md) | Lote como unidade de execução, com decisão de layout por arquivo | Rotação derrubava quatro ferramentas a **zero** de acurácia |
+| [0011](0011-unidade-e-esquema-declarados.md) | Unidade e esquema de saída declarados no perfil | `Origem.DERIVADO` definido e validado, produzido por nada |
 
 ## Em aberto
 
