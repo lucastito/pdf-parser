@@ -333,7 +333,9 @@ def _checar_valores_constantes(registros: list[Registro]) -> list[Achado]:
         valores = [
             r.campos[nome].valor
             for r in registros
-            if nome in r.campos and r.campos[nome].preenchido and r.campos[nome].valor is not None
+            if nome in r.campos
+            and r.campos[nome].preenchido
+            and r.campos[nome].valor is not None
         ]
         if len(valores) < MINIMO_PARA_ESTATISTICA:
             continue
@@ -344,7 +346,9 @@ def _checar_valores_constantes(registros: list[Registro]) -> list[Achado]:
                 Achado(
                     codigo="valor-constante",
                     severidade=Severidade.ALERTA,
-                    detalhe=f"campo {nome!r}: valor {valor!r} em todos os {len(valores)} itens",
+                    detalhe=(
+                        f"campo {nome!r}: valor {valor!r} em todos os " f"{len(valores)} itens"
+                    ),
                     acao=(
                         "Improvável em dado real. Verifique se a coluna correta está "
                         "sendo lida — um deslocamento produz valores plausíveis e "

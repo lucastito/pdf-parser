@@ -6,10 +6,6 @@ código. Se essa promessa não se sustentar aqui, ela não se sustenta em lugar
 nenhum — e a comparação entre extratores perde o sentido.
 """
 
-import json
-
-import pytest
-
 from parser.modelo import Campo, Evidencia, Registro
 from parser.pipeline import Pipeline, Resultado
 from parser.portas import DocumentoCanonico, Pagina, Palavra
@@ -106,17 +102,13 @@ class TestTriagemIntegrada:
         assert resultado.paginas == 4
 
     def test_com_triagem_relata_as_classes(self):
-        pipeline = Pipeline(
-            FonteFalsa(paginas=3), ExtratorFalso(), [], triar_paginas=True
-        )
+        pipeline = Pipeline(FonteFalsa(paginas=3), ExtratorFalso(), [], triar_paginas=True)
         resultado = pipeline.executar("d.pdf")
         assert resultado.triagem is not None
         assert sum(resultado.triagem.values()) == 3
 
     def test_triagem_nao_perde_pagina(self):
         """A soma das classes tem de fechar com o total — sempre."""
-        pipeline = Pipeline(
-            FonteFalsa(paginas=9), ExtratorFalso(), [], triar_paginas=True
-        )
+        pipeline = Pipeline(FonteFalsa(paginas=9), ExtratorFalso(), [], triar_paginas=True)
         resultado = pipeline.executar("d.pdf")
         assert sum(resultado.triagem.values()) == resultado.paginas

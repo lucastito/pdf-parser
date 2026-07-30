@@ -110,7 +110,9 @@ def avaliar(
     for identificador, esperados in gabarito.items():
         registro = obtidos.get(identificador)
         resultados = [
-            _comparar(campo, esperado, registro.campos.get(campo) if registro else None, tolerancia)
+            _comparar(
+                campo, esperado, registro.campos.get(campo) if registro else None, tolerancia
+            )
             for campo, esperado in esperados.items()
         ]
         comparacoes.append(Comparacao(identificador=identificador, resultados=resultados))
@@ -131,9 +133,7 @@ def _comparar(
         return ResultadoCampo(nome, Veredito.FALTOU, esperado, None)
 
     igual = _equivalentes(esperado, obtido, tolerancia)
-    return ResultadoCampo(
-        nome, Veredito.ACERTO if igual else Veredito.ERRO, esperado, obtido
-    )
+    return ResultadoCampo(nome, Veredito.ACERTO if igual else Veredito.ERRO, esperado, obtido)
 
 
 def _valor_de(campo: Campo | None) -> object:

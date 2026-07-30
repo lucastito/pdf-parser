@@ -5,8 +5,6 @@ defendidas. Um comparador que arredonda a favor produz relatório bonito e
 argumento falso — e ninguém percebe, porque o erro está no instrumento de medida.
 """
 
-import pytest
-
 from parser.avaliacao import Veredito, avaliar
 from parser.modelo import Campo, Evidencia, Registro, Sentinela
 
@@ -97,9 +95,7 @@ class TestSentinelasEAusencia:
 class TestMetricaPorCampo:
     def test_campo_sistematicamente_errado_aparece(self):
         """O ponto central: a média esconde, a visão por campo revela."""
-        obtidos = {
-            f"item{i}": _registro(bom=1.0, ruim=999.0) for i in range(10)
-        }
+        obtidos = {f"item{i}": _registro(bom=1.0, ruim=999.0) for i in range(10)}
         gabarito = {f"item{i}": {"bom": 1.0, "ruim": 1.0} for i in range(10)}
 
         r = avaliar("e", obtidos, gabarito)

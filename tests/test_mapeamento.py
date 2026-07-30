@@ -129,9 +129,17 @@ class TestMapeamentoReal:
     """Contra os rótulos que o extrator realmente produz no documento-caso."""
 
     ROTULOS_REAIS = [
-        "Umidade (%)", "Energia (kcal)", "Energia (kJ)", "Proteína (g)",
-        "Lipídeos (g)", "Colesterol (mg)", "Carboidrato (g)",
-        "Alimentar Fibra (g)", "Cinzas (g)", "Cálcio (mg)", "Magnésio (mg)",
+        "Umidade (%)",
+        "Energia (kcal)",
+        "Energia (kJ)",
+        "Proteína (g)",
+        "Lipídeos (g)",
+        "Colesterol (mg)",
+        "Carboidrato (g)",
+        "Alimentar Fibra (g)",
+        "Cinzas (g)",
+        "Cálcio (mg)",
+        "Magnésio (mg)",
     ]
 
     def test_mapeamento_do_perfil_cobre_os_cinco_macros(self):
@@ -141,12 +149,21 @@ class TestMapeamentoReal:
         registro = Registro(
             campos={
                 "identificador": Campo[str].extraido(valor="1 Arroz", evidencia=EV),
-                **{r: Campo[float].extraido(valor=1.0, evidencia=EV) for r in self.ROTULOS_REAIS},
+                **{
+                    r: Campo[float].extraido(valor=1.0, evidencia=EV)
+                    for r in self.ROTULOS_REAIS
+                },
             },
             fonte="d.pdf",
         )
         saida = m.aplicar(registro)
-        for esperado in ("energia_kcal", "proteina_g", "lipideos_g", "carboidrato_g", "fibra_g"):
+        for esperado in (
+            "energia_kcal",
+            "proteina_g",
+            "lipideos_g",
+            "carboidrato_g",
+            "fibra_g",
+        ):
             assert saida.campos[esperado].preenchido, f"{esperado} não foi mapeado"
 
     def test_energia_em_kj_nao_e_confundida_com_kcal(self):
@@ -154,7 +171,5 @@ class TestMapeamentoReal:
         from parser.mapeamento import MAPEAMENTO_NUTRICIONAL
 
         m = Mapeamento(MAPEAMENTO_NUTRICIONAL)
-        saida = m.aplicar(
-            _registro(**{"Energia (kcal)": 124.0, "Energia (kJ)": 517.0})
-        )
+        saida = m.aplicar(_registro(**{"Energia (kcal)": 124.0, "Energia (kJ)": 517.0}))
         assert saida.campos["energia_kcal"].valor == 124.0

@@ -44,7 +44,16 @@ class ConfiguracaoInvalida(ValueError):
     """A configuração não descreve uma execução válida."""
 
 
-ROTAS_CONHECIDAS = ("posicional", "linear", "biblioteca", "pdfplumber", "camelot", "ocr", "vlm", "llm")
+ROTAS_CONHECIDAS = (
+    "posicional",
+    "linear",
+    "biblioteca",
+    "pdfplumber",
+    "camelot",
+    "ocr",
+    "vlm",
+    "llm",
+)
 """Rotas que o projeto sabe executar.
 
 Nome fora desta lista é erro de digitação, e falhar na carga é melhor que ignorar
@@ -104,9 +113,7 @@ class Rota:
 
     @classmethod
     def de_dados(cls, nome: str, dados: dict[str, Any]) -> Rota:
-        conhecidos = {
-            "dpi", "modelo", "url", "timeout", "prompt", "layout", "campos_na_ordem"
-        }
+        conhecidos = {"dpi", "modelo", "url", "timeout", "prompt", "layout", "campos_na_ordem"}
         chave_dpi = f"{nome}.dpi"
         return cls(
             nome=nome,
@@ -183,7 +190,9 @@ def carregar_perfil(caminho: str | Path) -> Perfil:
     try:
         dados = json.loads(arquivo.read_text(encoding="utf-8"))
     except json.JSONDecodeError as erro:
-        raise ConfiguracaoInvalida(f"perfil {arquivo.name} não é JSON válido: {erro}") from erro
+        raise ConfiguracaoInvalida(
+            f"perfil {arquivo.name} não é JSON válido: {erro}"
+        ) from erro
 
     if not dados.get("nome"):
         raise ConfiguracaoInvalida(f"perfil {arquivo.name} sem 'nome'")
@@ -286,7 +295,7 @@ def carregar_prompt(caminho: str | Path) -> Prompt:
     marcas = list(_SECAO.finditer(texto))
     for i, marca in enumerate(marcas):
         fim = marcas[i + 1].start() if i + 1 < len(marcas) else len(texto)
-        secoes[_normalizar(marca.group(1))] = texto[marca.end():fim].strip()
+        secoes[_normalizar(marca.group(1))] = texto[marca.end() : fim].strip()
 
     if "instrucao" not in secoes or not secoes["instrucao"]:
         raise ConfiguracaoInvalida(

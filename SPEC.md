@@ -170,16 +170,25 @@ registro fica porque hipótese invalidada também é resultado:
 O texto livre, sem restrição alguma, também devolve vazio: a restrição não é a
 causa. Em todos os casos o modelo gera tokens e nada chega ao campo de resposta.
 
-A investigação seguinte separou **duas causas independentes**:
+A investigação seguinte descartou também a segunda suspeita — o canal de raciocínio
+do modelo. Repetidos os três degraus com o raciocínio desligado:
 
-**Confirmada — o canal de raciocínio.** O modelo gasta a geração inteira raciocinando
-e não emite no canal de resposta. Desligado, o mesmo modelo responde corretamente em
-237 s. Daí a rota desligar o raciocínio por padrão: é o que produz resposta.
+| Degrau | Raciocínio ligado | Raciocínio desligado |
+|---|---|---|
+| esquema completo | 306 s · 153 tokens | 77 s · 152 tokens |
+| `format: "json"` | 82 s · 152 tokens | 79 s · 152 tokens |
+| texto livre | 1055 s · 1844 tokens | 953 s · 1817 tokens |
 
-**Em aberto — algo no prompt de extração.** Mesmo com o raciocínio desligado, o
-prompt de extração continua devolvendo vazio (77,4 s e 78,8 s nos dois primeiros
-degraus), enquanto um prompt de descrição responde. O `eval_count` fica em 152 em
-toda rodada vazia, com e sem raciocínio.
+Todas vazias. A contagem de tokens quase idêntica indica que o pedido de desligar o
+raciocínio **não está sendo respeitado** por esta combinação de servidor e modelo.
+
+**Correção de registro:** uma versão anterior desta seção dava o raciocínio como
+causa confirmada, a partir de um único teste com prompt de descrição. A medição
+completa não sustentou. Fica registrado porque hipótese invalidada é resultado — e
+porque a próxima pessoa não deve refazer a mesma busca.
+
+**A única pista firme é o prompt:** um pedido de descrição responde (521 tokens), o
+de extração não (152). Investigação em aberto.
 
 Os degraus permanecem, porque resolvem um problema **diferente e real**: impedem
 que resposta vazia vire "página sem dados" em silêncio, e registram sob qual

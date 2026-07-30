@@ -46,9 +46,15 @@ def _processador() -> str:
     if platform.system() == "Windows":
         try:
             saida = subprocess.run(
-                ["powershell", "-NoProfile", "-Command",
-                 "(Get-CimInstance Win32_Processor).Name"],
-                capture_output=True, text=True, timeout=20,
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "(Get-CimInstance Win32_Processor).Name",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20,
             )
             if saida.stdout.strip():
                 return saida.stdout.strip().splitlines()[0]
@@ -60,6 +66,7 @@ def _processador() -> str:
 def _nucleos() -> int | None:
     try:
         import os
+
         return os.cpu_count()
     except Exception:
         return None
@@ -69,11 +76,17 @@ def _ram() -> tuple[float | None, float | None]:
     try:
         if platform.system() == "Windows":
             saida = subprocess.run(
-                ["powershell", "-NoProfile", "-Command",
-                 "$c=Get-CimInstance Win32_ComputerSystem;"
-                 "$o=Get-CimInstance Win32_OperatingSystem;"
-                 "Write-Output \"$($c.TotalPhysicalMemory) $($o.FreePhysicalMemory)\""],
-                capture_output=True, text=True, timeout=20,
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "$c=Get-CimInstance Win32_ComputerSystem;"
+                    "$o=Get-CimInstance Win32_OperatingSystem;"
+                    'Write-Output "$($c.TotalPhysicalMemory) $($o.FreePhysicalMemory)"',
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20,
             )
             partes = saida.stdout.split()
             if len(partes) == 2:
@@ -82,7 +95,8 @@ def _ram() -> tuple[float | None, float | None]:
             info = Path("/proc/meminfo").read_text()
             campos = {
                 linha.split(":")[0]: int(linha.split()[1])
-                for linha in info.splitlines() if ":" in linha
+                for linha in info.splitlines()
+                if ":" in linha
             }
             total = round(campos["MemTotal"] / 1024**2, 1)
             livre = round(campos.get("MemAvailable", campos["MemFree"]) / 1024**2, 1)
@@ -94,11 +108,14 @@ def _ram() -> tuple[float | None, float | None]:
 
 def _gpu() -> tuple[str | None, str | None]:
     import shutil
+
     if shutil.which("nvidia-smi"):
         try:
             saida = subprocess.run(
                 ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
-                capture_output=True, text=True, timeout=20,
+                capture_output=True,
+                text=True,
+                timeout=20,
             )
             linha = saida.stdout.strip().splitlines()[0]
             nome, memoria = (p.strip() for p in linha.split(","))
@@ -108,9 +125,15 @@ def _gpu() -> tuple[str | None, str | None]:
     if platform.system() == "Windows":
         try:
             saida = subprocess.run(
-                ["powershell", "-NoProfile", "-Command",
-                 "(Get-CimInstance Win32_VideoController | Select-Object -First 1).Name"],
-                capture_output=True, text=True, timeout=20,
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "(Get-CimInstance Win32_VideoController | Select-Object -First 1).Name",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20,
             )
             if saida.stdout.strip():
                 return saida.stdout.strip().splitlines()[0], None
@@ -126,12 +149,16 @@ def modelos_disponiveis(url: str = "http://localhost:11434") -> list[dict]:
     e comparar rodadas com etiquetas diferentes não é comparar o mesmo modelo.
     """
     import urllib.request
+
     try:
         with urllib.request.urlopen(f"{url.rstrip('/')}/api/tags", timeout=10) as r:
             dados = json.loads(r.read().decode("utf-8"))
         return [
-            {"nome": m.get("name"), "digest": (m.get("digest") or "")[:12],
-             "tamanho_gb": round(m.get("size", 0) / 1024**3, 2)}
+            {
+                "nome": m.get("name"),
+                "digest": (m.get("digest") or "")[:12],
+                "tamanho_gb": round(m.get("size", 0) / 1024**3, 2),
+            }
             for m in dados.get("models", [])
         ]
     except Exception:

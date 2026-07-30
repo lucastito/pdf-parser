@@ -27,13 +27,12 @@ existe para evitar.
 
 from __future__ import annotations
 
-import statistics
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from parser.portas import Pagina, Palavra
+from parser.portas import Palavra
 
 __all__ = [
     "CalibracaoFalhou",
@@ -78,8 +77,10 @@ def _numerico(texto: str) -> bool:
     limpo = texto.strip()
     if limpo in ("Tr", "tr", "NA", "na", "*"):
         return True
-    return bool(limpo) and any(c.isdigit() for c in limpo) and all(
-        c.isdigit() or c in ",.-" for c in limpo
+    return (
+        bool(limpo)
+        and any(c.isdigit() for c in limpo)
+        and all(c.isdigit() or c in ",.-" for c in limpo)
     )
 
 
@@ -88,9 +89,7 @@ def _unidade(texto: str) -> bool:
     return len(limpo) >= 3 and limpo.startswith("(") and limpo.endswith(")")
 
 
-def descobrir_paginas_de_dados(
-    caminho: str | Path, *, limite: int | None = None
-) -> list[int]:
+def descobrir_paginas_de_dados(caminho: str | Path, *, limite: int | None = None) -> list[int]:
     """Encontra as páginas que contêm tabela de dados, em numeração base 1.
 
     O critério é densidade numérica: página de dados tem muitos tokens numéricos
@@ -118,9 +117,7 @@ def descobrir_paginas_de_dados(
         documento.close()
 
 
-def calibrar(
-    caminho: str | Path, *, paginas: list[int] | None = None
-) -> Candidato:
+def calibrar(caminho: str | Path, *, paginas: list[int] | None = None) -> Candidato:
     """Descobre o layout de tabela de um documento.
 
     Args:
@@ -154,9 +151,7 @@ def calibrar(
 
     for numero in paginas:
         if not 1 <= numero <= total:
-            raise CalibracaoFalhou(
-                f"página {numero} fora do documento (tem {total} páginas)"
-            )
+            raise CalibracaoFalhou(f"página {numero} fora do documento (tem {total} páginas)")
 
     amostra: list[Palavra] = []
     for numero in paginas:
@@ -267,9 +262,7 @@ def _faixa_de_rotulos(
     O limite inferior exclui título e legenda, que ficam mais à esquerda: a busca
     para na primeira lacuna significativa.
     """
-    candidatos = [
-        p for p in palavras if p.x0 < x_unidades[0] and not _numerico(p.texto)
-    ]
+    candidatos = [p for p in palavras if p.x0 < x_unidades[0] and not _numerico(p.texto)]
     if not candidatos:
         raise CalibracaoFalhou("nenhum texto à esquerda das unidades — sem faixa de rótulos")
 

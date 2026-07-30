@@ -120,7 +120,9 @@ class Lote:
             raise FileNotFoundError(f"caminho não encontrado: {self.caminho}")
 
         if self.caminho.is_file():
-            return [self.caminho] if self.caminho.suffix.lower() in EXTENSOES_SUPORTADAS else []
+            return (
+                [self.caminho] if self.caminho.suffix.lower() in EXTENSOES_SUPORTADAS else []
+            )
 
         return sorted(
             p
@@ -157,6 +159,12 @@ def ingerir(
     inicio = time.perf_counter()
     lote = Lote(entrada)
     arquivos = lote.arquivos()
+
+    # Erro de perfil é igual para todos os arquivos: verificar uma vez, antes do
+    # laço, troca cem falhas idênticas por um erro no lugar certo. Sem isto, uma
+    # pasta de cem documentos gastaria a extração inteira para repetir a mesma
+    # mensagem cem vezes.
+    _validar_perfil(perfil)
 
     resultado = ResultadoLote(pasta=str(entrada), arquivos_encontrados=len(arquivos))
 
@@ -206,7 +214,7 @@ def _processar(
     Devolve os registros e uma nota sobre como o layout foi decidido — a nota vai
     para o log, de modo que a origem de um valor suspeito seja rastreável.
     """
-    from parser.extratores.posicional import ExtratorPosicional, LayoutTabela
+    from parser.extratores.posicional import ExtratorPosicional
     from parser.fontes.pdf import FontePDF
 
     layout, nota = _decidir_layout(arquivo, perfil, calibrar_por_arquivo)
@@ -245,24 +253,48 @@ def _converter_unidades(registros: list[Registro], perfil: Any) -> list[Registro
     return Conversor.de_perfil(perfil).aplicar_todos(registros)
 
 
+def _validar_perfil(perfil: Any) -> None:
+    """Verifica o que não depende de documento algum, antes de processar.
+
+    Mapeamento, unidades e esquema são iguais para a pasta inteira. Um erro em
+    qualquer um deles falha em todos os arquivos com a mesma mensagem, e
+    descobri-lo depois de extrair cem documentos é desperdício puro.
+
+    Levanta o erro original — `MapeamentoInvalido`, `UnidadeInvalida` ou
+    `EsquemaInvalido` —, que já nomeia campo e causa.
+    """
+    if perfil is None:
+        return
+
+    if getattr(perfil, "mapeamento", None):
+        from parser.mapeamento import Mapeamento
+
+        Mapeamento(perfil.mapeamento)
+
+    from parser.esquema import Esquema
+    from parser.unidades import Conversor
+
+    Conversor.de_perfil(perfil)
+    Esquema.de_perfil(perfil)
+
+
 def _aplicar_mapeamento(registros: list[Registro], perfil: Any) -> list[Registro]:
     if perfil is None or not getattr(perfil, "mapeamento", None):
         return registros
 
     from parser.mapeamento import Mapeamento
 
-    try:
-        return Mapeamento(perfil.mapeamento).aplicar_todos(registros)
-    except Exception:
-        # Mapeamento inválido não deve custar os registros já extraídos; a
-        # inconsistência aparece nas pendências, com nome de campo original.
-        return registros
+    # Mapeamento inválido **falha alto**, e a razão é o efeito a jusante: sem
+    # tradução, os registros seguem com os rótulos do documento e a validação de
+    # esquema acusa "coluna ausente". O usuário então procura por que a coluna
+    # sumiu, quando a causa é um perfil com dois campos reivindicando o mesmo
+    # rótulo. Engolir aqui não protege o lote — só troca um erro localizável por
+    # um erro que aponta para o lugar errado.
+    return Mapeamento(perfil.mapeamento).aplicar_todos(registros)
 
 
 def _decidir_layout(arquivo: Path, perfil: Any, calibrar_por_arquivo: bool):
     """Layout descoberto, se confiável; senão o do perfil."""
-    from parser.extratores.posicional import LayoutTabela
-
     if calibrar_por_arquivo:
         try:
             from parser.calibracao import calibrar
@@ -304,10 +336,11 @@ def _layout_de_dados(dados: dict):
 def _paginas_do_perfil(perfil: Any) -> range | None:
     if perfil is None or not hasattr(perfil, "intervalo_de_paginas"):
         return None
-    try:
-        return perfil.intervalo_de_paginas()
-    except Exception:
-        return None
+
+    # Sem captura: um 'paginas' malformado devolvia None em silêncio, e o lote
+    # processava o documento inteiro. Quem pediu três páginas recebia cento e
+    # sessenta e quatro, sem nenhum sinal de que o pedido foi ignorado.
+    return perfil.intervalo_de_paginas()
 
 
 def _classificar(arquivo: Path, erro: Exception) -> Falha:
@@ -321,9 +354,7 @@ def _classificar(arquivo: Path, erro: Exception) -> Falha:
     try:
         from parser.diagnostico import Severidade, diagnosticar
 
-        graves = [
-            a for a in diagnosticar(str(arquivo)) if a.severidade is Severidade.BLOQUEIA
-        ]
+        graves = [a for a in diagnosticar(str(arquivo)) if a.severidade is Severidade.BLOQUEIA]
         if graves:
             return Falha(
                 arquivo=str(arquivo),

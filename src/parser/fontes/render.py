@@ -36,9 +36,7 @@ def _validar_dpi(dpi: int) -> None:
         raise DpiInvalido(f"dpi {dpi} excede o máximo de {DPI_MAXIMO}")
 
 
-def renderizar(
-    caminho: str | Path, *, pagina: int, dpi: int = DPI_PADRAO
-) -> str:
+def renderizar(caminho: str | Path, *, pagina: int, dpi: int = DPI_PADRAO) -> str:
     """Renderiza uma página como PNG em base64.
 
     Args:
@@ -61,9 +59,7 @@ def renderizar(
     documento = fitz.open(arquivo)
     try:
         if not 1 <= pagina <= documento.page_count:
-            raise ValueError(
-                f"página {pagina} fora do documento (tem {documento.page_count})"
-            )
+            raise ValueError(f"página {pagina} fora do documento (tem {documento.page_count})")
         pixmap = documento[pagina - 1].get_pixmap(dpi=dpi)
         return base64.b64encode(pixmap.tobytes("png")).decode("ascii")
     finally:

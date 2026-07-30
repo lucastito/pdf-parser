@@ -189,7 +189,10 @@ class ExtratorBaseadoEmModelo:
                     "type": "array",
                     "items": {
                         "type": "object",
-                        "properties": {campo: {"type": ["string", "number", "null"]} for campo in self.campos},
+                        "properties": {
+                            campo: {"type": ["string", "number", "null"]}
+                            for campo in self.campos
+                        },
                     },
                 }
             },

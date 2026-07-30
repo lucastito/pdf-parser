@@ -100,7 +100,7 @@ def _degrau_maximo(rota: Rota):
 
 
 def _llm(perfil: Perfil, rota: Rota) -> Extrator:
-    from parser.ollama import ClienteOllama, ExtratorModelo
+    from parser.ollama import ExtratorModelo
 
     return ExtratorModelo(
         _cliente(rota),
@@ -205,7 +205,12 @@ def _instrucao(rota: Rota) -> str | None:
 
 
 def _layout(dados: dict) -> LayoutTabela:
-    faltando = {"x_rotulos", "x_unidades", "x_valores_min", "y_identificadores_min"} - dados.keys()
+    faltando = {
+        "x_rotulos",
+        "x_unidades",
+        "x_valores_min",
+        "y_identificadores_min",
+    } - dados.keys()
     if faltando:
         raise ConfiguracaoInvalida(f"layout sem: {', '.join(sorted(faltando))}")
     return LayoutTabela(

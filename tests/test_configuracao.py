@@ -15,8 +15,6 @@ import pytest
 
 from parser.configuracao import (
     ConfiguracaoInvalida,
-    Perfil,
-    Prompt,
     carregar_perfil,
     carregar_prompt,
 )
@@ -98,7 +96,10 @@ class TestExtensibilidade:
 
     def test_endereco_do_servidor_e_configuravel(self, tmp_path):
         dados = {**PERFIL_MINIMO, "rotas": {"vlm": {"url": "http://servidor:11434"}}}
-        assert carregar_perfil(_escrever(tmp_path, dados)).rota("vlm").url == "http://servidor:11434"
+        assert (
+            carregar_perfil(_escrever(tmp_path, dados)).rota("vlm").url
+            == "http://servidor:11434"
+        )
 
     def test_rota_desconhecida_falha_claro(self, tmp_path):
         """Nome de rota errado é erro de digitação, e deve aparecer como tal."""

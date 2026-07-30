@@ -206,16 +206,17 @@ class TestLimite:
 
 
 class TestRaciocinio:
-    """O canal de raciocínio precisa ser desligável — medido, não suposto.
+    """O canal de raciocínio precisa ser controlável — para poder ser medido.
 
-    Medição de 2026-07-30 com `qwen3-vl:4b`: com raciocínio ligado, os três
-    degraus devolvem resposta vazia, inclusive o texto livre sem restrição
-    alguma. O modelo gera tokens (153, 152 e 1844) e nada chega ao campo de
-    resposta. Desligado, o mesmo modelo devolve descrição correta da página em
-    237 s.
+    Cuidado com o que estes testes **não** afirmam. Uma versão anterior deles
+    dizia que desligar o raciocínio resolvia a resposta vazia, com base num único
+    teste de prompt de descrição. A medição completa não sustentou: desligado, os
+    três degraus geram praticamente os mesmos tokens (152 contra 152; 1817 contra
+    1844) e continuam vazios.
 
-    Ligar raciocínio é, portanto, uma escolha com custo medido — e o padrão
-    precisa ser o que produz resposta.
+    O que se verifica aqui é só que a escolha existe, é explícita e vale igual em
+    todos os degraus — variar raciocínio junto com restrição criaria variável
+    escondida e nenhuma comparação entre degraus significaria mais nada.
     """
 
     def test_desliga_o_raciocinio_por_padrao(self):
@@ -240,10 +241,16 @@ class TestRaciocinio:
 
         assert [c["think"] for c in transporte.chamadas] == [False, False, False]
 
-    def test_resposta_vazia_menciona_o_raciocinio(self):
-        """A causa medida tem de estar na mensagem, não no histórico do projeto."""
+    def test_vazio_em_todos_os_degraus_orienta_a_investigacao(self):
+        """A mensagem tem de dizer o que já foi descartado, não repetir a busca.
+
+        Sem isso, quem esbarrar nisso vai refazer as mesmas medições que já foram
+        feitas — e chegar às mesmas duas conclusões negativas.
+        """
         transporte = TransporteRoteirizado(VAZIO, VAZIO, VAZIO)
         with pytest.raises(TodosOsDegrausFalharam) as erro:
-            _saida(transporte, raciocinar=True).obter("prompt")
+            _saida(transporte).obter("prompt")
 
-        assert "racioc" in str(erro.value).lower()
+        mensagem = str(erro.value).lower()
+        assert "prompt" in mensagem, "a mensagem precisa apontar a pista atual"
+        assert "restrição" in mensagem or "restricao" in mensagem

@@ -116,7 +116,9 @@ class TestMedicao:
 
     def test_identificador_com_espaco_extra_ainda_alinha(self, tmp_path):
         g = Gabarito.de_arquivo(_csv(tmp_path, f"{CABECALHO}\n1,Arroz,29,2.6,ok\n"))
-        assert medir_acuracia("e", [_registro("  1 Arroz  ", proteina_g=2.6)], g).acuracia == 1.0
+        assert (
+            medir_acuracia("e", [_registro("  1 Arroz  ", proteina_g=2.6)], g).acuracia == 1.0
+        )
 
     def test_sentinela_no_gabarito(self, tmp_path):
         g = Gabarito.de_arquivo(_csv(tmp_path, f"{CABECALHO}\n1,Arroz,29,traco,ok\n"))
@@ -135,8 +137,10 @@ class TestMedicao:
         g = Gabarito.de_arquivo(_csv(tmp_path, conteudo))
         r = medir_acuracia(
             "e",
-            [_registro("1 A", proteina_g=2.6, fibra_g=99.0),
-             _registro("2 B", proteina_g=3.0, fibra_g=99.0)],
+            [
+                _registro("1 A", proteina_g=2.6, fibra_g=99.0),
+                _registro("2 B", proteina_g=3.0, fibra_g=99.0),
+            ],
             g,
         )
         por_campo = r.por_campo()
@@ -161,14 +165,19 @@ class TestGabaritoReal:
         from pathlib import Path
 
         caminho = (
-            Path(__file__).resolve().parent.parent
-            / "experimentos" / "golden" / "taco.csv"
+            Path(__file__).resolve().parent.parent / "experimentos" / "golden" / "taco.csv"
         )
         if not caminho.exists():
             pytest.skip("gabarito ainda não conferido")
 
         g = Gabarito.de_arquivo(caminho, gerado_por="posicional")
         assert len(g.itens) == 40
-        assert g.campos == ["energia_kcal", "proteina_g", "lipideos_g", "carboidrato_g", "fibra_g"]
+        assert g.campos == [
+            "energia_kcal",
+            "proteina_g",
+            "lipideos_g",
+            "carboidrato_g",
+            "fibra_g",
+        ]
         assert g.total == 200
         assert g.completo

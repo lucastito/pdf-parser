@@ -58,7 +58,8 @@ class ExtratorCamelot:
             # A ferramenta não conseguir ler é resultado do experimento, e precisa
             # aparecer como tal — não como exceção que interrompe a rodada.
             raise RuntimeError(
-                f"camelot ({self.modo}) não processou o documento: {type(erro).__name__}: {erro}"
+                f"camelot ({self.modo}) não processou o documento: "
+                f"{type(erro).__name__}: {erro}"
             ) from erro
 
         registros: list[Registro] = []

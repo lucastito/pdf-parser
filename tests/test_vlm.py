@@ -85,9 +85,7 @@ class TestEnvioDaImagem:
         tamanhos = []
         for dpi in (72, 200):
             transporte = TransporteFalso({"itens": []})
-            _extrator(transporte, pdf_exemplo, dpi=dpi).extrair(
-                _documento(pdf_exemplo.name)
-            )
+            _extrator(transporte, pdf_exemplo, dpi=dpi).extrair(_documento(pdf_exemplo.name))
             tamanhos.append(len(transporte.chamadas[0]["images"][0]))
 
         assert tamanhos[1] > tamanhos[0], "DPI maior deveria produzir imagem maior"
@@ -95,59 +93,43 @@ class TestEnvioDaImagem:
 
 class TestSaida:
     def test_produz_registros(self, pdf_exemplo):
-        transporte = TransporteFalso(
-            {"itens": [{"identificador": "Arroz", "proteina": 2.6}]}
-        )
-        registros = _extrator(transporte, pdf_exemplo).extrair(
-            _documento(pdf_exemplo.name)
-        )
+        transporte = TransporteFalso({"itens": [{"identificador": "Arroz", "proteina": 2.6}]})
+        registros = _extrator(transporte, pdf_exemplo).extrair(_documento(pdf_exemplo.name))
 
         assert len(registros) == 1
         assert registros[0].campos["proteina"].valor == 2.6
 
     def test_confianca_menor_que_deterministica(self, pdf_exemplo):
         transporte = TransporteFalso({"itens": [{"proteina": 2.6}]})
-        registros = _extrator(transporte, pdf_exemplo).extrair(
-            _documento(pdf_exemplo.name)
-        )
+        registros = _extrator(transporte, pdf_exemplo).extrair(_documento(pdf_exemplo.name))
         assert registros[0].campos["proteina"].confianca < 1.0
 
     def test_normalizacao_e_a_mesma_dos_outros_bracos(self, pdf_exemplo):
         """Vírgula decimal tratada igual em todas as estratégias."""
         transporte = TransporteFalso({"itens": [{"proteina": "2,6"}]})
-        registros = _extrator(transporte, pdf_exemplo).extrair(
-            _documento(pdf_exemplo.name)
-        )
+        registros = _extrator(transporte, pdf_exemplo).extrair(_documento(pdf_exemplo.name))
         assert registros[0].campos["proteina"].valor == pytest.approx(2.6)
 
     def test_sentinela_reconhecida(self, pdf_exemplo):
         transporte = TransporteFalso({"itens": [{"proteina": "Tr"}]})
-        registros = _extrator(transporte, pdf_exemplo).extrair(
-            _documento(pdf_exemplo.name)
-        )
+        registros = _extrator(transporte, pdf_exemplo).extrair(_documento(pdf_exemplo.name))
         campo = registros[0].campos["proteina"]
         assert campo.sentinela is not None
         assert campo.valor is None
 
     def test_campo_fora_do_schema_e_descartado(self, pdf_exemplo):
         transporte = TransporteFalso({"itens": [{"proteina": 2.6, "invencao": "x"}]})
-        registros = _extrator(transporte, pdf_exemplo).extrair(
-            _documento(pdf_exemplo.name)
-        )
+        registros = _extrator(transporte, pdf_exemplo).extrair(_documento(pdf_exemplo.name))
         assert "invencao" not in registros[0].campos
 
     def test_origem_e_extraida(self, pdf_exemplo):
         transporte = TransporteFalso({"itens": [{"proteina": 2.6}]})
-        registros = _extrator(transporte, pdf_exemplo).extrair(
-            _documento(pdf_exemplo.name)
-        )
+        registros = _extrator(transporte, pdf_exemplo).extrair(_documento(pdf_exemplo.name))
         assert registros[0].campos["proteina"].origem is Origem.EXTRAIDO
 
     def test_evidencia_registra_a_pagina(self, pdf_exemplo):
         transporte = TransporteFalso({"itens": [{"proteina": 2.6}]})
-        registros = _extrator(transporte, pdf_exemplo).extrair(
-            _documento(pdf_exemplo.name)
-        )
+        registros = _extrator(transporte, pdf_exemplo).extrair(_documento(pdf_exemplo.name))
         assert registros[0].campos["proteina"].evidencia.pagina == 1
 
 
@@ -155,9 +137,7 @@ class TestContrato:
     def test_respeita_a_porta_extrator(self, pdf_exemplo):
         from parser.portas import Extrator
 
-        assert isinstance(
-            _extrator(TransporteFalso({}), pdf_exemplo), Extrator
-        )
+        assert isinstance(_extrator(TransporteFalso({}), pdf_exemplo), Extrator)
 
     def test_dpi_invalido_falha_na_construcao(self, pdf_exemplo):
         from parser.fontes.render import DpiInvalido
@@ -188,9 +168,7 @@ class TestDegraus:
 
     def test_esquema_vazio_nao_vira_pagina_sem_dados(self, pdf_exemplo):
         transporte = self.TransporteQueColapsa({"itens": [{"proteina": 2.6}]})
-        registros = _extrator(transporte, pdf_exemplo).extrair(
-            _documento(pdf_exemplo.name)
-        )
+        registros = _extrator(transporte, pdf_exemplo).extrair(_documento(pdf_exemplo.name))
         assert registros, "o colapso do esquema virou página em branco"
         assert registros[0].campos["proteina"].valor == 2.6
 

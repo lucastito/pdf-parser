@@ -55,8 +55,9 @@ def pdf_tabular(tmp_path):
             pagina.insert_text((160 + i * 40, y), valor)
 
     # Nomes dos itens, um por coluna, na área inferior.
-    for i, nome in enumerate(["1 Item um", "2 Item dois", "3 Item tres",
-                              "4 Item quatro", "5 Item cinco"]):
+    for i, nome in enumerate(
+        ["1 Item um", "2 Item dois", "3 Item tres", "4 Item quatro", "5 Item cinco"]
+    ):
         pagina.insert_text((160 + i * 40, 600), nome)
 
     documento.save(caminho)

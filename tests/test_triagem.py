@@ -10,7 +10,6 @@ import pytest
 from parser.portas import DocumentoCanonico, Pagina, Palavra
 from parser.triagem import Classe, Triagem, triar
 
-
 _LEXICO = ["alimento", "cozido", "integral", "fonte", "tabela", "método", "amostra"]
 
 

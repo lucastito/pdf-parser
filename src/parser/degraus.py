@@ -7,26 +7,38 @@ a resposta é `""` com `done_reason=stop`, e o extrator recebe zero item — com
 a página estivesse em branco. Numa execução em lote isso vira "processado, 0
 registros" e segue adiante.
 
-**A causa medida não é a restrição.** A hipótese inicial culpava o esquema
-restringido — a gramática de decodificação tornando o caminho válido inalcançável.
-Medição de 2026-07-30 com `qwen3-vl:4b`, mesma imagem e mesma instrução:
+**A causa não é a restrição, e ainda não foi identificada.** A hipótese inicial
+culpava o esquema restringido — a gramática de decodificação tornando o caminho
+válido inalcançável. Medição de 2026-07-30 com `qwen3-vl:4b`, mesma imagem e mesma
+instrução, variando só a restrição e o canal de raciocínio:
 
-| Degrau | Segundos | `done_reason` | Tokens | Resposta |
-|---|---|---|---|---|
-| esquema completo | 306,2 | `stop` | 153 | vazia |
-| `format: "json"` | 81,9 | `stop` | 152 | vazia |
-| texto livre, sem restrição | 1055,4 | `length` | 1844 | vazia |
+| Degrau | Raciocínio ligado | Raciocínio desligado |
+|---|---|---|
+| esquema completo | 306 s · 153 tokens · vazia | 77 s · 152 tokens · vazia |
+| `format: "json"` | 82 s · 152 tokens · vazia | 79 s · 152 tokens · vazia |
+| texto livre | 1055 s · 1844 tokens · vazia | 953 s · 1817 tokens · vazia |
 
-O texto livre também vem vazio: a restrição não é a culpada. Em todos os casos o
-modelo **gera tokens** e nada chega ao campo de resposta. Com o raciocínio
-desligado, o mesmo modelo responde corretamente em 237 s — o orçamento inteiro
-estava sendo gasto no canal de raciocínio.
+Duas conclusões, ambas negativas:
 
-Daí `raciocinar=False` ser o padrão desta classe: é o que produz resposta.
+**A restrição não é a culpada** — o texto livre, sem restrição alguma, também
+devolve vazio.
+
+**O raciocínio também não explica** — desligá-lo praticamente não muda os números
+(152 contra 152; 1817 contra 1844). A contagem quase idêntica sugere que
+`think: false` **não está sendo respeitado** por esta combinação de servidor e
+modelo. Uma hipótese anterior dava esta causa como confirmada, a partir de um único
+teste com prompt de descrição; a medição completa não sustentou.
+
+A única pista firme é o **prompt**: um pedido de descrição responde (521 tokens),
+o de extração não (152). Investigação em aberto.
+
+`raciocinar` existe como parâmetro porque poder ligar e desligar é condição para
+medir. O padrão é desligado por ser o caso mais simples, **não** por estar provado
+que resolve.
 
 Os degraus permanecem porque resolvem um problema **diferente e real** — impedir
 que resposta vazia vire "página sem dados" em silêncio, e registrar sob qual
-restrição cada resultado foi obtido.
+restrição cada resultado foi obtido. Eles não consertam o vazio.
 
 A saída é, então, tentada em degraus:
 
@@ -197,12 +209,14 @@ class SaidaEmDegraus:
             + "\n".join(linhas)
         )
 
-        if self.raciocinar and all("vazia" in t.motivo for t in tentativas):
+        if all("vazia" in t.motivo for t in tentativas):
             relato += (
-                "\n\nTodos os degraus vieram vazios com o raciocínio ligado. Foi "
-                "exatamente o comportamento medido: o modelo gasta a geração no "
-                "canal de raciocínio e não emite no canal de resposta. Tente com "
-                "raciocinar=False."
+                "\n\nTodos os degraus vieram vazios — inclusive o menos restrito. "
+                "Comportamento já medido neste projeto com modelo de visão pequeno: "
+                "a restrição de formato não é a causa, e desligar o raciocínio "
+                "também não resolveu. A pista é o prompt — um pedido de descrição "
+                "responde onde o de extração não. Comece por um prompt curto que "
+                "funcione e acrescente as regras uma a uma."
             )
         return relato
 

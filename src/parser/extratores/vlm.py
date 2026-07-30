@@ -59,9 +59,10 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
             degrau_maximo: o degrau de saída mais livre permitido (SPEC §4.4).
                 Fixá-lo torna uma bateria de execuções comparável entre si; deixá-lo
                 aberto maximiza a chance de obter saída de um modelo pequeno.
-            raciocinar: liga o canal de raciocínio do modelo. Desligado por padrão
-                **por medição**: ligado, o modelo de visão gastou a geração inteira
-                raciocinando e devolveu resposta vazia nos três degraus.
+            raciocinar: liga o canal de raciocínio do modelo. Desligado por ser o
+                caso mais simples — **não** por estar provado que resolve alguma
+                coisa: a medição mostrou que desligar quase não altera a geração.
+                Existe para poder ser medido. Ver `parser.degraus`.
         """
         _validar_dpi(dpi)
         super().__init__(cliente, campos, instrucao=instrucao or INSTRUCAO_VISUAL)

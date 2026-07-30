@@ -113,7 +113,9 @@ def _calibrar(opcoes: argparse.Namespace) -> int:
     try:
         paginas = opcoes.paginas or descobrir_paginas_de_dados(opcoes.documento, limite=60)[:2]
         if not paginas:
-            print("nenhuma página com densidade de tabela. Informe --paginas.", file=sys.stderr)
+            print(
+                "nenhuma página com densidade de tabela. Informe --paginas.", file=sys.stderr
+            )
             return 1
         resultado = calibrar(opcoes.documento, paginas=paginas)
     except FileNotFoundError as erro:
@@ -146,8 +148,10 @@ def _calibrar(opcoes: argparse.Namespace) -> int:
 
 def _ingerir(opcoes: argparse.Namespace) -> int:
     """Processa uma pasta de documentos e consolida numa saída única."""
-    from parser.esquema import SaidaInvalida
+    from parser.esquema import EsquemaInvalido, SaidaInvalida
     from parser.lote import ingerir
+    from parser.mapeamento import MapeamentoInvalido
+    from parser.unidades import UnidadeInvalida
 
     try:
         perfil = _perfil(opcoes.perfil)
@@ -167,6 +171,15 @@ def _ingerir(opcoes: argparse.Namespace) -> int:
         )
     except FileNotFoundError as erro:
         print(f"{erro}", file=sys.stderr)
+        return 2
+    except (MapeamentoInvalido, UnidadeInvalida, EsquemaInvalido) as erro:
+        # Verificado antes do laço: o erro é do perfil, igual para todos os
+        # arquivos. Nenhum documento foi processado, então não há perda a relatar.
+        print(f"perfil inconsistente: {erro}", file=sys.stderr)
+        print(
+            "\nNenhum documento foi processado. Corrija o perfil e rode de novo.",
+            file=sys.stderr,
+        )
         return 2
     except SaidaInvalida as erro:
         # Nada foi gravado: a validação roda antes da escrita, de propósito.
@@ -254,9 +267,7 @@ def _avaliar(opcoes: argparse.Namespace) -> int:
             resultado = medir_acuracia(nome, registros, gabarito, tolerancia=perfil.tolerancia)
             piores = ", ".join(f"{c}={t:.0%}" for c, t in resultado.piores_campos(3))
             marca = "  (gerou o gabarito)" if nome == gabarito.gerado_por else ""
-            print(
-                f"{nome:16s} {resultado.acuracia:8.1%} {len(registros):6d}  {piores}{marca}"
-            )
+            print(f"{nome:16s} {resultado.acuracia:8.1%} {len(registros):6d}  {piores}{marca}")
         except Exception as erro:  # noqa: BLE001 — relatar é o ponto
             print(f"{nome:16s} {'falhou':>9s}         {type(erro).__name__}: {erro}")
             houve_erro = True
@@ -309,7 +320,9 @@ def _comparar(opcoes: argparse.Namespace) -> int:
         try:
             resultado = Pipeline(fonte, extrator, []).executar(documento)
             campos = sum(len(r.campos) for r in resultado.extraidos)
-            print(f"{nome:16s} {resultado.registros:10d} {campos:8d} {resultado.segundos:8.2f}s")
+            print(
+                f"{nome:16s} {resultado.registros:10d} {campos:8d} {resultado.segundos:8.2f}s"
+            )
             if resultado.extraidos:
                 saidas[nome] = [r.model_dump(mode="json") for r in resultado.extraidos]
         except Exception as erro:  # noqa: BLE001

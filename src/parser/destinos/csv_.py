@@ -45,9 +45,7 @@ class DestinoCSV:
             escritor = csv.DictWriter(arquivo, fieldnames=colunas)
             escritor.writeheader()
             for registro in registros:
-                escritor.writerow(
-                    {nome: _celula(registro, nome) for nome in colunas}
-                )
+                escritor.writerow({nome: _celula(registro, nome) for nome in colunas})
 
 
 def _celula(registro: Registro, nome: str) -> str:

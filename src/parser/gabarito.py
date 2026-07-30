@@ -55,7 +55,11 @@ class Gabarito:
 
     @classmethod
     def de_arquivo(
-        cls, caminho: str | Path, *, campos: list[str] | None = None, gerado_por: str | None = None
+        cls,
+        caminho: str | Path,
+        *,
+        campos: list[str] | None = None,
+        gerado_por: str | None = None,
     ) -> Gabarito:
         """Lê o gabarito de um CSV.
 
@@ -112,14 +116,18 @@ class Gabarito:
 
         return gabarito
 
-    def medir(self, registros: list[Registro], *, tolerancia: float = 0.01) -> ResultadoExtrator:
+    def medir(
+        self, registros: list[Registro], *, tolerancia: float = 0.01
+    ) -> ResultadoExtrator:
         """Compara os registros de uma estratégia com o gabarito."""
         return medir_acuracia("", registros, self, tolerancia=tolerancia)
 
 
 def _identificador(linha: dict) -> str:
     """`"1 Arroz, integral, cozido"` — mesmo formato que o extrator produz."""
-    return f"{(linha.get('numero') or '').strip()} {(linha.get('descricao') or '').strip()}".strip()
+    numero = (linha.get("numero") or "").strip()
+    descricao = (linha.get("descricao") or "").strip()
+    return f"{numero} {descricao}".strip()
 
 
 def _numero_do_item(identificador: str) -> str | None:
@@ -172,6 +180,8 @@ def medir_acuracia(
             esperados[chave] = dict(valores)
             continue
         numero = _numero_do_item(chave)
-        esperados[f"#{numero}" if numero and f"#{numero}" in obtidos else chave] = dict(valores)
+        esperados[f"#{numero}" if numero and f"#{numero}" in obtidos else chave] = dict(
+            valores
+        )
 
     return avaliar(estrategia, obtidos, esperados, tolerancia=tolerancia)

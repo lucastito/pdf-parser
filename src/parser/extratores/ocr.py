@@ -20,7 +20,7 @@ import shutil
 from pathlib import Path
 
 from parser.extratores.posicional import ExtratorPosicional, LayoutTabela
-from parser.fontes.render import DPI_PADRAO, _validar_dpi, renderizar
+from parser.fontes.render import _validar_dpi, renderizar
 from parser.modelo import Registro
 from parser.normalizacao import parse_numero  # noqa: F401 — normalização compartilhada
 from parser.portas import DocumentoCanonico, Pagina, Palavra
@@ -91,9 +91,7 @@ class ExtratorOCR:
         from PIL import Image
 
         pytesseract.pytesseract.tesseract_cmd = binario
-        os.environ.setdefault(
-            "TESSDATA_PREFIX", str(Path(binario).parent / "tessdata")
-        )
+        os.environ.setdefault("TESSDATA_PREFIX", str(Path(binario).parent / "tessdata"))
 
         indices = self.paginas or range(len(documento.paginas))
         paginas = []
@@ -101,9 +99,7 @@ class ExtratorOCR:
             numero = indice + 1
             imagem = Image.open(
                 io.BytesIO(
-                    base64.b64decode(
-                        renderizar(self.caminho_pdf, pagina=numero, dpi=self.dpi)
-                    )
+                    base64.b64decode(renderizar(self.caminho_pdf, pagina=numero, dpi=self.dpi))
                 )
             )
             paginas.append(
@@ -162,9 +158,14 @@ class ExtratorOCR:
             if rotacao:
                 palavras.append(
                     self._desrotacionar(
-                        x * escala, y * escala,
-                        (x + largura) * escala, (y + altura) * escala,
-                        texto, rotacao, largura_pt, altura_pt,
+                        x * escala,
+                        y * escala,
+                        (x + largura) * escala,
+                        (y + altura) * escala,
+                        texto,
+                        rotacao,
+                        largura_pt,
+                        altura_pt,
                     )
                 )
                 continue
@@ -182,8 +183,14 @@ class ExtratorOCR:
 
     @staticmethod
     def _desrotacionar(
-        x0: float, y0: float, x1: float, y1: float,
-        texto: str, rotacao: int, largura: float, altura: float,
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+        texto: str,
+        rotacao: int,
+        largura: float,
+        altura: float,
     ) -> Palavra:
         """Leva coordenadas da imagem renderizada de volta ao espaço do documento.
 

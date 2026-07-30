@@ -108,7 +108,9 @@ class ResultadoConcordancia:
             isoladas = [d for d in self.divergencias if d.isolada]
             for d in isoladas[:10]:
                 valores = "  ".join(f"{e}={v}" for e, v in d.valores.items())
-                linhas.append(f"  [{d.item[:26]}] {d.campo}: {valores}  (isolada: {d.isolada})")
+                linhas.append(
+                    f"  [{d.item[:26]}] {d.campo}: {valores}  (isolada: {d.isolada})"
+                )
         linhas.append(
             "\nConcordância NÃO é acurácia: estratégias podem errar igual, e uma "
             "\nestratégia isolada pode ser a única correta. Só o gabarito decide."
@@ -229,10 +231,6 @@ def comparar_estrategias(
                     Divergencia(item=item, campo=campo, valores=valores)
                 )
 
-    resultado.por_par = {
-        par: sum(v) / len(v) for par, v in acertos_par.items() if v
-    }
-    resultado.por_campo = {
-        campo: sum(v) / len(v) for campo, v in acertos_campo.items() if v
-    }
+    resultado.por_par = {par: sum(v) / len(v) for par, v in acertos_par.items() if v}
+    resultado.por_campo = {campo: sum(v) / len(v) for campo, v in acertos_campo.items() if v}
     return resultado

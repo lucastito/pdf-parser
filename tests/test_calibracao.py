@@ -129,8 +129,6 @@ class TestLayoutCalibradoFunciona:
         com_numero = [
             r
             for r in registros
-            if (c := r.campos.get("identificador"))
-            and c.valor
-            and str(c.valor)[:1].isdigit()
+            if (c := r.campos.get("identificador")) and c.valor and str(c.valor)[:1].isdigit()
         ]
         assert len(com_numero) >= 25, f"só {len(com_numero)} itens extraídos"

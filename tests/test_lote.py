@@ -183,7 +183,6 @@ class TestPendencias:
         assert not ingerir(pasta_com_pdfs).pendencias
 
 
-
 class TestUnidadeEEsquemaNoLote:
     """As duas etapas novas têm de rodar no caminho real, não só existir.
 
@@ -263,9 +262,7 @@ class TestUnidadeEEsquemaNoLote:
     def test_lote_converte_a_unidade_declarada(self, pasta_tabular, perfil_tabular):
         perfil_tabular.unidades = {"energia_kcal": {"de": "kcal", "para": "kJ"}}
 
-        resultado = ingerir(
-            pasta_tabular, perfil=perfil_tabular, calibrar_por_arquivo=False
-        )
+        resultado = ingerir(pasta_tabular, perfil=perfil_tabular, calibrar_por_arquivo=False)
 
         valores = [
             r.campos["energia_kcal"].valor
@@ -280,9 +277,7 @@ class TestUnidadeEEsquemaNoLote:
         from parser.modelo import Origem
 
         perfil_tabular.unidades = {"energia_kcal": {"de": "kcal", "para": "kJ"}}
-        resultado = ingerir(
-            pasta_tabular, perfil=perfil_tabular, calibrar_por_arquivo=False
-        )
+        resultado = ingerir(pasta_tabular, perfil=perfil_tabular, calibrar_por_arquivo=False)
 
         convertidos = [
             r.campos["energia_kcal"]
@@ -298,9 +293,7 @@ class TestUnidadeEEsquemaNoLote:
         from parser.modelo import Origem
 
         perfil_tabular.unidades = {"energia_kcal": {"de": "kcal", "para": "kJ"}}
-        resultado = ingerir(
-            pasta_tabular, perfil=perfil_tabular, calibrar_por_arquivo=False
-        )
+        resultado = ingerir(pasta_tabular, perfil=perfil_tabular, calibrar_por_arquivo=False)
 
         proteinas = [
             r.campos["proteina_g"]
@@ -357,9 +350,98 @@ class TestUnidadeEEsquemaNoLote:
         assert saida.exists()
         assert resultado.registros
         origens = {
-            c.origem
-            for r in resultado.registros
-            for c in r.campos.values()
-            if c.preenchido
+            c.origem for r in resultado.registros for c in r.campos.values() if c.preenchido
         }
         assert Origem.DERIVADO not in origens, "converteu sem regra declarada"
+
+
+class TestFalhaDeConfiguracaoNaoEEngolida:
+    """Perfil inconsistente tem de acusar, não degradar em silêncio.
+
+    Os dois casos aqui vinham de `except Exception` largos que devolviam o valor
+    de antes. A intenção era boa — não custar o lote inteiro por causa de um
+    perfil ruim —, mas o efeito é pior que a falha: o sistema segue produzindo
+    resultado plausível e errado, e o erro que o usuário vê aponta para o lugar
+    errado.
+    """
+
+    def test_mapeamento_ambiguo_acusa_o_mapeamento(self):
+        """O sintoma era 'coluna ausente' — que manda procurar no lugar errado.
+
+        Sem mapeamento aplicado, os registros saem com os rótulos do documento;
+        a validação de esquema então acusa coluna faltando. A causa real, um
+        perfil com dois campos reivindicando o mesmo rótulo, fica escondida.
+        """
+        from parser.lote import _aplicar_mapeamento
+        from parser.mapeamento import MapeamentoInvalido
+        from parser.modelo import Campo, Evidencia, Registro
+
+        ev = Evidencia(pagina=1, texto_bruto="124")
+        registro = Registro(
+            campos={"Energia (kcal)": Campo[float].extraido(valor=124.0, evidencia=ev)},
+            fonte="a.pdf",
+        )
+
+        class PerfilAmbiguo:
+            mapeamento = {
+                "energia_kcal": ["Energia (kcal)"],
+                "energia_duplicada": ["Energia (kcal)"],
+            }
+
+        with pytest.raises(MapeamentoInvalido) as erro:
+            _aplicar_mapeamento([registro], PerfilAmbiguo())
+
+        assert "Energia (kcal)" in str(erro.value)
+
+    def test_paginas_invalidas_acusam_o_perfil(self):
+        """Pedir 3 páginas e receber 164 sem aviso é pior que falhar."""
+        from parser.configuracao import ConfiguracaoInvalida
+        from parser.lote import _paginas_do_perfil
+
+        class PerfilComPaginasRuins:
+            nome = "ruim"
+            paginas = [1, 2, 3, 4, 5]  # 'paginas' aceita 2 ou 3 valores, não 5
+
+            def intervalo_de_paginas(self):
+                raise ConfiguracaoInvalida("'paginas' deve ter 2 ou 3 valores")
+
+        with pytest.raises(ConfiguracaoInvalida):
+            _paginas_do_perfil(PerfilComPaginasRuins())
+
+    def test_perfil_sem_paginas_continua_valendo_o_documento_todo(self):
+        """Ausência de declaração não é erro — é o padrão."""
+        from parser.lote import _paginas_do_perfil
+
+        class PerfilSemPaginas:
+            paginas = None
+
+            def intervalo_de_paginas(self):
+                return None
+
+        assert _paginas_do_perfil(PerfilSemPaginas()) is None
+        assert _paginas_do_perfil(None) is None
+
+    def test_perfil_ruim_falha_uma_vez_e_nao_por_arquivo(self, pasta_com_pdfs):
+        """Cem arquivos não devem render cem cópias do mesmo erro de perfil.
+
+        Erro de configuração é igual para a pasta inteira. Verificar antes do
+        laço troca cem falhas idênticas — e a extração gasta para produzi-las —
+        por um erro no lugar certo.
+        """
+        from parser.mapeamento import MapeamentoInvalido
+
+        class PerfilAmbiguo:
+            mapeamento = {"a": ["Rótulo X"], "b": ["Rótulo X"]}
+
+        with pytest.raises(MapeamentoInvalido):
+            ingerir(pasta_com_pdfs, perfil=PerfilAmbiguo())
+
+    def test_unidade_impossivel_no_perfil_falha_antes_do_lote(self, pasta_com_pdfs):
+        from parser.unidades import ConversaoImpossivel
+
+        class PerfilUnidadeRuim:
+            mapeamento = {}
+            unidades = {"proteina_g": {"de": "g", "para": "kcal"}}
+
+        with pytest.raises(ConversaoImpossivel):
+            ingerir(pasta_com_pdfs, perfil=PerfilUnidadeRuim())

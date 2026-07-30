@@ -60,18 +60,22 @@ O texto livre, sem restrição alguma, também devolve vazio — logo a restriç
 causa. Em todos os casos o modelo **gera tokens** e nada chega ao campo de resposta;
 no último, o orçamento inteiro é consumido.
 
-**Causa 1, confirmada: o canal de raciocínio.** O modelo declara `thinking` entre as
-capacidades e gasta a geração inteira ali. Com o raciocínio desligado, o mesmo modelo
-responde corretamente em 237 s (521 tokens) — lê a tabela, identifica os nutrientes,
-as colunas e a sentinela `Tr`. Por isso a rota desliga o raciocínio por padrão.
+**Segunda suspeita, também descartada: o canal de raciocínio.** O modelo declara
+`thinking` entre as capacidades, e a suspeita era que gastasse a geração toda ali.
+Repetidos os três degraus com o raciocínio desligado, a contagem de tokens mudou
+quase nada (152 contra 152; 1817 contra 1844) e as respostas continuaram vazias — o
+pedido de desligar aparentemente não é respeitado por esta combinação de servidor e
+modelo.
 
-**Causa 2, em aberto: algo no prompt de extração.** Mesmo com o raciocínio desligado,
-este prompt continua devolvendo vazio, enquanto um prompt de descrição simples
-responde. O `eval_count` fica em 152 em toda rodada vazia, com ou sem raciocínio.
+**O que resta, e é a pista firme: o prompt.** Um pedido de *descrição* da imagem
+responde corretamente (521 tokens, 237 s) — o modelo lê a tabela, identifica os
+nutrientes, as colunas e até a sentinela `Tr`. Este prompt de *extração* devolve
+vazio. Mesma imagem, mesmo modelo, mesma configuração.
 
 Se você está adaptando este prompt e obtém resposta vazia, comece por um prompt
 curto que funcione e vá acrescentando as regras uma a uma — é assim que se descobre
-qual delas trava a geração.
+qual delas trava a geração. Não perca tempo com a restrição de formato nem com o
+raciocínio: os dois já foram medidos e descartados.
 
 Os degraus de saída continuam justificados — impedem que resposta vazia vire "página
 sem dados" em silêncio —, mas **não** resolvem este problema.

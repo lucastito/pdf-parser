@@ -142,9 +142,7 @@ class ExtratorPosicional:
             faixas[chave].append(palavra)
         return faixas
 
-    def _nome_mais_proximo(
-        self, nomes: dict[float, list[Palavra]], y: float
-    ) -> str | None:
+    def _nome_mais_proximo(self, nomes: dict[float, list[Palavra]], y: float) -> str | None:
         candidatos = [
             (abs(y_nome - y), y_nome)
             for y_nome in nomes
@@ -161,8 +159,7 @@ class ExtratorPosicional:
         candidatas = [
             p
             for p in pagina.palavras
-            if p.x0 >= self.layout.x_valores_min
-            and p.y0 < self.layout.y_identificadores_min
+            if p.x0 >= self.layout.x_valores_min and p.y0 < self.layout.y_identificadores_min
         ]
 
         faixas: dict[float, list[Palavra]] = defaultdict(list)
@@ -180,8 +177,7 @@ class ExtratorPosicional:
         candidatas = [
             p
             for p in pagina.palavras
-            if p.y0 >= self.layout.y_identificadores_min
-            and p.x0 >= self.layout.x_valores_min
+            if p.y0 >= self.layout.y_identificadores_min and p.x0 >= self.layout.x_valores_min
         ]
 
         colunas: dict[float, list[Palavra]] = defaultdict(list)
@@ -212,9 +208,7 @@ class ExtratorPosicional:
             campos[rotulo] = self._campo(palavra, pagina, faixa)
         return campos
 
-    def _faixa_proxima(
-        self, valores: dict[float, list[Palavra]], y: float
-    ) -> list[Palavra]:
+    def _faixa_proxima(self, valores: dict[float, list[Palavra]], y: float) -> list[Palavra]:
         """Busca a faixa de valores correspondente a um Y de rótulo.
 
         Rótulo e valores são agrupados independentemente, então suas chaves de Y
@@ -250,7 +244,9 @@ class ExtratorPosicional:
         return " ".join(p.texto for p in ordenadas[inicio:fim])
 
     @staticmethod
-    def _campo(palavra: Palavra | None, pagina: int, faixa: list[Palavra] | None = None) -> Campo:
+    def _campo(
+        palavra: Palavra | None, pagina: int, faixa: list[Palavra] | None = None
+    ) -> Campo:
         if palavra is None:
             return Campo.ausente()
 
@@ -258,9 +254,7 @@ class ExtratorPosicional:
             pagina=pagina,
             bbox=(palavra.x0, palavra.y0, palavra.x1, palavra.y1),
             texto_bruto=palavra.texto,
-            vizinhanca=(
-                ExtratorPosicional._vizinhanca(palavra, faixa) if faixa else None
-            ),
+            vizinhanca=(ExtratorPosicional._vizinhanca(palavra, faixa) if faixa else None),
         )
         try:
             valor, sentinela = parse_numero(palavra.texto)
