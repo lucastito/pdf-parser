@@ -83,7 +83,7 @@ if ($SemCommit) {
     exit 0
 }
 
-$maquina = python -c "import sys; sys.path.insert(0,'src'); from parser.experimento import identificador_de_maquina as f; print(f())"
+$maquina = python -c "import sys; sys.path.insert(0,'src'); from parser.procedencia import identificador_de_maquina as f; print(f())"
 $branch = "experimento/$maquina"
 
 if ((git rev-parse --abbrev-ref HEAD) -ne $branch) {
@@ -94,7 +94,7 @@ Ok "branch $branch"
 
 # resultados/ e' ignorado por padrao para que a execucao seja cega; a rodada
 # desta maquina entra explicitamente, com -f.
-git add -f "resultados/$maquina"
+git add -f "experimentos/resultados/$maquina"
 if (-not (git diff --cached --name-only)) {
     Aviso "nada novo a registrar"
     exit 0

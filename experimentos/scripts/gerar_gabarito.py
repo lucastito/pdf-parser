@@ -21,16 +21,17 @@ import re
 import sys
 from pathlib import Path
 
-RAIZ = Path(__file__).resolve().parent.parent
+RAIZ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(RAIZ / "src"))
 
 from parser.extratores.posicional import ExtratorPosicional, LayoutTabela  # noqa: E402
 from parser.fontes.pdf import FontePDF  # noqa: E402
 
-PDF_PADRAO = Path(
-    r"c:\Users\Lucas Tito\projetos\nutriflow\data\rag\sources\taco\raw\TACO.pdf"
-)
-DESTINO = RAIZ / "golden" / "taco-para-conferir.csv"
+PDF_PADRAO = None
+"""Sem documento padrão: o caminho é sempre informado por quem roda.
+
+Um caminho embutido tornaria o script dependente de uma máquina específica."""
+DESTINO = RAIZ / "experimentos" / "golden" / "taco-para-conferir.csv"
 
 LAYOUT = LayoutTabela(
     x_rotulos=(110.0, 133.0),
@@ -147,7 +148,7 @@ def conferencia_iniciada(caminho: Path) -> bool:
 
 def main() -> int:
     argumentos = argparse.ArgumentParser(description=__doc__)
-    argumentos.add_argument("--pdf", type=Path, default=PDF_PADRAO)
+    argumentos.add_argument("--pdf", type=Path, required=True, help="documento a amostrar")
     argumentos.add_argument(
         "--verificar",
         action="store_true",

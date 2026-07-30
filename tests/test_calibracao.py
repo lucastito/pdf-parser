@@ -1,5 +1,9 @@
 """Descoberta automática de layout.
 
+Os testes que exigem o documento-caso o localizam pela variável de ambiente
+`PARSER_DOCUMENTO_CASO`, e são saltados se ela não estiver definida. Embutir um
+caminho de disco tornaria a suíte dependente de uma máquina específica.
+
 Existe para eliminar o passo manual mais custoso da adoção: calibrar as faixas de
 coordenadas de um documento novo. Sem isto, apontar o parser para outro arquivo
 exige alguém inspecionar coordenadas à mão — trabalho que não é retrabalho de
@@ -11,6 +15,9 @@ inventado produz extração que roda sem erro e grava lixo — exatamente o modo
 falha que o projeto inteiro tenta evitar.
 """
 
+import os
+from pathlib import Path
+
 import pytest
 
 from parser.calibracao import (
@@ -21,13 +28,17 @@ from parser.calibracao import (
 )
 
 
+def _documento_caso() -> Path:
+    """O documento usado na validação, se disponível nesta máquina."""
+    caminho = os.environ.get("PARSER_DOCUMENTO_CASO")
+    if not caminho or not Path(caminho).exists():
+        pytest.skip("defina PARSER_DOCUMENTO_CASO para rodar este teste")
+    return Path(caminho)
+
+
 class TestDescobertaDePaginas:
     def test_encontra_paginas_com_tabela(self):
-        from pathlib import Path
-
-        pdf = Path(r"c:\Users\Lucas Tito\projetos\nutriflow\data\rag\sources\taco\raw\TACO.pdf")
-        if not pdf.exists():
-            pytest.skip("documento-caso indisponível")
+        pdf = _documento_caso()
 
         paginas = descobrir_paginas_de_dados(str(pdf), limite=40)
         assert paginas, "nenhuma página de dados encontrada"
@@ -45,11 +56,7 @@ class TestDescobertaDePaginas:
 class TestCalibracao:
     def test_calibra_o_documento_caso(self):
         """O teste que importa: o layout descoberto deve bater com o calibrado à mão."""
-        from pathlib import Path
-
-        pdf = Path(r"c:\Users\Lucas Tito\projetos\nutriflow\data\rag\sources\taco\raw\TACO.pdf")
-        if not pdf.exists():
-            pytest.skip("documento-caso indisponível")
+        pdf = _documento_caso()
 
         resultado = calibrar(str(pdf), paginas=[29, 31])
         layout = resultado.layout
@@ -62,11 +69,7 @@ class TestCalibracao:
         assert 480 <= layout["y_identificadores_min"] <= 540
 
     def test_devolve_confianca(self):
-        from pathlib import Path
-
-        pdf = Path(r"c:\Users\Lucas Tito\projetos\nutriflow\data\rag\sources\taco\raw\TACO.pdf")
-        if not pdf.exists():
-            pytest.skip("documento-caso indisponível")
+        pdf = _documento_caso()
 
         resultado = calibrar(str(pdf), paginas=[29])
         assert 0.0 <= resultado.confianca <= 1.0
@@ -74,11 +77,7 @@ class TestCalibracao:
 
     def test_registra_como_decidiu(self):
         """Calibração sem justificativa é número mágico com outro nome."""
-        from pathlib import Path
-
-        pdf = Path(r"c:\Users\Lucas Tito\projetos\nutriflow\data\rag\sources\taco\raw\TACO.pdf")
-        if not pdf.exists():
-            pytest.skip("documento-caso indisponível")
+        pdf = _documento_caso()
 
         resultado = calibrar(str(pdf), paginas=[29])
         assert resultado.evidencias
@@ -91,11 +90,7 @@ class TestCalibracao:
             calibrar(str(pdf_exemplo), paginas=[1])
 
     def test_pagina_inexistente_falha_claro(self):
-        from pathlib import Path
-
-        pdf = Path(r"c:\Users\Lucas Tito\projetos\nutriflow\data\rag\sources\taco\raw\TACO.pdf")
-        if not pdf.exists():
-            pytest.skip("documento-caso indisponível")
+        pdf = _documento_caso()
 
         with pytest.raises(CalibracaoFalhou, match="9999"):
             calibrar(str(pdf), paginas=[9999])
@@ -115,11 +110,7 @@ class TestLayoutCalibradoFunciona:
     """
 
     def test_layout_descoberto_extrai_os_itens(self):
-        from pathlib import Path
-
-        pdf = Path(r"c:\Users\Lucas Tito\projetos\nutriflow\data\rag\sources\taco\raw\TACO.pdf")
-        if not pdf.exists():
-            pytest.skip("documento-caso indisponível")
+        pdf = _documento_caso()
 
         from parser.extratores.posicional import ExtratorPosicional, LayoutTabela
         from parser.fontes.pdf import FontePDF

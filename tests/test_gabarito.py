@@ -160,7 +160,10 @@ class TestGabaritoReal:
     def test_carrega_o_gabarito_do_projeto(self):
         from pathlib import Path
 
-        caminho = Path(__file__).resolve().parent.parent / "golden" / "taco.csv"
+        caminho = (
+            Path(__file__).resolve().parent.parent
+            / "experimentos" / "golden" / "taco.csv"
+        )
         if not caminho.exists():
             pytest.skip("gabarito ainda não conferido")
 
