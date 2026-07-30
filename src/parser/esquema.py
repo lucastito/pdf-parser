@@ -137,9 +137,7 @@ class Esquema:
         }
         quadro = pandas.DataFrame(
             {
-                nome: _coluna_tipada(
-                    valores, self.colunas[nome].get("tipo", "numero"), pandas
-                )
+                nome: _coluna_tipada(valores, self.colunas[nome].get("tipo", "numero"), pandas)
                 for nome, valores in bruto.items()
             }
         )
@@ -238,9 +236,8 @@ def _mensagem(erro: Any) -> str:
         indice = getattr(falha, "index", None)
         caso = getattr(falha, "failure_case", None)
         onde = f"registro {indice}: " if indice is not None else ""
-        linhas.append(f"{onde}coluna {coluna!r} — {getattr(falha, 'check', '?')} "
-                      f"(valor {caso!r})")
+        linhas.append(
+            f"{onde}coluna {coluna!r} — {getattr(falha, 'check', '?')} " f"(valor {caso!r})"
+        )
 
-    return "saída não satisfaz o esquema declarado:\n  " + "\n  ".join(
-        dict.fromkeys(linhas)
-    )
+    return "saída não satisfaz o esquema declarado:\n  " + "\n  ".join(dict.fromkeys(linhas))

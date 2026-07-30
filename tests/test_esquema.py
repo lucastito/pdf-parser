@@ -61,9 +61,7 @@ class TestAceita:
         registro = _registro(
             {
                 "identificador": _txt("Item um"),
-                "energia_kcal": Campo[float].extraido(
-                    sentinela=Sentinela.TRACO, evidencia=EV
-                ),
+                "energia_kcal": Campo[float].extraido(sentinela=Sentinela.TRACO, evidencia=EV),
                 "proteina_g": _num(2.6),
             }
         )

@@ -1,0 +1,20 @@
+# Configuração do flake8, alinhada ao black declarado em pyproject.toml.
+#
+# Sem este arquivo, o flake8 usa o padrão de 79 colunas e acusa quase toda linha
+# de um projeto formatado a 95 — o que faz a verificação ser ignorada por ruído,
+# que é pior que não tê-la.
+[flake8]
+max-line-length = 95
+
+# E203 (espaço antes de ':') conflita com o black em fatias: o black escreve
+# `texto[inicio : i + 1]` e o flake8 reclama. Entre os dois, o formatador manda.
+# W503 é o mesmo caso, para quebra de linha antes de operador binário.
+extend-ignore = E203, W503
+
+exclude =
+    .git,
+    __pycache__,
+    build,
+    dist,
+    .venv,
+    venv

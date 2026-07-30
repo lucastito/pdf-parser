@@ -35,6 +35,21 @@ resto suspeito.
 O primeiro instala o que falta e valida o clone. O segundo executa todas as
 estratégias, grava em `resultados/<maquina>/` e commita numa branch própria.
 
+### Se um script falhar com erro de sintaxe
+
+Os `.ps1` são gravados em **UTF-8 com BOM**, e precisam continuar assim. O Windows
+PowerShell 5.1 — o que vem instalado por padrão — lê arquivo sem BOM usando a página
+de código ANSI do sistema: toda acentuação vira byte inválido e o script deixa de
+compilar, com uma mensagem que aponta chave ou parêntese desbalanceado em linha
+sintaticamente correta.
+
+O erro é enganoso e aparece só na máquina de terceiro. Por isso a suíte verifica o
+BOM (`tests/test_scripts.py`); se um editor removê-lo ao salvar, o teste acusa antes
+da viagem.
+
+Pela mesma razão os scripts evitam `&&` e `||`, que são erro de sintaxe no 5.1 e só
+funcionam no PowerShell 7.
+
 ### Execução cega, de propósito
 
 **Não consulte `resultados/` de outra máquina antes de rodar.** Saber o resultado

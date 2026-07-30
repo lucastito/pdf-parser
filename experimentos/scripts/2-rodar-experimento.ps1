@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     PASSO 2 de 2 — roda o experimento, grava os resultados e commita numa branch.
 

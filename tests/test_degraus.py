@@ -19,12 +19,7 @@ import json
 
 import pytest
 
-from parser.degraus import (
-    Degrau,
-    RespostaVazia,
-    SaidaEmDegraus,
-    TodosOsDegrausFalharam,
-)
+from parser.degraus import Degrau, SaidaEmDegraus, TodosOsDegrausFalharam
 
 
 class TransporteRoteirizado:
