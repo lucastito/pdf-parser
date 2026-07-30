@@ -134,6 +134,59 @@ def _intervalo_do_perfil(perfil: Perfil) -> range | None:
     return range(*paginas) if isinstance(paginas, list) else paginas
 
 
+def _ingerir(opcoes: argparse.Namespace) -> int:
+    """Processa uma pasta de documentos e consolida numa saída única."""
+    from parser.configuracao import ConfiguracaoInvalida, carregar_perfil
+    from parser.lote import ingerir
+
+    perfil = None
+    if opcoes.perfil:
+        try:
+            perfil = carregar_perfil(opcoes.perfil)
+        except ConfiguracaoInvalida as erro:
+            print(f"perfil inválido: {erro}", file=sys.stderr)
+            return 2
+
+    esperados = opcoes.campos or (list(perfil.mapeamento) if perfil else None)
+
+    try:
+        resultado = ingerir(
+            opcoes.entrada,
+            saida=opcoes.saida,
+            perfil=perfil,
+            campos_esperados=esperados,
+            calibrar_por_arquivo=not opcoes.sem_calibrar,
+        )
+    except FileNotFoundError as erro:
+        print(f"{erro}", file=sys.stderr)
+        return 2
+
+    print(resultado.resumo())
+
+    if opcoes.saida:
+        saida = Path(opcoes.saida)
+        print(f"\ngravado    : {saida}")
+        print(f"             {saida.with_suffix('.log').name}")
+        if resultado.falhas:
+            print(f"             {saida.with_suffix('.erros.json').name}")
+        if resultado.pendencias:
+            print(f"             {saida.with_suffix('.pendencias.json').name}")
+
+    if resultado.pendencias:
+        print(
+            f"\n{len(resultado.pendencias)} campo(s) que nenhum documento trouxe. "
+            "Verifique a lista de pendências — é o que precisa de atenção humana."
+        )
+
+    # Falha parcial devolve código próprio: o chamador precisa distinguir "tudo
+    # certo" de "saiu resultado, mas com perdas".
+    if resultado.falhas and resultado.processados:
+        return 3
+    if resultado.falhas:
+        return 1
+    return 0
+
+
 def _calibrar(opcoes: argparse.Namespace) -> int:
     """Descobre o layout de um documento e imprime o perfil pronto para uso."""
     import json as _json
@@ -344,6 +397,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     diagnostico.add_argument("documento", help="arquivo a examinar")
     diagnostico.set_defaults(funcao=_diagnosticar)
+
+    lote = comandos.add_parser(
+        "ingerir",
+        help="processa uma pasta de documentos e consolida numa saída única",
+    )
+    lote.add_argument("entrada", help="pasta ou arquivo a processar")
+    lote.add_argument("--saida", help="caminho do CSV consolidado")
+    lote.add_argument("--perfil", type=Path, help="perfil de configuração")
+    lote.add_argument(
+        "--campos", nargs="*", help="campos que o destino exige (gera pendências)"
+    )
+    lote.add_argument(
+        "--sem-calibrar",
+        action="store_true",
+        help="usa o layout do perfil para todos os arquivos, sem descobrir por arquivo",
+    )
+    lote.set_defaults(funcao=_ingerir)
 
     calibracao = comandos.add_parser(
         "calibrar", help="descobre o layout de tabela de um documento novo"
