@@ -117,3 +117,122 @@ class TestInstrucoesDeUso:
         raiz = _PASTA.parent.parent
         for nome in ("1-preparar-maquina.ps1", "2-rodar-experimento.ps1"):
             assert (raiz / "experimentos" / "scripts" / nome).exists()
+
+
+class TestGuardaDeConfidencialidade:
+    """A guarda precisa distinguir palavra comum de nome de produto.
+
+    Um termo restrito curto que também é palavra comum bloqueia trabalho
+    legítimo: o dado nutricional "Cereais, milho, flocos, com sal" batia com um
+    nome de produto por coincidência de letras, e o commit dos dados brutos do
+    experimento ficava travado.
+
+    A correção não é abrir exceção para cada variante — texto extraído de PDF vem
+    fragmentado e as variantes são infinitas. É tornar o termo restrito
+    **específico**: o que identifica o cliente é a combinação com o nome do
+    produto, não a palavra sozinha.
+
+    Os casos que **devem** bloquear são lidos da própria denylist, que é ignorada
+    pelo git. Escrevê-los aqui seria escrever o segredo num arquivo versionado —
+    e a guarda, corretamente, recusaria o commit deste arquivo.
+    """
+
+    def _verificar(self, texto: str) -> int:
+        import subprocess
+        import tempfile
+
+        raiz = _PASTA.parent.parent
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".txt", delete=False, encoding="utf-8"
+        ) as arquivo:
+            arquivo.write(texto)
+            caminho = arquivo.name
+        try:
+            return subprocess.run(
+                ["python", str(raiz / ".githooks" / "verificar.py"), "mensagem", caminho],
+                capture_output=True,
+                text=True,
+                cwd=raiz,
+            ).returncode
+        finally:
+            Path(caminho).unlink(missing_ok=True)
+
+    def _termos_restritos(self) -> list[str]:
+        lista = _PASTA.parent.parent / ".githooks" / "denylist.txt"
+        if not lista.exists():
+            pytest.skip("denylist.txt ausente — guarda não configurada neste clone")
+        return [
+            linha.strip()
+            for linha in lista.read_text(encoding="utf-8").splitlines()
+            if linha.strip() and not linha.lstrip().startswith("#")
+        ]
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "21 Cereais, milho, flocos, com sal",
+            "Aveia, flocos, crua",
+            "22 | Cereais, milh | o, flocos, se | m sal",
+            "flocos de milho no cafe da manha",
+            "Farinha, de milho, amarela",
+        ],
+    )
+    def test_alimento_nao_e_bloqueado(self, texto: str):
+        """Dado nutricional é domínio livre e não pode travar o trabalho."""
+        assert self._verificar(texto) == 0, (
+            f"dado nutricional legítimo bloqueado: {texto!r}. "
+            "Termo restrito genérico demais trava trabalho honesto."
+        )
+
+    def test_todo_termo_da_denylist_e_bloqueado(self):
+        """A outra direção, e a que mais importa.
+
+        Verificar só que alimento passa seria perigoso: uma guarda que nunca
+        bloqueia passaria nesse teste e não protegeria nada.
+        """
+        passaram = [
+            termo
+            for termo in self._termos_restritos()
+            if self._verificar(f"integracao com {termo} no modulo") == 0
+        ]
+        assert not passaram, (
+            f"{len(passaram)} termo(s) restrito(s) passaram pela guarda. "
+            "Tornar um termo específico não pode virar deixar passar."
+        )
+
+    def test_nenhum_termo_bloqueia_vocabulario_legitimo(self):
+        """O risco real não é o termo ser curto — é ele ser palavra comum.
+
+        Foi o caso do dado nutricional: um termo genérico travou o commit dos
+        dados brutos do experimento. Um termo curto mas específico (uma sigla,
+        por exemplo) não causa esse problema.
+
+        Este teste mede o que importa: se algum termo restrito bate contra o
+        vocabulário normal deste projeto. É a pergunta que o comprimento só
+        aproximava.
+        """
+        vocabulario = [
+            "21 Cereais, milho, flocos, com sal",
+            "Farinha, de milho, amarela",
+            "operacao de leitura concluida",
+            "opcao invalida no perfil",
+            "download dos modelos de linguagem",
+            "poder de processamento da maquina",
+            "politica de retentativa do cliente",
+            "extracao posicional de tabela sem grade",
+            "conversao de unidade com proveniencia por campo",
+            "o parser grava o resultado com procedencia",
+        ]
+        termos = self._termos_restritos()
+
+        colisoes = [
+            (frase, termo)
+            for frase in vocabulario
+            for termo in termos
+            if termo.lower() in frase.lower()
+        ]
+        assert not colisoes, (
+            f"{len(colisoes)} termo(s) restrito(s) batem com vocabulário legítimo "
+            f"do projeto: {[f for f, _ in colisoes]}. Termo genérico demais trava "
+            "trabalho honesto — prefira a combinação que identifica o produto."
+        )
