@@ -134,6 +134,49 @@ def _intervalo_do_perfil(perfil: Perfil) -> range | None:
     return range(*paginas) if isinstance(paginas, list) else paginas
 
 
+def _calibrar(opcoes: argparse.Namespace) -> int:
+    """Descobre o layout de um documento e imprime o perfil pronto para uso."""
+    import json as _json
+
+    from parser.calibracao import CalibracaoFalhou, calibrar, descobrir_paginas_de_dados
+
+    try:
+        paginas = opcoes.paginas or descobrir_paginas_de_dados(opcoes.documento, limite=60)[:2]
+        if not paginas:
+            print(
+                "nenhuma página com densidade de tabela encontrada. Informe --paginas.",
+                file=sys.stderr,
+            )
+            return 1
+        resultado = calibrar(opcoes.documento, paginas=paginas)
+    except FileNotFoundError as erro:
+        print(f"{erro}", file=sys.stderr)
+        return 2
+    except CalibracaoFalhou as erro:
+        print(f"calibração falhou: {erro}", file=sys.stderr)
+        print(
+            "\nFalhar é o comportamento correto: um layout inventado produziria "
+            "extração que roda sem erro e grava lixo.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"CALIBRAÇÃO — {Path(opcoes.documento).name} (páginas {paginas})\n")
+    print(resultado.resumo())
+
+    if opcoes.json:
+        print("\nRecorte para o perfil:\n")
+        print(_json.dumps({"rotas": {"posicional": {"layout": resultado.layout}}}, indent=2))
+
+    if resultado.confianca < 0.75:
+        print(
+            f"\nConfiança de {resultado.confianca:.0%} é baixa. Verifique a extração "
+            "contra alguns valores lidos à mão antes de confiar no layout."
+        )
+        return 1
+    return 0
+
+
 def _diagnosticar(opcoes: argparse.Namespace) -> int:
     """Examina um documento antes de extrair, e diz o que pode sabotar a leitura."""
     from parser.diagnostico import Severidade, diagnosticar, relatorio
@@ -301,6 +344,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     diagnostico.add_argument("documento", help="arquivo a examinar")
     diagnostico.set_defaults(funcao=_diagnosticar)
+
+    calibracao = comandos.add_parser(
+        "calibrar", help="descobre o layout de tabela de um documento novo"
+    )
+    calibracao.add_argument("documento", help="arquivo a calibrar")
+    calibracao.add_argument(
+        "--paginas", nargs="*", type=int, help="páginas a analisar (base 1)"
+    )
+    calibracao.add_argument(
+        "--json", action="store_true", help="imprime o recorte pronto para o perfil"
+    )
+    calibracao.set_defaults(funcao=_calibrar)
 
     extrair = comandos.add_parser("extrair", help="roda um perfil e grava nos destinos")
     extrair.add_argument("perfil", type=Path, help="arquivo de perfil (JSON)")
