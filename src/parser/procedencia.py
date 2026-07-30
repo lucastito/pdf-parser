@@ -26,6 +26,7 @@ import re
 import subprocess
 import time
 from dataclasses import asdict, dataclass, field
+from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -42,7 +43,9 @@ def identificador_de_maquina() -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "-", nome).strip("-").lower() or "maquina"
 
 
+@lru_cache(maxsize=1)
 def _processador() -> str:
+    """Memoizado: consultar o sistema custa segundos e o processador não muda."""
     if platform.system() == "Windows":
         try:
             saida = subprocess.run(
@@ -106,7 +109,9 @@ def _ram() -> tuple[float | None, float | None]:
     return None, None
 
 
+@lru_cache(maxsize=1)
 def _gpu() -> tuple[str | None, str | None]:
+    """Memoizado: mesma razão de `_processador`."""
     import shutil
 
     if shutil.which("nvidia-smi"):
@@ -182,7 +187,15 @@ class Ambiente:
     modelos: list[dict] = field(default_factory=list)
 
     @classmethod
-    def levantar(cls) -> Ambiente:
+    def levantar(cls, *, consultar_modelos: bool = True) -> Ambiente:
+        """Levanta o ambiente desta máquina.
+
+        Args:
+            consultar_modelos: pergunta ao servidor de inferência quais modelos
+                estão disponíveis. Custa uma chamada de rede e um tempo de espera
+                quando o servidor não responde — desnecessário para quem só quer
+                identificar a máquina.
+        """
         total, livre = _ram()
         gpu, vram = _gpu()
         return cls(
@@ -196,7 +209,7 @@ class Ambiente:
             vram=vram,
             python=platform.python_version(),
             data_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            modelos=modelos_disponiveis(),
+            modelos=modelos_disponiveis() if consultar_modelos else [],
         )
 
 
