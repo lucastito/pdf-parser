@@ -21,6 +21,7 @@
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Documento,
+    [string]$Perfil = "perfis/nutricional.json",
     [int]$Dpi = 150,
     [int]$TimeoutSegundos = 3600,
     [switch]$SemModelos,
@@ -66,6 +67,7 @@ Write-Host "      (pode levar muito tempo — as estrategias com modelo sao lent
 
 $argumentos = @(
     "-m", "parser.cli", "experimento",
+    "--perfil", $Perfil,
     "--documento", $Documento,
     "--dpi", $Dpi,
     "--timeout", $TimeoutSegundos

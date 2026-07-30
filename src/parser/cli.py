@@ -8,12 +8,17 @@ adoção de um documento novo:
     calibrar      qual o layout deste documento?
     ingerir       processa a pasta, consolida, lista o que precisa de atenção
 
-Mais dois, para quem quer número antes de confiar:
+Mais três, para quem quer número antes de confiar:
 
     avaliar       acurácia contra um gabarito próprio
     comparar      estratégias entre si, no mesmo documento
+    experimento   roda tudo e grava os dados brutos, com procedência
 
-Os dois últimos não têm dado embutido: o gabarito é sempre informado por quem usa.
+Os três não têm dado embutido: o gabarito é sempre informado por quem usa.
+
+`comparar` imprime e esquece; `experimento` grava, porque a acurácia é calculada
+depois sobre os mesmos dados, sem reexecutar — e porque uma rodada que ninguém
+consegue reproduzir não sustenta decisão nenhuma.
 """
 
 from __future__ import annotations
@@ -333,6 +338,84 @@ def _comparar(opcoes: argparse.Namespace) -> int:
     return 0
 
 
+def _experimentar(opcoes: argparse.Namespace) -> int:
+    """Roda todas as estratégias e grava os dados brutos com procedência.
+
+    É o comando que o script de execução em outra máquina chama. Diferente de
+    `comparar`, que só imprime, este **grava em disco** — porque a acurácia é
+    calculada depois, sobre os mesmos dados, sem reexecutar nada.
+
+    A trava de medição impede que duas rodadas disputem o mesmo processador: sem
+    ela, os tempos das duas ficam inflados e nenhuma é comparável com nada.
+    """
+    from parser.fabrica import montar_todas
+    from parser.fontes.pdf import FontePDF
+    from parser.medicao import MedicaoEmAndamento, travar
+    from parser.procedencia import Experimento
+
+    try:
+        perfil = _perfil(opcoes.perfil)
+    except ConfiguracaoInvalida as erro:
+        print(f"perfil inválido: {erro}", file=sys.stderr)
+        return 2
+
+    documento = opcoes.documento or (perfil.documento if perfil else None)
+    if not documento:
+        print("informe --documento ou 'documento' no perfil", file=sys.stderr)
+        return 2
+    if not Path(documento).exists():
+        print(f"documento não encontrado: {documento}", file=sys.stderr)
+        return 2
+    if perfil is None:
+        print("informe --perfil: sem ele não há rotas a executar", file=sys.stderr)
+        return 2
+
+    # Sobreposições da linha de comando entram no perfil antes da montagem, para
+    # que o valor efetivo seja o mesmo que vai gravado na procedência. Aplicar
+    # depois deixaria o registro dizendo uma coisa e a execução fazendo outra.
+    for rota in perfil.rotas.values():
+        if opcoes.dpi and rota.dpi:
+            rota.dpi = opcoes.dpi
+        if opcoes.timeout:
+            rota.timeout = opcoes.timeout
+
+    destino = Path(opcoes.destino)
+    try:
+        with travar(destino / ".medicao-em-andamento", descricao="experimento"):
+            fonte = FontePDF(paginas=perfil.intervalo_de_paginas())
+            extratores = montar_todas(perfil, incluir_modelos=not opcoes.sem_modelos)
+            if not extratores:
+                print("nenhuma estratégia montou — nada a medir", file=sys.stderr)
+                return 1
+
+            experimento = Experimento(documento, destino)
+            print(f"EXPERIMENTO — {Path(documento).name}")
+            print(f"máquina: {experimento.ambiente.maquina}\n")
+
+            for nome, extrator in extratores.items():
+                print(f"  {nome} ...", flush=True)
+                execucao = experimento.rodar(
+                    nome,
+                    fonte,
+                    extrator,
+                    parametros={"dpi": perfil.rota(nome).dpi} if nome in perfil.rotas else {},
+                )
+                if execucao.erro:
+                    print(f"    falhou: {execucao.erro}")
+                else:
+                    print(
+                        f"    {execucao.registros} registro(s) em " f"{execucao.segundos:.1f}s"
+                    )
+
+            pasta = experimento.gravar()
+    except MedicaoEmAndamento as erro:
+        print(f"{erro}", file=sys.stderr)
+        return 2
+
+    print(f"\ngravado em {pasta}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="parser",
@@ -394,6 +477,33 @@ def main(argv: list[str] | None = None) -> int:
         "--com-modelos", action="store_true", help="inclui as rotas por modelo (lentas)"
     )
     comparacao.set_defaults(funcao=_comparar)
+
+    experimento = comandos.add_parser(
+        "experimento",
+        help="roda todas as estratégias e grava os dados brutos com procedência",
+    )
+    experimento.add_argument("--perfil", type=Path, required=True)
+    experimento.add_argument("--documento")
+    experimento.add_argument(
+        "--destino",
+        default="experimentos/resultados",
+        help="onde gravar a rodada, numa pasta por máquina",
+    )
+    experimento.add_argument(
+        "--sem-modelos", action="store_true", help="pula as rotas por modelo (lentas)"
+    )
+    experimento.add_argument(
+        "--dpi",
+        type=int,
+        help="sobrepõe a resolução das rotas que renderizam imagem. É variável de "
+        "experimento: fica registrada com o resultado",
+    )
+    experimento.add_argument(
+        "--timeout",
+        type=float,
+        help="limite por chamada ao modelo, em segundos",
+    )
+    experimento.set_defaults(funcao=_experimentar)
 
     opcoes = parser.parse_args(argv)
     return opcoes.funcao(opcoes)
