@@ -131,14 +131,19 @@ class TestExtratorBiblioteca:
         caminho = tmp_path / "tabela.pdf"
         documento = fitz.open()
         pagina = documento.new_page(width=595, height=842)
-        # Tabela com linhas de grade: o caso que o detector pronto trata bem.
+        # Grade **fechada**: horizontais, as duas verticais de borda e o
+        # separador de coluna. O detector do PyMuPDF depende das linhas — sem a
+        # moldura completa devolve zero tabelas, que é exatamente a patologia do
+        # documento-caso e a razão de existir a reconstrução posicional.
         for i, linha in enumerate([("Item", "Valor"), ("Um", "124"), ("Dois", "360")]):
             y = 100 + i * 30
             pagina.insert_text((100, y), linha[0])
             pagina.insert_text((250, y), linha[1])
             pagina.draw_line(fitz.Point(90, y + 5), fitz.Point(400, y + 5))
+        pagina.draw_line(fitz.Point(90, 95), fitz.Point(400, 95))
         pagina.draw_line(fitz.Point(90, 95), fitz.Point(90, 200))
         pagina.draw_line(fitz.Point(400, 95), fitz.Point(400, 200))
+        pagina.draw_line(fitz.Point(200, 95), fitz.Point(200, 200))
         documento.save(caminho)
         documento.close()
         return caminho
@@ -148,14 +153,44 @@ class TestExtratorBiblioteca:
 
         assert isinstance(ExtratorBiblioteca(str(pdf_com_tabela)), Extrator)
 
-    def test_extrai_sem_estourar(self, pdf_com_tabela):
-        """O contrato mínimo: devolver lista de registros, não explodir."""
+    def test_extrai_os_valores_da_tabela(self, pdf_com_tabela):
+        """Verifica o **resultado**, não só que não estourou.
+
+        Um teste que só checa `isinstance(x, list)` passa com o extrator
+        devolvendo lista vazia sempre — infla cobertura e não protege nada. Como
+        este extrator é a régua contra a qual o posicional se justifica, um piso
+        que devolve vazio faria o posicional parecer melhor do que é.
+        """
         from parser.extratores.biblioteca import ExtratorBiblioteca
 
         registros = ExtratorBiblioteca(str(pdf_com_tabela)).extrair(
             _documento(identificador="tabela.pdf")
         )
-        assert isinstance(registros, list)
+
+        assert registros, "não extraiu nada de um PDF com tabela e linhas de grade"
+        valores = {
+            campo.valor
+            for registro in registros
+            for campo in registro.campos.values()
+            if campo.valor is not None
+        }
+        assert 124.0 in valores or "124" in valores, f"valores lidos: {valores}"
+
+    def test_registro_carrega_a_fonte_e_a_evidencia(self, pdf_com_tabela):
+        """Sem proveniência, o revisor não sabe onde conferir (ADR-0004)."""
+        from parser.extratores.biblioteca import ExtratorBiblioteca
+
+        registros = ExtratorBiblioteca(str(pdf_com_tabela)).extrair(
+            _documento(identificador="tabela.pdf")
+        )
+
+        assert registros
+        for registro in registros:
+            assert registro.fonte == "tabela.pdf"
+            for campo in registro.campos.values():
+                if campo.preenchido:
+                    assert campo.evidencia is not None
+                    assert campo.evidencia.pagina == 1
 
     def test_pdf_sem_tabela_devolve_lista_vazia(self, tmp_path):
         """Zero tabela é resultado legítimo — e é o que motivou o posicional."""
