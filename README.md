@@ -67,6 +67,21 @@ python -m parser.cli comparar --perfil perfis/X.json --documento doc.pdf
 concordância entre estratégias, sem gabarito — sinal útil, mas não prova:
 estratégias podem errar igual.
 
+Para uma rodada que fica registrada:
+
+```powershell
+python -m parser.cli experimento --perfil perfis/X.json --documento doc.pdf
+```
+
+`comparar` imprime e esquece; `experimento` **grava** os dados brutos com
+procedência (máquina, processador, parâmetros, data), numa pasta por máquina. A
+acurácia é calculada depois, sobre os mesmos dados, sem reexecutar nada.
+
+Uma trava impede duas rodadas simultâneas na mesma máquina: elas disputariam o
+mesmo processador e os tempos das duas ficariam inflados, sem que nada no
+resultado denunciasse. Rodada contaminada que parece válida é pior que rodada
+ausente.
+
 ## Configuração
 
 Trocar de contexto é trocar de perfil:
@@ -76,6 +91,11 @@ Trocar de contexto é trocar de perfil:
   "nome": "exemplo",
   "paginas": [28, 31, 2],
   "mapeamento": { "campo_destino": ["Rótulo no documento"] },
+  "unidades": { "energia_kj": { "de": "kcal", "para": "kJ" } },
+  "esquema": {
+    "identificador": { "tipo": "texto", "obrigatorio": true },
+    "energia_kj": { "tipo": "numero", "minimo": 0 }
+  },
   "rotas": {
     "posicional": { "layout": { "x_rotulos": [110, 133], "...": "..." } },
     "ocr": { "dpi": 350 },
@@ -86,6 +106,20 @@ Trocar de contexto é trocar de perfil:
 
 Use `parser calibrar --json` para descobrir o layout de um documento novo — ele
 imprime o recorte pronto para colar.
+
+**`mapeamento`** traduz o rótulo do documento para o nome que o destino espera.
+Sem ele, uma extração perfeita mede zero de acurácia.
+
+**`unidades`** converte para a unidade que o destino usa. O campo convertido sai
+marcado como *derivado*, preservando a evidência do valor original. Sem declaração,
+nada é convertido — nenhum resultado anterior muda de valor.
+
+**`esquema`** descreve a saída esperada: coluna, tipo e restrições. É verificado
+**antes de gravar**, porque dado inválido que chega ao destino já contaminou o
+consumidor. Sem declaração, não há verificação de conjunto.
+
+Nos três casos a regra é a mesma: o núcleo não conhece campo, unidade nem domínio.
+Tudo entra por arquivo, e trocar de contexto é trocar de perfil.
 
 Os prompts ficam em [prompts/](prompts/), em arquivos com a instrução, os guardrails
 e a **justificativa de cada regra**. Sem a justificativa, a próxima pessoa remove uma

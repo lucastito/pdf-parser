@@ -28,8 +28,8 @@ resto suspeito.
 ## Rodar uma nova rodada
 
 ```powershell
-.\scripts\1-preparar-maquina.ps1
-.\scripts\2-rodar-experimento.ps1 -Documento "CAMINHO\DO\DOCUMENTO.pdf"
+.\experimentos\scripts\1-preparar-maquina.ps1
+.\experimentos\scripts\2-rodar-experimento.ps1 -Documento "CAMINHO\DO\DOCUMENTO.pdf"
 ```
 
 O primeiro instala o que falta e valida o clone. O segundo executa todas as

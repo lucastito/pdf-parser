@@ -11,15 +11,18 @@
     clone inconsistente produziria números sem valor.
 
 .EXAMPLE
-    .\scripts\1-preparar-maquina.ps1
+    .\experimentos\scripts\1-preparar-maquina.ps1
 
 .EXAMPLE
-    .\scripts\1-preparar-maquina.ps1 -SemModelos   # só o ambiente Python
+    .\experimentos\scripts\1-preparar-maquina.ps1 -SemModelos   # só o ambiente Python
 #>
 param([switch]$SemModelos)
 
 $ErrorActionPreference = "Stop"
-$RAIZ = Split-Path -Parent $PSScriptRoot
+# Dois niveis: de experimentos/scripts/ ate a raiz do repositorio. Um nivel so
+# levava a experimentos/, onde nao ha tests/ nem src/ — o pytest nao achava nada
+# e o script concluia "testes falharam" com a suite inteira passando.
+$RAIZ = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $RAIZ
 $env:PYTHONIOENCODING = "utf-8"
 
@@ -139,7 +142,7 @@ if ($diag -eq 0) {
 
 Proximo passo:
 
-    .\scripts\2-rodar-experimento.ps1 -Documento "C:\caminho\do\documento.pdf"
+    .\experimentos\scripts\2-rodar-experimento.ps1 -Documento "C:\caminho\do\documento.pdf"
 
 "@ -ForegroundColor White
 } else {

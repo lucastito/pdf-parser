@@ -14,10 +14,10 @@
     ou não terminar. Isso é resultado do experimento, não defeito dele.
 
 .EXAMPLE
-    .\scripts\2-rodar-experimento.ps1 -Documento "C:\docs\tabela.pdf"
+    .\experimentos\scripts\2-rodar-experimento.ps1 -Documento "C:\docs\tabela.pdf"
 
 .EXAMPLE
-    .\scripts\2-rodar-experimento.ps1 -Documento "C:\docs\tabela.pdf" -SemModelos
+    .\experimentos\scripts\2-rodar-experimento.ps1 -Documento "C:\docs\tabela.pdf" -SemModelos
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Documento,
@@ -29,7 +29,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$RAIZ = Split-Path -Parent $PSScriptRoot
+# Dois niveis: de experimentos/scripts/ ate a raiz do repositorio. Um nivel so
+# levava a experimentos/, onde nao ha tests/ nem src/ — o pytest nao achava nada
+# e o script concluia "testes falharam" com a suite inteira passando.
+$RAIZ = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $RAIZ
 $env:PYTHONIOENCODING = "utf-8"
 
@@ -47,7 +50,7 @@ Ok (Split-Path -Leaf $Documento)
 
 $saida = python -m pytest --quiet 2>&1 | Select-Object -Last 2
 if ($LASTEXITCODE -ne 0) {
-    Falha "testes falharam — rode .\scripts\1-preparar-maquina.ps1"
+    Falha "testes falharam — rode .\experimentos\scripts\1-preparar-maquina.ps1"
     exit 1
 }
 Ok ($saida -join " ")
