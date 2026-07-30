@@ -64,12 +64,14 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
 __all__ = [
     "Degrau",
+    "Varredura",
     "RespostaVazia",
     "ResultadoDegrau",
     "SaidaEmDegraus",
@@ -119,6 +121,54 @@ class Tentativa:
     sucesso: bool
     motivo: str = ""
     segundos: float = 0.0
+    tipo_de_falha: str | None = None
+    """Categoria da falha, para agrupar resultados entre máquinas.
+
+    `resposta-vazia` e `sem-estrutura` são achados diferentes: o primeiro sugere
+    problema de modelo, o segundo de formato. Colapsar os dois em "falhou"
+    perderia a distinção justamente na comparação em que ela importa.
+    """
+
+    def como_dados(self) -> dict[str, Any]:
+        return {
+            "degrau": self.degrau.value,
+            "sucesso": self.sucesso,
+            "segundos": round(self.segundos, 2),
+            "tipo_de_falha": self.tipo_de_falha,
+            "motivo": self.motivo,
+        }
+
+
+@dataclass
+class Varredura:
+    """O resultado de rodar **todos** os degraus, para comparação entre máquinas."""
+
+    tentativas: list[Tentativa] = field(default_factory=list)
+
+    @property
+    def primeiro_sucesso(self) -> Degrau | None:
+        for tentativa in self.tentativas:
+            if tentativa.sucesso:
+                return tentativa.degrau
+        return None
+
+    def como_dados(self) -> dict[str, Any]:
+        """Forma serializável, para gravar em `experimentos/resultados/`."""
+        primeiro = self.primeiro_sucesso
+        return {
+            "primeiro_sucesso": primeiro.value if primeiro else None,
+            "tentativas": [t.como_dados() for t in self.tentativas],
+        }
+
+    def resumo(self) -> str:
+        linhas = []
+        for tentativa in self.tentativas:
+            marca = "ok    " if tentativa.sucesso else "falhou"
+            detalhe = "" if tentativa.sucesso else f" ({tentativa.tipo_de_falha})"
+            linhas.append(
+                f"  {tentativa.degrau.value:20s} {marca} {tentativa.segundos:7.1f}s{detalhe}"
+            )
+        return "\n".join(linhas)
 
 
 @dataclass
@@ -180,8 +230,57 @@ class SaidaEmDegraus:
             return ORDEM
         return ORDEM[: ORDEM.index(self.degrau_maximo) + 1]
 
+    def varrer(self, prompt: str, *, imagens: list[str] | None = None) -> Varredura:
+        """Roda **todos** os degraus, em ordem, mesmo os que vêm depois de um sucesso.
+
+        É o modo de experimento, e o contrário de `obter`. A diferença é de
+        propósito, não de implementação:
+
+        - `obter` para no primeiro sucesso, porque em produção os degraus
+          seguintes custariam tempo sem acrescentar nada;
+        - `varrer` executa todos, porque **comparar máquinas exige que todas
+          tenham tentado as mesmas coisas**. Se a máquina A responde no degrau 1
+          e para, não há como saber se ela também responderia no 3 — e a
+          comparação com uma máquina B que só responde no 3 fica sem base.
+
+        Nunca levanta: falha é o dado que se quer medir. Cada tentativa registra
+        degrau, sucesso, tipo da falha e tempo.
+
+        `degrau_maximo` é ignorado de propósito: limitar degraus é decisão de
+        produção, e o experimento mede todos.
+        """
+        tentativas: list[Tentativa] = []
+
+        for degrau in ORDEM:
+            inicio = time.perf_counter()
+            try:
+                self._tentar(degrau, prompt, imagens)
+            except (RespostaVazia, ValueError) as erro:
+                tentativas.append(
+                    Tentativa(
+                        degrau=degrau,
+                        sucesso=False,
+                        motivo=str(erro)[:160],
+                        segundos=time.perf_counter() - inicio,
+                        tipo_de_falha=_classificar_falha(erro),
+                    )
+                )
+                continue
+
+            tentativas.append(
+                Tentativa(
+                    degrau=degrau,
+                    sucesso=True,
+                    segundos=time.perf_counter() - inicio,
+                )
+            )
+
+        return Varredura(tentativas=tentativas)
+
     def obter(self, prompt: str, *, imagens: list[str] | None = None) -> ResultadoDegrau:
-        """Tenta cada degrau permitido, do mais restrito ao mais livre.
+        """Tenta cada degrau permitido, parando no primeiro que funcionar.
+
+        É o modo de produção. Para medir e comparar máquinas, use `varrer`.
 
         Levanta:
             TodosOsDegrausFalharam: se nenhum produzir a estrutura esperada.
@@ -189,15 +288,24 @@ class SaidaEmDegraus:
         tentativas: list[Tentativa] = []
 
         for degrau in self._permitidos():
+            inicio = time.perf_counter()
             try:
                 dados = self._tentar(degrau, prompt, imagens)
             except (RespostaVazia, ValueError) as erro:
                 tentativas.append(
-                    Tentativa(degrau=degrau, sucesso=False, motivo=str(erro)[:120])
+                    Tentativa(
+                        degrau=degrau,
+                        sucesso=False,
+                        motivo=str(erro)[:120],
+                        segundos=time.perf_counter() - inicio,
+                        tipo_de_falha=_classificar_falha(erro),
+                    )
                 )
                 continue
 
-            tentativas.append(Tentativa(degrau=degrau, sucesso=True))
+            tentativas.append(
+                Tentativa(degrau=degrau, sucesso=True, segundos=time.perf_counter() - inicio)
+            )
             return ResultadoDegrau(dados=dados, degrau=degrau, tentativas=tentativas)
 
         raise TodosOsDegrausFalharam(self._relatorio(tentativas))
@@ -380,3 +488,17 @@ def _maior_objeto(texto: str) -> str | None:
                 return texto[inicio : i + 1]
 
     return None
+
+
+def _classificar_falha(erro: Exception) -> str:
+    """Agrupa a falha num tipo comparável entre máquinas.
+
+    A distinção que importa: `resposta-vazia` sugere problema de modelo — ele
+    gerou tokens e nada chegou ao campo de resposta —, enquanto `sem-estrutura`
+    sugere problema de formato: o modelo falou, mas não no formato pedido.
+    Colapsar os dois em "falhou" perderia justamente a informação que separa uma
+    causa da outra.
+    """
+    if isinstance(erro, RespostaVazia):
+        return "resposta-vazia"
+    return "sem-estrutura"

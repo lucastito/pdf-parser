@@ -19,7 +19,7 @@ import json
 
 import pytest
 
-from parser.degraus import Degrau, SaidaEmDegraus, TodosOsDegrausFalharam
+from parser.degraus import ORDEM, Degrau, SaidaEmDegraus, TodosOsDegrausFalharam
 
 
 class TransporteRoteirizado:
@@ -254,3 +254,97 @@ class TestRaciocinio:
         mensagem = str(erro.value).lower()
         assert "prompt" in mensagem, "a mensagem precisa apontar a pista atual"
         assert "restrição" in mensagem or "restricao" in mensagem
+
+
+class TestVarredura:
+    """No experimento, TODOS os degraus rodam — não só até o primeiro que funciona.
+
+    A diferença é de propósito. Em produção, parar no primeiro sucesso é o certo:
+    os degraus seguintes custariam tempo sem acrescentar nada.
+
+    No experimento é o oposto. Se a máquina A responde no degrau 1 e a máquina B
+    no degrau 3, parar no primeiro sucesso significa que A nunca tentou os degraus
+    2 e 3 — e a comparação entre A e B vira comparação entre restrições
+    diferentes. Sem rodar todos, não há como saber se B *falharia* no degrau 1 ou
+    se apenas não chegou a tentá-lo.
+
+    Toda tentativa registra: qual degrau, se deu certo, o tipo da falha e o tempo.
+    """
+
+    def test_roda_todos_os_degraus_mesmo_com_o_primeiro_funcionando(self):
+        transporte = TransporteRoteirizado(
+            {"response": json.dumps(ITENS)},
+            {"response": json.dumps(ITENS)},
+            {"response": json.dumps(ITENS)},
+        )
+        varredura = _saida(transporte).varrer("prompt")
+
+        assert len(transporte.chamadas) == 3, "parou antes de tentar todos"
+        assert len(varredura.tentativas) == 3
+
+    def test_roda_todos_mesmo_com_todos_falhando(self):
+        transporte = TransporteRoteirizado(VAZIO, VAZIO, VAZIO)
+        varredura = _saida(transporte).varrer("prompt")
+
+        assert len(varredura.tentativas) == 3
+        assert not any(t.sucesso for t in varredura.tentativas)
+
+    def test_varredura_nao_levanta_quando_todos_falham(self):
+        """Falha é o dado que se quer medir, não interrupção do experimento."""
+        varredura = _saida(TransporteRoteirizado(VAZIO, VAZIO, VAZIO)).varrer("prompt")
+        assert varredura.tentativas
+
+    def test_cada_tentativa_registra_degrau_sucesso_motivo_e_tempo(self):
+        transporte = TransporteRoteirizado(
+            VAZIO, {"response": "prosa"}, {"response": json.dumps(ITENS)}
+        )
+        varredura = _saida(transporte).varrer("prompt")
+
+        for tentativa in varredura.tentativas:
+            assert tentativa.degrau in ORDEM
+            assert isinstance(tentativa.sucesso, bool)
+            assert tentativa.segundos >= 0.0
+            if not tentativa.sucesso:
+                assert tentativa.motivo, "falha sem motivo não é comparável"
+
+    def test_distingue_o_tipo_da_falha(self):
+        """Resposta vazia e JSON malformado são achados diferentes.
+
+        Se as duas virassem "falhou", perderia-se a informação que distingue
+        problema de modelo de problema de formato.
+        """
+        transporte = TransporteRoteirizado(
+            VAZIO, {"response": "isto nao e json"}, {"response": json.dumps(ITENS)}
+        )
+        varredura = _saida(transporte).varrer("prompt")
+
+        assert varredura.tentativas[0].tipo_de_falha == "resposta-vazia"
+        assert varredura.tentativas[1].tipo_de_falha == "sem-estrutura"
+        assert varredura.tentativas[2].tipo_de_falha is None
+
+    def test_a_ordem_dos_degraus_e_sempre_a_mesma(self):
+        """Ordem estável é condição para comparar máquina com máquina."""
+        transporte = TransporteRoteirizado(VAZIO, VAZIO, VAZIO)
+        varredura = _saida(transporte).varrer("prompt")
+
+        assert [t.degrau for t in varredura.tentativas] == list(ORDEM)
+
+    def test_resumo_serializavel_para_o_experimento(self):
+        """O resultado precisa virar JSON: é o que vai para experimentos/."""
+        transporte = TransporteRoteirizado(VAZIO, {"response": json.dumps(ITENS)}, VAZIO)
+        varredura = _saida(transporte).varrer("prompt")
+
+        dados = varredura.como_dados()
+        json.dumps(dados)  # levanta se não for serializável
+        assert len(dados["tentativas"]) == 3
+        assert dados["primeiro_sucesso"] == Degrau.JSON_LIVRE.value
+
+    def test_sem_sucesso_algum_o_resumo_diz_isso(self):
+        varredura = _saida(TransporteRoteirizado(VAZIO, VAZIO, VAZIO)).varrer("prompt")
+        assert varredura.como_dados()["primeiro_sucesso"] is None
+
+    def test_varredura_ignora_degrau_maximo(self):
+        """O experimento mede todos os degraus; limitar é decisão de produção."""
+        transporte = TransporteRoteirizado(VAZIO, VAZIO, VAZIO)
+        varredura = _saida(transporte, degrau_maximo=Degrau.ESQUEMA_COMPLETO).varrer("prompt")
+        assert len(varredura.tentativas) == 3

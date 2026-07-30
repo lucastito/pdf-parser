@@ -254,6 +254,9 @@ class Experimento:
         self.destino = Path(destino)
         self.ambiente = ambiente or Ambiente.levantar()
         self.execucoes: list[Execucao] = []
+        self.extras: dict[str, Any] = {}
+        """Medições que não são execução de estratégia — varredura de degraus,
+        por exemplo. Entram no resumo com a mesma procedência."""
 
     def rodar(
         self,
@@ -288,6 +291,10 @@ class Experimento:
         self.execucoes.append(execucao)
         return execucao
 
+    def registrar_extra(self, nome: str, dados: Any) -> None:
+        """Anota uma medição avulsa, fora do laço de estratégias."""
+        self.extras[nome] = dados
+
     def gravar(self) -> Path:
         """Grava ambiente, resumo e dados brutos.
 
@@ -307,6 +314,7 @@ class Experimento:
             "maquina": self.ambiente.maquina,
             "data_utc": self.ambiente.data_utc,
             "execucoes": [e.resumo() for e in self.execucoes],
+            "extras": self.extras,
         }
         (pasta / "resumo.json").write_text(
             json.dumps(resumo, ensure_ascii=False, indent=2), encoding="utf-8"

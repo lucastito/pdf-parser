@@ -162,3 +162,266 @@ class TestIngestao:
         erro = capsys.readouterr().err
         assert "perfil" in erro.lower()
         assert "Rótulo X" in erro
+
+
+class TestVarreduraNoExperimento:
+    """O comando de experimento roda todos os degraus, não só até o primeiro.
+
+    O erro que motivou estes testes foi um nome não importado dentro da função de
+    varredura — invisível porque nada a exercitava. Uma função só chamada com
+    servidor de inferência no ar é uma função sem teste.
+    """
+
+    def _perfil_com_modelo(self, tmp_path, documento):
+        import json
+
+        perfil = tmp_path / "p.json"
+        perfil.write_text(
+            json.dumps(
+                {
+                    "nome": "t",
+                    "documento": str(documento),
+                    "rotas": {
+                        "vlm": {
+                            "modelo": "modelo-inexistente:0b",
+                            "campos": ["identificador"],
+                            "dpi": 72,
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        return perfil
+
+    def _documento(self, tmp_path):
+        import fitz
+
+        caminho = tmp_path / "d.pdf"
+        documento = fitz.open()
+        documento.new_page().insert_text((72, 72), "texto")
+        documento.save(caminho)
+        documento.close()
+        return caminho
+
+    def test_varredura_roda_e_registra_mesmo_sem_servidor(self, tmp_path, capsys):
+        """Servidor fora do ar é resultado do experimento, não interrupção."""
+        import json
+
+        documento = self._documento(tmp_path)
+        perfil = self._perfil_com_modelo(tmp_path, documento)
+        destino = tmp_path / "res"
+
+        codigo = main(
+            [
+                "experimento",
+                "--perfil",
+                str(perfil),
+                "--destino",
+                str(destino),
+            ]
+        )
+
+        assert codigo in (0, 1)
+        resumos = list(destino.glob("*/resumo.json"))
+        assert resumos, "o experimento não gravou nada"
+
+        dados = json.loads(resumos[0].read_text(encoding="utf-8"))
+        assert "extras" in dados, "a varredura não foi registrada no resumo"
+
+    def test_sem_degraus_pula_a_varredura(self, tmp_path):
+        import json
+
+        documento = self._documento(tmp_path)
+        perfil = self._perfil_com_modelo(tmp_path, documento)
+        destino = tmp_path / "res"
+
+        main(
+            [
+                "experimento",
+                "--perfil",
+                str(perfil),
+                "--destino",
+                str(destino),
+                "--sem-degraus",
+            ]
+        )
+
+        dados = json.loads(next(destino.glob("*/resumo.json")).read_text(encoding="utf-8"))
+        assert not dados["extras"], "varredura rodou apesar de --sem-degraus"
+
+
+class TestAvaliarRegistra:
+    """A acurácia é o resultado mais valioso do experimento — e se perdia.
+
+    O comando `avaliar` imprimia na tela e não gravava nada. Fechado o terminal,
+    o número sumia, e refazer custa uma execução inteira.
+
+    Tudo que rodamos aqui é experimento: o produto é agnóstico ao tema, e o
+    documento nutricional é um caso de teste como qualquer outro seria. Logo, a
+    medição de acurácia pertence a `experimentos/resultados/`, com a mesma
+    procedência das demais.
+    """
+
+    def _cenario(self, tmp_path):
+        import json
+
+        import fitz
+
+        documento = tmp_path / "d.pdf"
+        pdf = fitz.open()
+        pagina = pdf.new_page(width=595, height=842)
+        pagina.insert_text((112, 400.0), "Energia ")
+        pagina.insert_text((165, 400.0), "(kcal) ")
+        for i, valor in enumerate(["124", "360"]):
+            pagina.insert_text((230 + i * 70, 400.0), valor + " ")
+        for i, nome in enumerate(["Um", "Dois"]):
+            pagina.insert_text((230 + i * 70, 600), nome + " ")
+        pdf.save(documento)
+        pdf.close()
+
+        gabarito = tmp_path / "g.csv"
+        gabarito.write_text(
+            "numero,descricao,energia_kcal,energia_kcal_ok\n"
+            "1,Um,124.0,ok\n"
+            "2,Dois,360.0,ok\n",
+            encoding="utf-8",
+        )
+
+        perfil = tmp_path / "p.json"
+        perfil.write_text(
+            json.dumps(
+                {
+                    "nome": "t",
+                    "documento": str(documento),
+                    "mapeamento": {"energia_kcal": ["Energia (kcal)"]},
+                    "rotas": {
+                        "posicional": {
+                            "layout": {
+                                "x_rotulos": [110.0, 160.0],
+                                "x_unidades": [160.0, 200.0],
+                                "x_valores_min": 200.0,
+                                "y_identificadores_min": 550.0,
+                                "y_rotulo_max": 550.0,
+                            }
+                        }
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return documento, gabarito, perfil
+
+    def test_avaliacao_fica_gravada_com_procedencia(self, tmp_path):
+        import json
+
+        _, gabarito, perfil = self._cenario(tmp_path)
+        destino = tmp_path / "res"
+
+        main(
+            [
+                "avaliar",
+                str(gabarito),
+                "--perfil",
+                str(perfil),
+                "--destino",
+                str(destino),
+            ]
+        )
+
+        arquivos = list(destino.glob("*/acuracia.json"))
+        assert arquivos, "a acurácia não foi gravada"
+
+        dados = json.loads(arquivos[0].read_text(encoding="utf-8"))
+        assert dados["maquina"]
+        assert dados["quando"]
+        assert dados["gabarito"]
+        assert dados["rotas"], "nenhuma rota foi medida"
+
+    def test_grava_acuracia_por_campo(self, tmp_path):
+        """O número agregado esconde qual campo falha — e é esse que se corrige."""
+        import json
+
+        _, gabarito, perfil = self._cenario(tmp_path)
+        destino = tmp_path / "res"
+
+        main(["avaliar", str(gabarito), "--perfil", str(perfil), "--destino", str(destino)])
+
+        dados = json.loads(next(destino.glob("*/acuracia.json")).read_text(encoding="utf-8"))
+        primeira = next(iter(dados["rotas"].values()))
+        assert "acuracia" in primeira
+        assert "por_campo" in primeira
+
+
+class TestDocumentoDaLinhaDeComando:
+    """`--documento` precisa chegar às rotas que abrem o arquivo.
+
+    Quatro das seis rotas — pdfplumber, camelot, ocr e biblioteca — precisam do
+    caminho do PDF, não do formato canônico. Elas o buscavam só em
+    `perfil.documento`, então um `--documento` informado na linha de comando era
+    ignorado e as quatro falhavam com "perfil precisa de 'documento'".
+
+    O efeito é uma avaliação silenciosamente incompleta: duas rotas medidas, quatro
+    "falhadas" por motivo que não é delas. Quem lesse a tabela concluiria que as
+    ferramentas não funcionam.
+    """
+
+    def _perfil_multirrota(self, tmp_path):
+        import json
+
+        perfil = tmp_path / "p.json"
+        perfil.write_text(
+            json.dumps(
+                {
+                    "nome": "t",
+                    "rotas": {
+                        "posicional": {
+                            "layout": {
+                                "x_rotulos": [110.0, 160.0],
+                                "x_unidades": [160.0, 200.0],
+                                "x_valores_min": 200.0,
+                                "y_identificadores_min": 550.0,
+                            }
+                        },
+                        "pdfplumber": {},
+                        "biblioteca": {},
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        return perfil
+
+    def test_documento_da_linha_de_comando_chega_as_rotas(self, tmp_path, capsys):
+        import fitz
+
+        documento = tmp_path / "d.pdf"
+        pdf = fitz.open()
+        pdf.new_page().insert_text((72, 72), "texto")
+        pdf.save(documento)
+        pdf.close()
+
+        gabarito = tmp_path / "g.csv"
+        gabarito.write_text(
+            "numero,descricao,energia_kcal,energia_kcal_ok\n1,Um,124.0,ok\n",
+            encoding="utf-8",
+        )
+
+        main(
+            [
+                "avaliar",
+                str(gabarito),
+                "--perfil",
+                str(self._perfil_multirrota(tmp_path)),
+                "--documento",
+                str(documento),
+                "--destino",
+                str(tmp_path / "res"),
+            ]
+        )
+
+        saida = capsys.readouterr().out
+        assert (
+            "precisa de 'documento'" not in saida
+        ), "o --documento da linha de comando não chegou às rotas que abrem o arquivo"

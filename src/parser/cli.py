@@ -45,6 +45,21 @@ def _perfil(caminho: Path | None):
     return carregar_perfil(caminho)
 
 
+def _resolver_documento(informado: str | None, perfil) -> str | None:
+    """Decide o documento e **grava a escolha no perfil**.
+
+    Escrever de volta não é conveniência: quatro das seis rotas — as que abrem o
+    arquivo em vez de consumir o formato canônico — leem `perfil.documento` na
+    montagem. Sem isto, um `--documento` na linha de comando era ignorado por
+    elas, que falhavam com "perfil precisa de 'documento'" e sumiam da
+    comparação. A avaliação saía silenciosamente incompleta.
+    """
+    documento = informado or (perfil.documento if perfil else None)
+    if perfil is not None and documento:
+        perfil.documento = documento
+    return documento
+
+
 def _ambiente(opcoes: argparse.Namespace) -> int:
     """Relata o que esta máquina oferece, e o que falta."""
     from parser.procedencia import Ambiente
@@ -239,7 +254,7 @@ def _avaliar(opcoes: argparse.Namespace) -> int:
         print(f"{erro}", file=sys.stderr)
         return 2
 
-    documento = opcoes.documento or perfil.documento
+    documento = _resolver_documento(opcoes.documento, perfil)
     if not documento:
         print("informe --documento ou 'documento' no perfil", file=sys.stderr)
         return 2
@@ -263,6 +278,7 @@ def _avaliar(opcoes: argparse.Namespace) -> int:
     print("-" * 70)
 
     houve_erro = False
+    medidas: dict[str, dict] = {}
     for nome in rotas:
         try:
             extrator = montar_extrator(perfil, nome)
@@ -273,8 +289,15 @@ def _avaliar(opcoes: argparse.Namespace) -> int:
             piores = ", ".join(f"{c}={t:.0%}" for c, t in resultado.piores_campos(3))
             marca = "  (gerou o gabarito)" if nome == gabarito.gerado_por else ""
             print(f"{nome:16s} {resultado.acuracia:8.1%} {len(registros):6d}  {piores}{marca}")
+            medidas[nome] = {
+                "acuracia": round(resultado.acuracia, 4),
+                "itens": len(registros),
+                "por_campo": {c: round(v, 4) for c, v in resultado.por_campo().items()},
+                "tautologica": nome == gabarito.gerado_por,
+            }
         except Exception as erro:  # noqa: BLE001 — relatar é o ponto
             print(f"{nome:16s} {'falhou':>9s}         {type(erro).__name__}: {erro}")
+            medidas[nome] = {"erro": f"{type(erro).__name__}: {erro}"}
             houve_erro = True
 
     if gabarito.gerado_por:
@@ -283,7 +306,51 @@ def _avaliar(opcoes: argparse.Namespace) -> int:
             "gerou o material que foi conferido, e acerta por construção. Para medi-la "
             "de forma independente, use um conjunto de reserva transcrito às cegas."
         )
+
+    caminho = _gravar_acuracia(opcoes.destino, documento, gabarito, perfil, medidas)
+    print(f"\ngravado em {caminho}")
     return 1 if houve_erro else 0
+
+
+def _gravar_acuracia(destino, documento: str, gabarito, perfil, medidas: dict) -> Path:
+    """Registra a acurácia junto dos demais resultados de experimento.
+
+    A acurácia é o resultado mais valioso de uma rodada, e antes só existia na
+    tela: fechado o terminal, o número sumia e refazê-lo custava uma execução
+    inteira. Vai para a mesma pasta por máquina que o resto, com a procedência
+    que torna a comparação entre máquinas possível.
+    """
+    import json
+    from datetime import datetime, timezone
+
+    from parser.procedencia import Ambiente
+
+    ambiente = Ambiente.levantar(consultar_modelos=False)
+    pasta = Path(destino) / ambiente.maquina
+    pasta.mkdir(parents=True, exist_ok=True)
+
+    conteudo = {
+        "documento": Path(documento).name,
+        "gabarito": Path(gabarito.caminho).name if gabarito.caminho else "(informado)",
+        "gerado_por": gabarito.gerado_por,
+        "total_de_valores": gabarito.total,
+        "itens_no_gabarito": len(gabarito.itens),
+        "tolerancia": perfil.tolerancia,
+        "maquina": ambiente.maquina,
+        "processador": ambiente.processador,
+        "quando": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "rotas": medidas,
+    }
+
+    caminho = pasta / "acuracia.json"
+    # Rodada anterior preservada: sobrescrever apagaria a evidência de que o
+    # resultado mudou, que costuma ser a informação mais valiosa.
+    if caminho.exists():
+        carimbo = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        caminho.replace(pasta / f"acuracia.{carimbo}.json")
+
+    caminho.write_text(json.dumps(conteudo, ensure_ascii=False, indent=2), encoding="utf-8")
+    return caminho
 
 
 def _comparar(opcoes: argparse.Namespace) -> int:
@@ -307,7 +374,7 @@ def _comparar(opcoes: argparse.Namespace) -> int:
         print(f"perfil inválido: {erro}", file=sys.stderr)
         return 2
 
-    documento = opcoes.documento or perfil.documento
+    documento = _resolver_documento(opcoes.documento, perfil)
     if not documento:
         print("informe --documento ou 'documento' no perfil", file=sys.stderr)
         return 2
@@ -359,7 +426,7 @@ def _experimentar(opcoes: argparse.Namespace) -> int:
         print(f"perfil inválido: {erro}", file=sys.stderr)
         return 2
 
-    documento = opcoes.documento or (perfil.documento if perfil else None)
+    documento = _resolver_documento(opcoes.documento, perfil)
     if not documento:
         print("informe --documento ou 'documento' no perfil", file=sys.stderr)
         return 2
@@ -407,6 +474,9 @@ def _experimentar(opcoes: argparse.Namespace) -> int:
                         f"    {execucao.registros} registro(s) em " f"{execucao.segundos:.1f}s"
                     )
 
+            if not opcoes.sem_modelos and not opcoes.sem_degraus:
+                _varrer_degraus(experimento, perfil, documento, fonte)
+
             pasta = experimento.gravar()
     except MedicaoEmAndamento as erro:
         print(f"{erro}", file=sys.stderr)
@@ -414,6 +484,50 @@ def _experimentar(opcoes: argparse.Namespace) -> int:
 
     print(f"\ngravado em {pasta}")
     return 0
+
+
+def _varrer_degraus(experimento, perfil, documento: str, fonte) -> None:
+    """Roda **todos** os degraus de saída, em ordem, em cada rota de modelo.
+
+    Diferente da execução normal, que para no primeiro degrau que funciona. Aqui
+    todos são tentados, porque comparar máquinas exige que todas tenham tentado
+    as mesmas coisas: se uma responde no degrau 1 e para, não há como saber se
+    responderia no 3 — e a comparação com outra que só responde no 3 fica sem base.
+
+    Falha não interrompe: é o dado que se quer medir.
+    """
+    from parser.degraus import SaidaEmDegraus
+    from parser.extratores.vlm import INSTRUCAO_VISUAL
+    from parser.fabrica import _campos, _cliente, _instrucao
+    from parser.fontes.render import renderizar
+
+    for nome in ("vlm", "llm"):
+        rota = perfil.rotas.get(nome)
+        if rota is None or not rota.modelo:
+            continue
+
+        print(f"  {nome}: varredura de degraus ...", flush=True)
+        try:
+            campos = _campos(rota)
+            saida = SaidaEmDegraus(_cliente(rota), campos)
+            prompt = f"{_instrucao(rota) or INSTRUCAO_VISUAL}\n\nCampos: {', '.join(campos)}"
+
+            if nome == "vlm":
+                paginas = perfil.intervalo_de_paginas()
+                primeira = (list(paginas)[0] + 1) if paginas else 1
+                imagens = [renderizar(documento, pagina=primeira, dpi=rota.dpi)]
+            else:
+                pagina = fonte.carregar(documento).paginas[0]
+                prompt, imagens = f"{prompt}\n\n{pagina.texto}", None
+
+            varredura = saida.varrer(prompt, imagens=imagens)
+            print(varredura.resumo())
+            experimento.registrar_extra(f"degraus-{nome}", varredura.como_dados())
+        except Exception as erro:  # noqa: BLE001 — a falha é dado do experimento
+            print(f"    varredura falhou: {type(erro).__name__}: {erro}")
+            experimento.registrar_extra(
+                f"degraus-{nome}", {"erro": f"{type(erro).__name__}: {erro}"}
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -462,6 +576,11 @@ def main(argv: list[str] | None = None) -> int:
     avaliacao.add_argument("--documento")
     avaliacao.add_argument("--rotas", nargs="*", help="estratégias a avaliar")
     avaliacao.add_argument(
+        "--destino",
+        default="experimentos/resultados",
+        help="onde gravar a acurácia medida, numa pasta por máquina",
+    )
+    avaliacao.add_argument(
         "--gerado-por",
         help="estratégia que gerou o material conferido, se aplicável — a acurácia "
         "dela é tautológica e o relatório declara isso",
@@ -491,6 +610,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     experimento.add_argument(
         "--sem-modelos", action="store_true", help="pula as rotas por modelo (lentas)"
+    )
+    experimento.add_argument(
+        "--sem-degraus",
+        action="store_true",
+        help="pula a varredura de degraus de saída (que roda todos, um a um)",
     )
     experimento.add_argument(
         "--dpi",
