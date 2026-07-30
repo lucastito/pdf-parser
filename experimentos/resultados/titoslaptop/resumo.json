@@ -1,0 +1,92 @@
+{
+  "documento": "TACO.pdf",
+  "maquina": "titoslaptop",
+  "data_utc": "2026-07-30T21:41:51+00:00",
+  "execucoes": [
+    {
+      "estrategia": "posicional",
+      "parametros": {
+        "dpi": 0
+      },
+      "paginas": 2,
+      "registros": 64,
+      "campos": 768,
+      "campos_preenchidos": 757,
+      "segundos": 0.2898548999801278,
+      "erro": null,
+      "cobertura": 0.9857,
+      "segundos_por_pagina": 0.14
+    },
+    {
+      "estrategia": "pdfplumber",
+      "parametros": {
+        "dpi": 0
+      },
+      "paginas": 2,
+      "registros": 63,
+      "campos": 567,
+      "campos_preenchidos": 567,
+      "segundos": 2.473506800015457,
+      "erro": null,
+      "cobertura": 1.0,
+      "segundos_por_pagina": 1.24
+    },
+    {
+      "estrategia": "camelot",
+      "parametros": {
+        "dpi": 0
+      },
+      "paginas": 2,
+      "registros": 94,
+      "campos": 846,
+      "campos_preenchidos": 846,
+      "segundos": 3.0924833999597467,
+      "erro": null,
+      "cobertura": 1.0,
+      "segundos_por_pagina": 1.55
+    },
+    {
+      "estrategia": "ocr",
+      "parametros": {
+        "dpi": 350
+      },
+      "paginas": 2,
+      "registros": 64,
+      "campos": 768,
+      "campos_preenchidos": 757,
+      "segundos": 17.37327619997086,
+      "erro": null,
+      "cobertura": 0.9857,
+      "segundos_por_pagina": 8.69
+    },
+    {
+      "estrategia": "linear",
+      "parametros": {
+        "dpi": 0
+      },
+      "paginas": 2,
+      "registros": 0,
+      "campos": 0,
+      "campos_preenchidos": 0,
+      "segundos": 0.02410280000185594,
+      "erro": null,
+      "cobertura": 0.0,
+      "segundos_por_pagina": 0.01
+    },
+    {
+      "estrategia": "biblioteca",
+      "parametros": {
+        "dpi": 0
+      },
+      "paginas": 2,
+      "registros": 4,
+      "campos": 4,
+      "campos_preenchidos": 0,
+      "segundos": 1.373067100008484,
+      "erro": null,
+      "cobertura": 0.0,
+      "segundos_por_pagina": 0.69
+    }
+  ],
+  "extras": {}
+}

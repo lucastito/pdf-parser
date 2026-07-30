@@ -342,7 +342,12 @@ def _gravar_acuracia(destino, documento: str, gabarito, perfil, medidas: dict) -
         "rotas": medidas,
     }
 
-    caminho = pasta / "acuracia.json"
+    # Nome derivado do gabarito: medir contra o gabarito principal e contra o
+    # conjunto de reserva são medições diferentes, e uma não pode sobrescrever a
+    # outra. O reserva é a única acurácia não-tautológica.
+    origem = Path(gabarito.caminho).stem if gabarito.caminho else "gabarito"
+    sufixo = "" if origem in ("taco", "gabarito") else f"-{origem}"
+    caminho = pasta / f"acuracia{sufixo}.json"
     # Rodada anterior preservada: sobrescrever apagaria a evidência de que o
     # resultado mudou, que costuma ser a informação mais valiosa.
     if caminho.exists():

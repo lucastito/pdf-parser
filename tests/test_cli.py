@@ -330,7 +330,7 @@ class TestAvaliarRegistra:
             ]
         )
 
-        arquivos = list(destino.glob("*/acuracia.json"))
+        arquivos = list(destino.glob("*/acuracia*.json"))
         assert arquivos, "a acurácia não foi gravada"
 
         dados = json.loads(arquivos[0].read_text(encoding="utf-8"))
@@ -348,10 +348,29 @@ class TestAvaliarRegistra:
 
         main(["avaliar", str(gabarito), "--perfil", str(perfil), "--destino", str(destino)])
 
-        dados = json.loads(next(destino.glob("*/acuracia.json")).read_text(encoding="utf-8"))
+        dados = json.loads(next(destino.glob("*/acuracia*.json")).read_text(encoding="utf-8"))
         primeira = next(iter(dados["rotas"].values()))
         assert "acuracia" in primeira
         assert "por_campo" in primeira
+
+    def test_gabaritos_diferentes_nao_se_sobrescrevem(self, tmp_path):
+        """Gabarito principal e conjunto de reserva medem coisas diferentes.
+
+        O principal foi gerado por uma estratégia e conferido — a acurácia dela é
+        tautológica. O reserva foi transcrito às cegas, e é a única medição
+        independente. Uma sobrescrever a outra apagaria justamente a que vale
+        como evidência.
+        """
+        _, gabarito, perfil = self._cenario(tmp_path)
+        reserva = tmp_path / "holdout.csv"
+        reserva.write_text("numero,descricao,energia_kcal\n1,Um,124.0\n", encoding="utf-8")
+        destino = tmp_path / "res"
+
+        for alvo in (gabarito, reserva):
+            main(["avaliar", str(alvo), "--perfil", str(perfil), "--destino", str(destino)])
+
+        arquivos = {p.name for p in destino.glob("*/acuracia*.json")}
+        assert len(arquivos) == 2, f"uma medição apagou a outra: {arquivos}"
 
 
 class TestDocumentoDaLinhaDeComando:

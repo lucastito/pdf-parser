@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import csv
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -142,8 +143,31 @@ def _numero_do_item(identificador: str) -> str | None:
     return correspondencia.group(1) if correspondencia else None
 
 
+def _descricao_do_item(identificador: str) -> str | None:
+    """A descrição, sem o número que a antecede e sem variação de caixa/acento.
+
+    Segunda chave de alinhamento, e ela existe por um defeito medido: um conjunto
+    de reserva transcrito com numeração **local** (1 a 10) não casava com a
+    numeração do documento (51, 53…), mesmo sendo o mesmo alimento com o mesmo
+    valor. A acurácia saía 0% em todas as rotas — zero que não media nada.
+    """
+    sem_numero = re.sub(r"^\s*\d+\s*", "", identificador).strip()
+    if not sem_numero:
+        return None
+    sem_acento = "".join(
+        c for c in unicodedata.normalize("NFD", sem_numero) if unicodedata.category(c) != "Mn"
+    )
+    return re.sub(r"\s+", " ", sem_acento).strip().lower() or None
+
+
 def _indexar(registros: list[Registro]) -> dict[str, Registro]:
-    """Indexa registros pelo identificador, e também só pelo número do item."""
+    """Indexa por identificador, por número do item e por descrição.
+
+    Três chaves porque cada uma cobre uma falha da outra: o identificador
+    completo é o caso normal; o número resolve nome fragmentado pela ferramenta
+    (`"Arroz, integra l"`); a descrição resolve numeração divergente entre
+    gabarito e documento.
+    """
     indice: dict[str, Registro] = {}
     for registro in registros:
         campo = registro.campos.get("identificador")
@@ -154,6 +178,9 @@ def _indexar(registros: list[Registro]) -> dict[str, Registro]:
         numero = _numero_do_item(texto)
         if numero:
             indice.setdefault(f"#{numero}", registro)
+        descricao = _descricao_do_item(texto)
+        if descricao:
+            indice.setdefault(f"@{descricao}", registro)
     return indice
 
 
@@ -179,9 +206,26 @@ def medir_acuracia(
         if chave in obtidos:
             esperados[chave] = dict(valores)
             continue
+
+        # Descrição **antes** de número, e a ordem inversa é um erro medido: o
+        # número sozinho casa com o item errado quando a numeração do gabarito
+        # não é a do documento. Um conjunto de reserva numerado de 1 a 10 casava
+        # `1 Pão, milho` (292 kcal) com `1 Arroz, integral` (124 kcal) — dois
+        # alimentos diferentes, e o resultado parecia erro de extração.
+        #
+        # A descrição identifica o item; o número é posicional e pode ser local
+        # ao gabarito. O número continua valendo como recuo, para o caso de a
+        # ferramenta ter fragmentado o texto e a descrição não bater.
+        descricao = _descricao_do_item(chave)
+        if descricao and f"@{descricao}" in obtidos:
+            esperados[f"@{descricao}"] = dict(valores)
+            continue
+
         numero = _numero_do_item(chave)
-        esperados[f"#{numero}" if numero and f"#{numero}" in obtidos else chave] = dict(
-            valores
-        )
+        if numero and f"#{numero}" in obtidos:
+            esperados[f"#{numero}"] = dict(valores)
+            continue
+
+        esperados[chave] = dict(valores)
 
     return avaliar(estrategia, obtidos, esperados, tolerancia=tolerancia)

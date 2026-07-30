@@ -181,3 +181,102 @@ class TestGabaritoReal:
         ]
         assert g.total == 200
         assert g.completo
+
+
+class TestAlinhamentoPorDescricao:
+    """O alinhamento não pode depender só do número do item.
+
+    Defeito medido em 2026-07-30: o conjunto de reserva foi transcrito com
+    numeração **local** (1 a 10), não a do documento. O mesmo alimento aparecia
+    como `1 Pão, milho, forma` no gabarito e `51 Pão, milho, forma` na extração,
+    com o **mesmo valor** de energia (292). Casando só por número, nada batia, e a
+    acurácia saía 0% em todas as rotas — um zero que não media nada.
+
+    Zero falso é pior que erro ruidoso: sugere que as ferramentas não funcionam,
+    quando o defeito está no material de validação.
+
+    O casamento por número continua valendo, e por boa razão: algumas ferramentas
+    fragmentam o texto (`"Arroz, integra l"`) e casar só por nome descartaria
+    itens cujos valores estão corretos. A descrição é a **segunda** chave.
+    """
+
+    def _registro(self, identificador: str, energia: float):
+        from parser.modelo import Campo, Evidencia, Registro
+
+        ev = Evidencia(pagina=1, texto_bruto="x")
+        return Registro(
+            campos={
+                "identificador": Campo[str].extraido(valor=identificador, evidencia=ev),
+                "energia_kcal": Campo[float].extraido(valor=energia, evidencia=ev),
+            },
+            fonte="d.pdf",
+        )
+
+    def _gabarito(self, tmp_path, linhas: str):
+        from parser.gabarito import Gabarito
+
+        caminho = tmp_path / "g.csv"
+        caminho.write_text("numero,descricao,energia_kcal\n" + linhas, encoding="utf-8")
+        return Gabarito.de_arquivo(caminho)
+
+    def test_numeracao_divergente_ainda_casa_pela_descricao(self, tmp_path):
+        from parser.gabarito import medir_acuracia
+
+        gabarito = self._gabarito(tmp_path, '1,"Pão, milho, forma",292\n')
+        registros = [self._registro("51 Pão, milho, forma", 292.0)]
+
+        resultado = medir_acuracia("teste", registros, gabarito)
+        assert (
+            resultado.acuracia == 1.0
+        ), "o mesmo alimento com o mesmo valor não casou por diferença de número"
+
+    def test_casamento_por_numero_continua_valendo(self, tmp_path):
+        """Descrição fragmentada pela ferramenta não pode descartar o item."""
+        from parser.gabarito import medir_acuracia
+
+        gabarito = self._gabarito(tmp_path, '7,"Arroz, integral, cozido",124\n')
+        registros = [self._registro("7 Arroz, integra l, cozido", 124.0)]
+
+        assert medir_acuracia("teste", registros, gabarito).acuracia == 1.0
+
+    def test_descricao_diferente_e_numero_diferente_nao_casam(self, tmp_path):
+        """Casar por descrição não pode virar casar com qualquer coisa."""
+        from parser.gabarito import medir_acuracia
+
+        gabarito = self._gabarito(tmp_path, '1,"Pão, milho, forma",292\n')
+        registros = [self._registro("51 Farinha, de centeio, integral", 336.0)]
+
+        assert medir_acuracia("teste", registros, gabarito).acuracia == 0.0
+
+    def test_valor_errado_com_descricao_certa_conta_como_erro(self, tmp_path):
+        """Alinhar melhor não pode virar aceitar valor errado."""
+        from parser.gabarito import medir_acuracia
+
+        gabarito = self._gabarito(tmp_path, '1,"Pão, milho, forma",292\n')
+        registros = [self._registro("51 Pão, milho, forma", 999.0)]
+
+        assert medir_acuracia("teste", registros, gabarito).acuracia == 0.0
+
+    def test_numero_coincidente_nao_casa_com_alimento_errado(self, tmp_path):
+        """A armadilha real: número igual, alimento diferente.
+
+        O conjunto de reserva numerava de 1 a 10; o documento tem um item 1
+        diferente. Casando por número primeiro, `1 Pão, milho` (292) era comparado
+        com `1 Arroz, integral` (124) — e o erro parecia de extração, quando era
+        de alinhamento.
+
+        Por isso a descrição vem antes: ela identifica o alimento, o número é
+        posicional.
+        """
+        from parser.gabarito import medir_acuracia
+
+        gabarito = self._gabarito(tmp_path, '1,"Pão, milho, forma",292\n')
+        registros = [
+            self._registro("1 Arroz, integral, cozido", 124.0),
+            self._registro("51 Pão, milho, forma", 292.0),
+        ]
+
+        resultado = medir_acuracia("teste", registros, gabarito)
+        assert (
+            resultado.acuracia == 1.0
+        ), "casou pelo número com o alimento errado em vez de casar pela descrição"

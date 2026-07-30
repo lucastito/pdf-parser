@@ -32,6 +32,27 @@ avaliação passa a comparar todos os extratores.
 sistemáticos — uma coluna inteira deslocada produz valores plausíveis e é
 justamente o que a conferência precisa pegar.
 
+## Conjunto de reserva: como ler o número
+
+O `holdout.csv` foi transcrito às cegas, com numeração **local** (1 a 10), não a do
+documento. O mesmo alimento aparece como `1 Pão, milho, forma` no reserva e
+`51 Pão, milho, forma` na extração — mesmo valor, número diferente.
+
+Por isso o alinhamento acontece **primeiro pela descrição**, e só depois pelo
+número. A ordem inversa causava um erro silencioso: `1 Pão, milho` (292 kcal) era
+comparado com `1 Arroz, integral` (124 kcal), e o resultado parecia erro de
+extração quando era erro de alinhamento.
+
+**A acurácia contra o reserva mede duas coisas ao mesmo tempo.** Dos 10 itens, só 2
+estão nas páginas que o perfil declara ler; os outros 8 são de seções que o
+intervalo não cobre. Os 2 presentes acertam **5 de 5 campos** — leitura perfeita.
+Os 8 ausentes contam como erro, e o total sai 20%.
+
+Esse 20% não é qualidade de leitura: é **cobertura de páginas**. Para medir só a
+leitura, amplie o intervalo de páginas do perfil ou compare apenas os itens
+presentes. Registrar a distinção importa porque um "20%" sem contexto sugere que as
+ferramentas não funcionam, quando o que falta é alcance.
+
 ## Fonte e licença
 
 Dados extraídos da **Tabela Brasileira de Composição de Alimentos (TACO)**,
