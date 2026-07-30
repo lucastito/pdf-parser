@@ -169,8 +169,17 @@ registro fica porque hipótese invalidada também é resultado:
 
 O texto livre, sem restrição alguma, também devolve vazio: a restrição não é a
 causa. Em todos os casos o modelo gera tokens e nada chega ao campo de resposta.
-Investigação em aberto — a suspeita recai sobre a geração ficar no canal de
-raciocínio do modelo.
+
+A investigação seguinte separou **duas causas independentes**:
+
+**Confirmada — o canal de raciocínio.** O modelo gasta a geração inteira raciocinando
+e não emite no canal de resposta. Desligado, o mesmo modelo responde corretamente em
+237 s. Daí a rota desligar o raciocínio por padrão: é o que produz resposta.
+
+**Em aberto — algo no prompt de extração.** Mesmo com o raciocínio desligado, o
+prompt de extração continua devolvendo vazio (77,4 s e 78,8 s nos dois primeiros
+degraus), enquanto um prompt de descrição responde. O `eval_count` fica em 152 em
+toda rodada vazia, com e sem raciocínio.
 
 Os degraus permanecem, porque resolvem um problema **diferente e real**: impedem
 que resposta vazia vire "página sem dados" em silêncio, e registram sob qual

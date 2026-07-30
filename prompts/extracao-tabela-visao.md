@@ -60,9 +60,18 @@ O texto livre, sem restrição alguma, também devolve vazio — logo a restriç
 causa. Em todos os casos o modelo **gera tokens** e nada chega ao campo de resposta;
 no último, o orçamento inteiro é consumido.
 
-A hipótese em aberto é que o modelo gaste a geração no canal de raciocínio e não
-emita no canal de resposta. A verificar: desligar o raciocínio na chamada e ler o
-campo correspondente, além do campo de resposta.
+**Causa 1, confirmada: o canal de raciocínio.** O modelo declara `thinking` entre as
+capacidades e gasta a geração inteira ali. Com o raciocínio desligado, o mesmo modelo
+responde corretamente em 237 s (521 tokens) — lê a tabela, identifica os nutrientes,
+as colunas e a sentinela `Tr`. Por isso a rota desliga o raciocínio por padrão.
+
+**Causa 2, em aberto: algo no prompt de extração.** Mesmo com o raciocínio desligado,
+este prompt continua devolvendo vazio, enquanto um prompt de descrição simples
+responde. O `eval_count` fica em 152 em toda rodada vazia, com ou sem raciocínio.
+
+Se você está adaptando este prompt e obtém resposta vazia, comece por um prompt
+curto que funcione e vá acrescentando as regras uma a uma — é assim que se descobre
+qual delas trava a geração.
 
 Os degraus de saída continuam justificados — impedem que resposta vazia vire "página
 sem dados" em silêncio —, mas **não** resolvem este problema.
