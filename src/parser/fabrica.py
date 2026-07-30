@@ -107,6 +107,7 @@ def _llm(perfil: Perfil, rota: Rota) -> Extrator:
         _campos(rota),
         instrucao=_instrucao(rota),
         degrau_maximo=_degrau_maximo(rota),
+        raciocinar=bool(rota.extras.get("raciocinar", False)),
     )
 
 
@@ -120,6 +121,7 @@ def _vlm(perfil: Perfil, rota: Rota) -> Extrator:
         instrucao=_instrucao(rota),
         dpi=rota.dpi,
         degrau_maximo=_degrau_maximo(rota),
+        raciocinar=bool(rota.extras.get("raciocinar", False)),
     )
 
 

@@ -1,15 +1,32 @@
 """Degraus de saída do modelo: do mais restrito ao mais livre (SPEC §4.4).
 
-Impor um esquema JSON aninhado como gramática de decodificação é a forma mais
-segura de obter saída estruturada — **quando funciona**. Em modelo pequeno
-quantizado, pode tornar o caminho válido inalcançável: o modelo emite o token de
-parada e devolve resposta vazia.
+Um modelo pequeno pode devolver **resposta vazia** sem erro algum. O que torna
+esse modo de falha traiçoeiro é que **ele não se parece com falha**: não há
+exceção, não há JSON malformado, não há tempo esgotado. O servidor responde `200`,
+a resposta é `""` com `done_reason=stop`, e o extrator recebe zero item — como se
+a página estivesse em branco. Numa execução em lote isso vira "processado, 0
+registros" e segue adiante.
 
-O que torna esse modo de falha traiçoeiro é que **ele não se parece com falha**.
-Não há exceção, não há JSON malformado, não há tempo esgotado. O servidor responde
-`200`, a resposta é `""` com `done_reason=stop`, e o extrator recebe zero item —
-como se a página estivesse em branco. Numa execução em lote isso vira
-"processado, 0 registros" e segue adiante.
+**A causa medida não é a restrição.** A hipótese inicial culpava o esquema
+restringido — a gramática de decodificação tornando o caminho válido inalcançável.
+Medição de 2026-07-30 com `qwen3-vl:4b`, mesma imagem e mesma instrução:
+
+| Degrau | Segundos | `done_reason` | Tokens | Resposta |
+|---|---|---|---|---|
+| esquema completo | 306,2 | `stop` | 153 | vazia |
+| `format: "json"` | 81,9 | `stop` | 152 | vazia |
+| texto livre, sem restrição | 1055,4 | `length` | 1844 | vazia |
+
+O texto livre também vem vazio: a restrição não é a culpada. Em todos os casos o
+modelo **gera tokens** e nada chega ao campo de resposta. Com o raciocínio
+desligado, o mesmo modelo responde corretamente em 237 s — o orçamento inteiro
+estava sendo gasto no canal de raciocínio.
+
+Daí `raciocinar=False` ser o padrão desta classe: é o que produz resposta.
+
+Os degraus permanecem porque resolvem um problema **diferente e real** — impedir
+que resposta vazia vire "página sem dados" em silêncio, e registrar sob qual
+restrição cada resultado foi obtido.
 
 A saída é, então, tentada em degraus:
 
@@ -126,6 +143,7 @@ class SaidaEmDegraus:
         *,
         chave: str = "itens",
         degrau_maximo: Degrau | None = None,
+        raciocinar: bool = False,
     ) -> None:
         """
         Args:
@@ -135,11 +153,15 @@ class SaidaEmDegraus:
             degrau_maximo: o degrau mais livre permitido. Fixá-lo é o que torna
                 uma bateria de execuções comparável entre si: rodadas em degraus
                 diferentes medem restrições diferentes, não estratégias.
+            raciocinar: liga o canal de raciocínio do modelo. **Desligado por
+                padrão, por medição** — ver o cabeçalho do módulo. Ligá-lo é
+                escolha legítima para medir o efeito, não o comportamento padrão.
         """
         self.cliente = cliente
         self.campos = campos
         self.chave = chave
         self.degrau_maximo = degrau_maximo
+        self.raciocinar = raciocinar
 
     def _permitidos(self) -> tuple[Degrau, ...]:
         if self.degrau_maximo is None:
@@ -168,13 +190,21 @@ class SaidaEmDegraus:
 
         raise TodosOsDegrausFalharam(self._relatorio(tentativas))
 
-    @staticmethod
-    def _relatorio(tentativas: list[Tentativa]) -> str:
+    def _relatorio(self, tentativas: list[Tentativa]) -> str:
         linhas = [f"  {t.degrau.value}: {t.motivo}" for t in tentativas]
-        return (
+        relato = (
             f"nenhum dos {len(tentativas)} degraus produziu estrutura utilizável:\n"
             + "\n".join(linhas)
         )
+
+        if self.raciocinar and all("vazia" in t.motivo for t in tentativas):
+            relato += (
+                "\n\nTodos os degraus vieram vazios com o raciocínio ligado. Foi "
+                "exatamente o comportamento medido: o modelo gasta a geração no "
+                "canal de raciocínio e não emite no canal de resposta. Tente com "
+                "raciocinar=False."
+            )
+        return relato
 
     def _tentar(self, degrau: Degrau, prompt: str, imagens: list[str] | None) -> Any:
         bruto = self._chamar(degrau, prompt, imagens)
@@ -202,6 +232,10 @@ class SaidaEmDegraus:
             "model": self.cliente.modelo,
             "prompt": self._prompt_do_degrau(degrau, prompt),
             "stream": False,
+            # Vale igual nos três degraus: variar o raciocínio junto com a
+            # restrição criaria variável escondida, e nenhuma comparação entre
+            # degraus significaria mais nada.
+            "think": self.raciocinar,
         }
         if degrau is Degrau.ESQUEMA_COMPLETO:
             carga["format"] = self._esquema()

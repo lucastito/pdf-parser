@@ -203,3 +203,47 @@ class TestLimite:
         resultado = _saida(transporte).obter("prompt")
 
         assert resultado.degrau is Degrau.JSON_LIVRE
+
+
+class TestRaciocinio:
+    """O canal de raciocínio precisa ser desligável — medido, não suposto.
+
+    Medição de 2026-07-30 com `qwen3-vl:4b`: com raciocínio ligado, os três
+    degraus devolvem resposta vazia, inclusive o texto livre sem restrição
+    alguma. O modelo gera tokens (153, 152 e 1844) e nada chega ao campo de
+    resposta. Desligado, o mesmo modelo devolve descrição correta da página em
+    237 s.
+
+    Ligar raciocínio é, portanto, uma escolha com custo medido — e o padrão
+    precisa ser o que produz resposta.
+    """
+
+    def test_desliga_o_raciocinio_por_padrao(self):
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+        _saida(transporte).obter("prompt")
+
+        assert transporte.chamadas[0]["think"] is False
+
+    def test_raciocinio_pode_ser_religado(self):
+        """Quem quiser medir o efeito do raciocínio precisa conseguir ligá-lo."""
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+        _saida(transporte, raciocinar=True).obter("prompt")
+
+        assert transporte.chamadas[0]["think"] is True
+
+    def test_a_escolha_vale_em_todos_os_degraus(self):
+        """Mudar de degrau não pode mudar o raciocínio: seria variável escondida."""
+        transporte = TransporteRoteirizado(
+            VAZIO, {"response": "x"}, {"response": json.dumps(ITENS)}
+        )
+        _saida(transporte).obter("prompt")
+
+        assert [c["think"] for c in transporte.chamadas] == [False, False, False]
+
+    def test_resposta_vazia_menciona_o_raciocinio(self):
+        """A causa medida tem de estar na mensagem, não no histórico do projeto."""
+        transporte = TransporteRoteirizado(VAZIO, VAZIO, VAZIO)
+        with pytest.raises(TodosOsDegrausFalharam) as erro:
+            _saida(transporte, raciocinar=True).obter("prompt")
+
+        assert "racioc" in str(erro.value).lower()

@@ -256,11 +256,14 @@ class ExtratorModelo(ExtratorBaseadoEmModelo):
         *,
         instrucao: str | None = None,
         degrau_maximo: Any = None,
+        raciocinar: bool = False,
     ) -> None:
         from parser.degraus import SaidaEmDegraus
 
         super().__init__(cliente, campos, instrucao=instrucao)
-        self.saida = SaidaEmDegraus(cliente, campos, degrau_maximo=degrau_maximo)
+        self.saida = SaidaEmDegraus(
+            cliente, campos, degrau_maximo=degrau_maximo, raciocinar=raciocinar
+        )
         self.degraus_usados: list[Any] = []
         """O degrau que produziu cada página, na ordem."""
 

@@ -46,6 +46,7 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
         instrucao: str | None = None,
         dpi: int = DPI_PADRAO,
         degrau_maximo: Degrau | None = None,
+        raciocinar: bool = False,
     ) -> None:
         """
         Args:
@@ -58,12 +59,17 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
             degrau_maximo: o degrau de saída mais livre permitido (SPEC §4.4).
                 Fixá-lo torna uma bateria de execuções comparável entre si; deixá-lo
                 aberto maximiza a chance de obter saída de um modelo pequeno.
+            raciocinar: liga o canal de raciocínio do modelo. Desligado por padrão
+                **por medição**: ligado, o modelo de visão gastou a geração inteira
+                raciocinando e devolveu resposta vazia nos três degraus.
         """
         _validar_dpi(dpi)
         super().__init__(cliente, campos, instrucao=instrucao or INSTRUCAO_VISUAL)
         self.caminho_pdf = caminho_pdf
         self.dpi = dpi
-        self.saida = SaidaEmDegraus(cliente, campos, degrau_maximo=degrau_maximo)
+        self.saida = SaidaEmDegraus(
+            cliente, campos, degrau_maximo=degrau_maximo, raciocinar=raciocinar
+        )
         self.degraus_usados: list[Degrau] = []
         """O degrau que produziu cada página, na ordem.
 
