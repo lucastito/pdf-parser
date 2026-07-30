@@ -1,0 +1,408 @@
+"""Conhecimento operacional: o que sabota a extração, e como detectar.
+
+Este módulo existe porque o aprendizado mais caro do projeto estava enterrado
+dentro de extratores individuais. A rotação de página derrubava **quatro
+ferramentas a zero de acurácia**, e o tratamento vivia duplicado em dois arquivos,
+com implementações diferentes — a terceira ferramenta nem tratava. Quem escrevesse
+a próxima cairia na mesma armadilha.
+
+São duas famílias de verificação, com propósitos distintos:
+
+**Diagnóstico de documento** — roda *antes* da extração e detecta características
+que sabotam ferramentas. Cada achado vem com a ação recomendada; diagnóstico sem
+ação é só reclamação.
+
+**Validação de saída** — roda *depois* e pega resultado plausível mas errado. É o
+modo de falha que mais custa: passa por validação de tipo, parece dado e chega ao
+consumidor. Cobertura alta com valores errados é pior que cobertura baixa.
+
+Nenhuma verificação aqui depende de conhecer o domínio do documento. As faixas de
+valor, quando usadas, são parâmetro do perfil.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
+
+from parser.modelo import Registro
+
+__all__ = [
+    "Achado",
+    "Severidade",
+    "diagnosticar",
+    "relatorio",
+    "validar_registros",
+]
+
+MINIMO_PARA_ESTATISTICA = 5
+"""Abaixo disto, coincidência é explicação mais provável que erro sistemático."""
+
+COBERTURA_MINIMA = 0.30
+"""Abaixo disto a extração provavelmente falhou, ainda que sem erro."""
+
+
+class Severidade(Enum):
+    BLOQUEIA = "bloqueia"
+    """O resultado não deve ser usado sem investigar."""
+
+    ALERTA = "alerta"
+    """Merece atenção, mas pode ser legítimo."""
+
+    NOTA = "nota"
+    """Informação para a leitura do resultado."""
+
+    @property
+    def grave(self) -> bool:
+        return self is Severidade.BLOQUEIA
+
+
+@dataclass(frozen=True)
+class Achado:
+    """Uma característica detectada, com o que fazer a respeito."""
+
+    codigo: str
+    severidade: Severidade
+    detalhe: str
+    acao: str
+
+
+def diagnosticar(caminho: str | Path) -> list[Achado]:
+    """Examina o documento antes da extração.
+
+    Levanta:
+        FileNotFoundError: arquivo inexistente.
+    """
+    import fitz
+
+    arquivo = Path(caminho)
+    if not arquivo.exists():
+        raise FileNotFoundError(f"arquivo não encontrado: {arquivo}")
+
+    documento = fitz.open(arquivo)
+    try:
+        achados: list[Achado] = []
+        achados += _checar_rotacao(documento)
+        achados += _checar_camada_de_texto(documento)
+        achados += _checar_orientacao_do_texto(documento)
+        achados += _checar_fontes(documento)
+        return achados
+    finally:
+        documento.close()
+
+
+def _checar_rotacao(documento) -> list[Achado]:
+    """Rotação declarada é a armadilha mais custosa já encontrada.
+
+    Com `rotation=90` ativa, detectores de tabela encontram **zero** tabelas.
+    Desrotacionada, a mesma página rende extração correta. Além disso, a
+    renderização aplica a rotação enquanto a extração de texto não — os dois
+    sistemas de coordenadas divergem em silêncio.
+    """
+    rotacionadas = [i + 1 for i in range(documento.page_count) if documento[i].rotation]
+    if not rotacionadas:
+        return []
+
+    amostra = ", ".join(str(p) for p in rotacionadas[:5])
+    reticencia = "…" if len(rotacionadas) > 5 else ""
+    return [
+        Achado(
+            codigo="pagina-rotacionada",
+            severidade=Severidade.BLOQUEIA,
+            detalhe=(
+                f"{len(rotacionadas)} de {documento.page_count} páginas declaram rotação "
+                f"(páginas {amostra}{reticencia})"
+            ),
+            acao=(
+                "Desrotacione antes de detectar tabela: com a rotação ativa, os "
+                "detectores encontram zero tabelas. Se renderizar para imagem, "
+                "converta as coordenadas de volta ao espaço não rotacionado — a "
+                "renderização aplica a rotação, a extração de texto não."
+            ),
+        )
+    ]
+
+
+def _checar_camada_de_texto(documento) -> list[Achado]:
+    """Sem texto nativo, só a rota por reconhecimento óptico é possível."""
+    amostra = range(min(10, documento.page_count))
+    com_texto = sum(1 for i in amostra if documento[i].get_text("words"))
+
+    if com_texto == 0:
+        return [
+            Achado(
+                codigo="sem-camada-de-texto",
+                severidade=Severidade.BLOQUEIA,
+                detalhe="nenhuma das páginas amostradas tem texto extraível",
+                acao=(
+                    "Documento digitalizado: use a rota por reconhecimento óptico. "
+                    "As rotas que dependem da camada de texto não têm o que ler."
+                ),
+            )
+        ]
+    if com_texto < len(list(amostra)):
+        return [
+            Achado(
+                codigo="camada-de-texto-parcial",
+                severidade=Severidade.ALERTA,
+                detalhe=f"{com_texto} de {len(list(amostra))} páginas amostradas têm texto",
+                acao=(
+                    "Documento misto. Triar por página e rotear cada uma para a "
+                    "estratégia adequada, em vez de aplicar uma só ao documento todo."
+                ),
+            )
+        ]
+    return []
+
+
+def _checar_orientacao_do_texto(documento) -> list[Achado]:
+    """Texto vertical indica tabela rotacionada — o layout que quebra o
+    pressuposto de que uma linha corresponde a um registro."""
+    verticais = horizontais = 0
+    for i in range(min(5, documento.page_count)):
+        for bloco in documento[i].get_text("dict").get("blocks", []):
+            for linha in bloco.get("lines", []):
+                direcao = linha.get("dir", (1, 0))
+                if abs(direcao[0]) > 0.9:
+                    horizontais += 1
+                else:
+                    verticais += 1
+
+    total = verticais + horizontais
+    if not total or verticais / total < 0.30:
+        return []
+
+    return [
+        Achado(
+            codigo="texto-vertical",
+            severidade=Severidade.ALERTA,
+            detalhe=f"{verticais} de {total} linhas de texto amostradas são verticais",
+            acao=(
+                "Provável tabela rotacionada, em que cada faixa horizontal traz um "
+                "atributo de todos os itens em vez de todos os atributos de um item. "
+                "Alinhar por posição, não por cabeçalho: o cabeçalho detectado será "
+                "lixo, mas as linhas de dados costumam estar íntegras."
+            ),
+        )
+    ]
+
+
+def _checar_fontes(documento) -> list[Achado]:
+    """Fonte CID com mapa de caracteres incompleto corrompe extração ingênua.
+
+    Medido no documento-caso: 5 mapas para 31 fontes, e leitura direta do fluxo
+    rendeu 89 palavras reais em 534 mil caracteres.
+    """
+    bruto = documento.write() if documento.page_count < 50 else b""
+    if not bruto:
+        return []
+
+    fontes = bruto.count(b"/BaseFont")
+    mapas = bruto.count(b"/ToUnicode")
+    if fontes and mapas < fontes / 2:
+        return [
+            Achado(
+                codigo="mapa-de-caracteres-incompleto",
+                severidade=Severidade.ALERTA,
+                detalhe=f"{mapas} mapas ToUnicode para {fontes} fontes declaradas",
+                acao=(
+                    "Não leia o fluxo de conteúdo diretamente: sem o mapa, os bytes "
+                    "não são o texto. Use biblioteca que aplique ToUnicode."
+                ),
+            )
+        ]
+    return []
+
+
+def validar_registros(
+    registros: list[Registro],
+    *,
+    faixas: dict[str, tuple[float, float]] | None = None,
+) -> list[Achado]:
+    """Examina o resultado da extração.
+
+    Args:
+        faixas: por campo, o intervalo plausível. Parâmetro do perfil — este
+            módulo não conhece domínio nenhum.
+    """
+    if not registros:
+        return [
+            Achado(
+                codigo="nenhum-registro",
+                severidade=Severidade.BLOQUEIA,
+                detalhe="a extração não produziu registro algum",
+                acao=(
+                    "Verifique o diagnóstico do documento antes de concluir que a "
+                    "estratégia falhou. Rotação de página e ausência de camada de "
+                    "texto produzem esse sintoma."
+                ),
+            )
+        ]
+
+    achados: list[Achado] = []
+    achados += _checar_identificadores(registros)
+    achados += _checar_cobertura(registros)
+    achados += _checar_valores_constantes(registros)
+    if faixas:
+        achados += _checar_faixas(registros, faixas)
+    return achados
+
+
+def _checar_identificadores(registros: list[Registro]) -> list[Achado]:
+    """Identificador sem número indica cabeçalho lido como item.
+
+    Sintoma observado: `{'Carbo-': 'idrato'}` — a ferramenta tomou o cabeçalho
+    partido em duas linhas por dados, e produziu volume que parece registro.
+    """
+    com_identificador = [
+        r for r in registros if (c := r.campos.get("identificador")) and c.preenchido
+    ]
+    if not com_identificador:
+        return [
+            Achado(
+                codigo="sem-identificador",
+                severidade=Severidade.BLOQUEIA,
+                detalhe=f"nenhum dos {len(registros)} registros tem identificador",
+                acao=(
+                    "Sem identificador não há como alinhar com gabarito nem com outra "
+                    "estratégia. Verifique se o cabeçalho está sendo lido como dado."
+                ),
+            )
+        ]
+
+    sem_numero = [
+        r
+        for r in com_identificador
+        if not str(r.campos["identificador"].valor or "").strip()[:1].isdigit()
+    ]
+    if len(sem_numero) > len(com_identificador) / 2:
+        exemplo = str(sem_numero[0].campos["identificador"].valor)[:40]
+        return [
+            Achado(
+                codigo="identificador-sem-numero",
+                severidade=Severidade.BLOQUEIA,
+                detalhe=(
+                    f"{len(sem_numero)} de {len(com_identificador)} identificadores não "
+                    f"começam por número (ex.: {exemplo!r})"
+                ),
+                acao=(
+                    "Provável cabeçalho lido como item. Alinhe por posição em vez de "
+                    "cabeçalho, e descarte linhas que não comecem por identificador."
+                ),
+            )
+        ]
+    return []
+
+
+def _checar_cobertura(registros: list[Registro]) -> list[Achado]:
+    total = sum(len(r.campos) for r in registros)
+    preenchidos = sum(1 for r in registros for c in r.campos.values() if c.preenchido)
+    if not total:
+        return []
+
+    cobertura = preenchidos / total
+    if cobertura >= COBERTURA_MINIMA:
+        return []
+    return [
+        Achado(
+            codigo="cobertura-baixa",
+            severidade=Severidade.ALERTA,
+            detalhe=f"{cobertura:.0%} dos campos preenchidos ({preenchidos}/{total})",
+            acao=(
+                "Verifique o alinhamento de colunas e a tolerância de coordenadas. "
+                "Resolução alta demais também reduz cobertura, ao dessincronizar a "
+                "tolerância expressa em pontos tipográficos."
+            ),
+        )
+    ]
+
+
+def _checar_valores_constantes(registros: list[Registro]) -> list[Achado]:
+    """Mesmo valor em todo item sugere coluna lida errado.
+
+    Com poucos itens é coincidência plausível; com muitos, não.
+    """
+    if len(registros) < MINIMO_PARA_ESTATISTICA:
+        return []
+
+    achados = []
+    nomes = {n for r in registros for n in r.campos if n != "identificador"}
+    for nome in sorted(nomes):
+        valores = [
+            r.campos[nome].valor
+            for r in registros
+            if nome in r.campos and r.campos[nome].preenchido and r.campos[nome].valor is not None
+        ]
+        if len(valores) < MINIMO_PARA_ESTATISTICA:
+            continue
+        contagem = Counter(valores)
+        valor, ocorrencias = contagem.most_common(1)[0]
+        if ocorrencias == len(valores):
+            achados.append(
+                Achado(
+                    codigo="valor-constante",
+                    severidade=Severidade.ALERTA,
+                    detalhe=f"campo {nome!r}: valor {valor!r} em todos os {len(valores)} itens",
+                    acao=(
+                        "Improvável em dado real. Verifique se a coluna correta está "
+                        "sendo lida — um deslocamento produz valores plausíveis e "
+                        "todos errados."
+                    ),
+                )
+            )
+    return achados
+
+
+def _checar_faixas(
+    registros: list[Registro], faixas: dict[str, tuple[float, float]]
+) -> list[Achado]:
+    """Valor fora da faixa plausível.
+
+    Pega o erro característico do reconhecimento óptico: a vírgula decimal perdida
+    multiplica o valor por dez, produzindo um número que passa por validação de
+    tipo e chega ao consumidor.
+    """
+    achados = []
+    for nome, (minimo, maximo) in faixas.items():
+        fora = []
+        for registro in registros:
+            campo = registro.campos.get(nome)
+            if not campo or not campo.preenchido or campo.sentinela is not None:
+                continue
+            valor = campo.valor
+            if isinstance(valor, (int, float)) and not minimo <= valor <= maximo:
+                fora.append(valor)
+        if fora:
+            achados.append(
+                Achado(
+                    codigo="fora-da-faixa",
+                    severidade=Severidade.ALERTA,
+                    detalhe=(
+                        f"campo {nome!r}: {len(fora)} valor(es) fora de "
+                        f"[{minimo}, {maximo}] (ex.: {fora[:3]})"
+                    ),
+                    acao=(
+                        "Verifique perda de separador decimal — é o erro típico do "
+                        "reconhecimento óptico, e produz valores dez vezes maiores "
+                        "que passam por validação de tipo."
+                    ),
+                )
+            )
+    return achados
+
+
+def relatorio(achados: list[Achado]) -> str:
+    """Formata os achados, mais graves primeiro."""
+    if not achados:
+        return "nenhum achado"
+
+    ordem = {Severidade.BLOQUEIA: 0, Severidade.ALERTA: 1, Severidade.NOTA: 2}
+    linhas = []
+    for achado in sorted(achados, key=lambda a: ordem[a.severidade]):
+        linhas.append(f"[{achado.severidade.value.upper()}] {achado.codigo}")
+        linhas.append(f"  {achado.detalhe}")
+        linhas.append(f"  → {achado.acao}")
+        linhas.append("")
+    return "\n".join(linhas).rstrip()

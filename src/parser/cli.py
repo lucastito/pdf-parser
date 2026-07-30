@@ -134,6 +134,29 @@ def _intervalo_do_perfil(perfil: Perfil) -> range | None:
     return range(*paginas) if isinstance(paginas, list) else paginas
 
 
+def _diagnosticar(opcoes: argparse.Namespace) -> int:
+    """Examina um documento antes de extrair, e diz o que pode sabotar a leitura."""
+    from parser.diagnostico import Severidade, diagnosticar, relatorio
+
+    try:
+        achados = diagnosticar(opcoes.documento)
+    except FileNotFoundError as erro:
+        print(f"{erro}", file=sys.stderr)
+        return 2
+
+    print(f"DIAGNÓSTICO — {Path(opcoes.documento).name}\n")
+    print(relatorio(achados))
+
+    graves = [a for a in achados if a.severidade is Severidade.BLOQUEIA]
+    if graves:
+        print(
+            f"\n{len(graves)} achado(s) que exigem tratamento antes de confiar no "
+            "resultado. Ignorá-los produz extração que roda sem erro e grava lixo."
+        )
+        return 1
+    return 0
+
+
 def _ambiente(opcoes: argparse.Namespace) -> int:
     """Relata o que esta máquina tem, e o que falta para o experimento."""
     from parser.experimento import Ambiente
@@ -271,6 +294,13 @@ def main(argv: list[str] | None = None) -> int:
         "ambiente", help="mostra o que esta máquina tem e o que falta"
     )
     ambiente.set_defaults(funcao=_ambiente)
+
+    diagnostico = comandos.add_parser(
+        "diagnosticar",
+        help="examina um documento e aponta o que pode sabotar a extração",
+    )
+    diagnostico.add_argument("documento", help="arquivo a examinar")
+    diagnostico.set_defaults(funcao=_diagnosticar)
 
     extrair = comandos.add_parser("extrair", help="roda um perfil e grava nos destinos")
     extrair.add_argument("perfil", type=Path, help="arquivo de perfil (JSON)")
