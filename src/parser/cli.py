@@ -146,6 +146,7 @@ def _calibrar(opcoes: argparse.Namespace) -> int:
 
 def _ingerir(opcoes: argparse.Namespace) -> int:
     """Processa uma pasta de documentos e consolida numa saída única."""
+    from parser.esquema import SaidaInvalida
     from parser.lote import ingerir
 
     try:
@@ -166,6 +167,16 @@ def _ingerir(opcoes: argparse.Namespace) -> int:
         )
     except FileNotFoundError as erro:
         print(f"{erro}", file=sys.stderr)
+        return 2
+    except SaidaInvalida as erro:
+        # Nada foi gravado: a validação roda antes da escrita, de propósito.
+        # Dado inválido que chega ao destino já contaminou o consumidor.
+        print(f"saída rejeitada pelo esquema do perfil:\n{erro}", file=sys.stderr)
+        print(
+            "\nNada foi gravado. Corrija o esquema em 'esquema' no perfil, ou o "
+            "mapeamento que produz as colunas.",
+            file=sys.stderr,
+        )
         return 2
 
     print(resultado.resumo())

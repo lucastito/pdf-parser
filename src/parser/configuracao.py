@@ -129,6 +129,20 @@ class Perfil:
     documento: str | None = None
     rotas: dict[str, Rota] = field(default_factory=dict)
     mapeamento: dict[str, list[str]] = field(default_factory=dict)
+    unidades: dict[str, dict[str, str]] = field(default_factory=dict)
+    """Campo canônico → ``{"de": unidade de origem, "para": unidade alvo}``.
+
+    Vazio por padrão: sem declaração, a etapa de conversão executa e não converte
+    nada, e nenhuma medição anterior muda de valor (SPEC §4.3).
+    """
+
+    esquema: dict[str, dict[str, Any]] = field(default_factory=dict)
+    """Coluna → declaração (``tipo``, ``minimo``, ``maximo``, ``obrigatorio``).
+
+    Vazio por padrão: sem declaração, a saída não é verificada como conjunto e o
+    comportamento anterior fica intacto (SPEC §4.4).
+    """
+
     campos_na_ordem: list[str] = field(default_factory=list)
     paginas: list[int] | None = None
     tolerancia: float = field(default_factory=lambda: _default("tolerancia"))
@@ -190,6 +204,8 @@ def carregar_perfil(caminho: str | Path) -> Perfil:
         documento=dados.get("documento"),
         rotas=rotas,
         mapeamento=dados.get("mapeamento", {}),
+        unidades=dados.get("unidades", {}),
+        esquema=dados.get("esquema", {}),
         campos_na_ordem=dados.get("campos_na_ordem", []),
         paginas=dados.get("paginas"),
         tolerancia=dados.get("tolerancia", _default("tolerancia")),
@@ -198,7 +214,31 @@ def carregar_perfil(caminho: str | Path) -> Perfil:
         caminho=arquivo,
     )
     perfil.intervalo_de_paginas()  # valida cedo
+    _validar_declaracoes(perfil, arquivo.name)
     return perfil
+
+
+def _validar_declaracoes(perfil: Perfil, nome_arquivo: str) -> None:
+    """Constrói conversor e esquema na carga, só para falhar cedo.
+
+    Ambos validam a própria declaração ao serem construídos. Fazê-lo aqui troca
+    um erro no meio de um lote de 164 páginas por um erro imediato, com o nome do
+    arquivo de perfil na mensagem.
+
+    O import é local para não impor `pint` e `pandera` a quem apenas lê um perfil.
+    """
+    from parser.esquema import Esquema, EsquemaInvalido
+    from parser.unidades import Conversor, UnidadeInvalida
+
+    try:
+        Conversor.de_perfil(perfil)
+    except UnidadeInvalida as erro:
+        raise ConfiguracaoInvalida(f"perfil {nome_arquivo}: {erro}") from erro
+
+    try:
+        Esquema.de_perfil(perfil)
+    except EsquemaInvalido as erro:
+        raise ConfiguracaoInvalida(f"perfil {nome_arquivo}: {erro}") from erro
 
 
 @dataclass

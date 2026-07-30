@@ -181,3 +181,185 @@ class TestPendencias:
 
     def test_sem_campos_esperados_nao_gera_pendencia(self, pasta_com_pdfs):
         assert not ingerir(pasta_com_pdfs).pendencias
+
+
+
+class TestUnidadeEEsquemaNoLote:
+    """As duas etapas novas têm de rodar no caminho real, não só existir.
+
+    Um módulo correto que ninguém chama é dívida disfarçada de trabalho pronto —
+    foi exatamente o estado de `pint` e `pandera` antes disto: instalados, sem uso.
+    """
+
+    @pytest.fixture
+    def pasta_tabular(self, tmp_path):
+        """Um PDF cuja tabela o extrator posicional consegue reconstruir.
+
+        Local a esta classe, e não em `conftest`, por duas razões: o layout
+        precisa casar exatamente com o perfil declarado abaixo, e o espaço após
+        cada palavra é significativo — sem ele o PyMuPDF funde nome e unidade
+        (`"Energia(kcal)"`), a unidade nunca cai na própria faixa de X e a
+        reconstrução devolve zero registro.
+        """
+        import fitz
+
+        pasta = tmp_path / "entrada"
+        pasta.mkdir()
+        documento = fitz.open()
+        pagina = documento.new_page(width=595, height=842)
+
+        linhas = [
+            ("Energia", "(kcal)", 400.0, ["124", "360", "128"]),
+            ("Proteína", "(g)", 350.0, ["2,6", "7,3", "2,5"]),
+            ("Lipídeos", "(g)", 300.0, ["1,0", "1,9", "Tr"]),
+        ]
+        for rotulo, unidade, y, valores in linhas:
+            pagina.insert_text((112, y), rotulo + " ")
+            pagina.insert_text((165, y), unidade + " ")
+            for i, valor in enumerate(valores):
+                pagina.insert_text((230 + i * 70, y), valor + " ")
+
+        for i, nome in enumerate(["Um", "Dois", "Tres"]):
+            pagina.insert_text((230 + i * 70, 600), nome + " ")
+
+        documento.save(pasta / "a.pdf")
+        documento.close()
+        return pasta
+
+    @pytest.fixture
+    def perfil_tabular(self):
+        """Perfil com layout explícito, para não depender da calibração.
+
+        A calibração recusa este PDF sintético — pequeno demais para atingir o
+        limiar de densidade numérica —, e recusar é o comportamento correto dela.
+        Declarar o layout isola o que estes testes medem: as etapas de unidade e
+        de esquema, não a descoberta de layout.
+        """
+        from parser.configuracao import Perfil, Rota
+
+        return Perfil(
+            nome="tabular",
+            rotas={
+                "posicional": Rota(
+                    nome="posicional",
+                    layout={
+                        "x_rotulos": [110.0, 160.0],
+                        "x_unidades": [160.0, 200.0],
+                        "x_valores_min": 200.0,
+                        "y_identificadores_min": 550.0,
+                        "y_rotulo_max": 550.0,
+                        "tolerancia_y": 6.0,
+                        "tolerancia_x": 6.0,
+                    },
+                )
+            },
+            mapeamento={
+                "energia_kcal": ["Energia (kcal)"],
+                "proteina_g": ["Proteína (g)"],
+                "lipideos_g": ["Lipídeos (g)"],
+            },
+        )
+
+    def test_lote_converte_a_unidade_declarada(self, pasta_tabular, perfil_tabular):
+        perfil_tabular.unidades = {"energia_kcal": {"de": "kcal", "para": "kJ"}}
+
+        resultado = ingerir(
+            pasta_tabular, perfil=perfil_tabular, calibrar_por_arquivo=False
+        )
+
+        valores = [
+            r.campos["energia_kcal"].valor
+            for r in resultado.registros
+            if r.campos["energia_kcal"].valor is not None
+        ]
+        assert valores, "o lote não produziu energia para converter"
+        # 124 kcal ≈ 519 kJ: a ordem de grandeza sozinha denuncia se não converteu.
+        assert min(valores) > 400
+
+    def test_campo_convertido_no_lote_sai_derivado(self, pasta_tabular, perfil_tabular):
+        from parser.modelo import Origem
+
+        perfil_tabular.unidades = {"energia_kcal": {"de": "kcal", "para": "kJ"}}
+        resultado = ingerir(
+            pasta_tabular, perfil=perfil_tabular, calibrar_por_arquivo=False
+        )
+
+        convertidos = [
+            r.campos["energia_kcal"]
+            for r in resultado.registros
+            if r.campos["energia_kcal"].valor is not None
+        ]
+        assert convertidos
+        assert all(c.origem is Origem.DERIVADO for c in convertidos)
+        assert all(c.evidencia is not None for c in convertidos), "perdeu a auditoria"
+
+    def test_campo_sem_regra_nao_e_tocado(self, pasta_tabular, perfil_tabular):
+        """Converter energia não pode alterar proteína."""
+        from parser.modelo import Origem
+
+        perfil_tabular.unidades = {"energia_kcal": {"de": "kcal", "para": "kJ"}}
+        resultado = ingerir(
+            pasta_tabular, perfil=perfil_tabular, calibrar_por_arquivo=False
+        )
+
+        proteinas = [
+            r.campos["proteina_g"]
+            for r in resultado.registros
+            if r.campos["proteina_g"].valor is not None
+        ]
+        assert proteinas
+        assert all(c.origem is Origem.EXTRAIDO for c in proteinas)
+        assert max(c.valor for c in proteinas) < 10
+
+    def test_esquema_barra_a_gravacao_de_lote_invalido(
+        self, pasta_tabular, perfil_tabular, tmp_path
+    ):
+        from parser.esquema import SaidaInvalida
+
+        perfil_tabular.esquema = {"coluna_que_nao_existe": {"tipo": "numero"}}
+        saida = tmp_path / "saida.csv"
+
+        with pytest.raises(SaidaInvalida):
+            ingerir(
+                pasta_tabular,
+                saida=saida,
+                perfil=perfil_tabular,
+                calibrar_por_arquivo=False,
+            )
+        assert not saida.exists(), "gravou apesar do esquema violado"
+
+    def test_esquema_conforme_deixa_gravar(self, pasta_tabular, perfil_tabular, tmp_path):
+        perfil_tabular.esquema = {
+            "identificador": {"tipo": "texto"},
+            "energia_kcal": {"tipo": "numero", "minimo": 0.0},
+            "proteina_g": {"tipo": "numero"},
+            "lipideos_g": {"tipo": "numero"},
+        }
+        saida = tmp_path / "saida.csv"
+
+        ingerir(
+            pasta_tabular,
+            saida=saida,
+            perfil=perfil_tabular,
+            calibrar_por_arquivo=False,
+        )
+        assert saida.exists()
+
+    def test_sem_declaracao_o_lote_nao_muda(self, pasta_tabular, perfil_tabular, tmp_path):
+        """Nenhuma medição anterior pode mudar de valor por causa desta fatia."""
+        from parser.modelo import Origem
+
+        saida = tmp_path / "saida.csv"
+        resultado = ingerir(
+            pasta_tabular, saida=saida, perfil=perfil_tabular, calibrar_por_arquivo=False
+        )
+
+        assert saida.exists()
+        assert resultado.registros
+        origens = {
+            c.origem
+            for r in resultado.registros
+            for c in r.campos.values()
+            if c.preenchido
+        }
+        assert Origem.DERIVADO not in origens, "converteu sem regra declarada"

@@ -179,9 +179,23 @@ def ingerir(
     resultado.segundos = time.perf_counter() - inicio
 
     if saida:
+        # Verifica o lote **inteiro** antes de gravar: coluna faltante e lote
+        # heterogêneo só aparecem no conjunto, e o destino CSV monta o cabeçalho
+        # a partir do primeiro registro — a coluna sumiria calada (SPEC §4.4).
+        _validar_saida(resultado.registros, perfil)
         _gravar(resultado, Path(saida))
 
     return resultado
+
+
+def _validar_saida(registros: list[Registro], perfil: Any) -> None:
+    """Valida contra o esquema declarado. Sem esquema no perfil, não faz nada."""
+    if perfil is None:
+        return
+
+    from parser.esquema import Esquema
+
+    Esquema.de_perfil(perfil).validar(registros)
 
 
 def _processar(
@@ -209,7 +223,26 @@ def _processar(
     # o chama de outro jeito.
     registros = _aplicar_mapeamento(registros, perfil)
 
+    # Depois do mapeamento, nunca antes: as regras de unidade são declaradas sobre
+    # os nomes canônicos, que só existem a partir daqui.
+    registros = _converter_unidades(registros, perfil)
+
     return registros, nota
+
+
+def _converter_unidades(registros: list[Registro], perfil: Any) -> list[Registro]:
+    """Converte para a unidade que o perfil declarar (SPEC §4.3).
+
+    Diferente do mapeamento, uma falha aqui **não** é engolida: unidade errada
+    produz número plausível e errado, que ninguém audita a jusante. Sem regras
+    declaradas o conversor é inerte e os registros passam intactos.
+    """
+    if perfil is None:
+        return registros
+
+    from parser.unidades import Conversor
+
+    return Conversor.de_perfil(perfil).aplicar_todos(registros)
 
 
 def _aplicar_mapeamento(registros: list[Registro], perfil: Any) -> list[Registro]:

@@ -116,6 +116,50 @@ O documento-caso usa `Tr` (traço), `NA` (não analisado) e `*`. **Não são zer
 nulo.** Confundi-los corrompe qualquer cálculo a jusante. O schema os representa
 explicitamente, preservando o texto bruto na evidência.
 
+### 4.3 Unidade de medida (RF-7)
+
+RF-7 exige saída com **tipo e unidade quando aplicável**. Até aqui a unidade existe
+apenas como texto inerte dentro do rótulo — `"Energia (kcal)"` — usado para
+desambiguar o mapeamento, nunca para converter. Consequência: `Origem.DERIVADO` está
+definido e validado no modelo, com "conversão de unidade" no próprio docstring, e
+**nada o produz**. Este é o buraco que a conversão fecha.
+
+O documento-caso já mostra o problema em escala pequena: energia aparece em kcal *e*
+em kJ, e um consumidor que espere uma das duas recebe a outra sem aviso. Um documento
+de outro contexto trará o mesmo problema com outras unidades.
+
+**A conversão é etapa permanente do pipeline; a tabela de conversão vem do perfil.**
+Essa separação é o que preserva o núcleo agnóstico: o núcleo sabe *converter*, e nunca
+sabe que "kcal" ou "g" existem. Sem unidade-alvo declarada, a etapa executa e não
+converte nada — não por estar desligada, mas por não haver o que converter. É o mesmo
+contrato do mapeamento, que também é sempre aplicado com regras vindas de fora.
+
+Regras que a conversão obedece:
+
+- Campo convertido sai com origem **`DERIVADO`**, preservando a evidência do valor
+  original — a auditoria continua chegando ao texto bruto no documento.
+- A confiança do campo original é **propagada**, nunca elevada: converter não
+  acrescenta conhecimento.
+- Unidade desconhecida ou incompatível (`g` → `kcal`) **falha alto**, com o nome do
+  campo na mensagem. Converter errado em silêncio é o modo de falha que este projeto
+  mais evita.
+- Sentinela não se converte: `Tr` em grama continua `Tr`. Não há número a multiplicar.
+- Sem unidade-alvo declarada, o campo passa **intacto**, com origem `EXTRAIDO`
+  preservada — de modo que nenhuma medição anterior mude de valor.
+
+### 4.4 Validação da saída tabular
+
+O modelo valida **campo a campo** (Pydantic, na construção do `Registro`). Isso não
+cobre invariantes do conjunto: colunas ausentes, tipo divergente entre registros,
+lote heterogêneo. O destino CSV monta o cabeçalho a partir do **primeiro** registro,
+então um lote em que o segundo registro tenha campo a mais perde a coluna em silêncio
+— exatamente a classe de falha muda que a spec repudia em §1.1.
+
+A validação de esquema tabular é, portanto, uma **segunda porta**, aplicada ao
+conjunto antes da gravação: verifica presença de coluna, tipo e as restrições que o
+perfil declarar. Como toda configuração do projeto, o esquema é declarativo e vem do
+perfil — o núcleo não conhece nome de campo algum.
+
 ## 5. Requisitos verificáveis
 
 Cada item vira teste antes da implementação (TDD).
@@ -128,6 +172,14 @@ Cada item vira teste antes da implementação (TDD).
 | **E4** | Converter decimal com vírgula | `"3,86"` → `3.86` |
 | **V1** | Rejeitar registro fora do schema | Registro inválido falha alto, com mensagem localizável |
 | **V2** | Todo campo carrega origem e evidência | Nenhum campo sai com origem indefinida |
+| **U1** | Converter unidade declarada no perfil | `1000 kcal` → `4184 kJ`, dentro da tolerância |
+| **U2** | Campo convertido é `DERIVADO`, com a evidência original | Origem muda; evidência aponta o texto bruto do documento |
+| **U3** | Conversão impossível falha alto | `g` → `kcal` levanta erro nomeando o campo |
+| **U4** | Sentinela e campo ausente atravessam intactos | `Tr` continua `Tr`; ausente continua ausente |
+| **U5** | Sem unidade-alvo declarada, nada muda | Registro sai idêntico à entrada, origem preservada |
+| **U6** | O núcleo não conhece unidade de domínio algum | Nenhum nome de unidade aparece fora de perfil e de teste |
+| **T1** | Esquema tabular rejeita coluna ausente ou tipo divergente | Lote inválido falha alto, nomeando coluna e motivo |
+| **T2** | Lote heterogêneo não perde coluna em silêncio | Registro com campo a mais é detectado antes da gravação |
 | **S1** | Gravar CSV e JSON do mesmo registro validado | Round-trip preserva valores e sentinelas |
 | **S2** | Formato de saída é parâmetro | Trocar destino não altera o núcleo |
 | **A1** | Extrator é intercambiável | Um extrator alternativo roda o mesmo golden set sem mudar o núcleo |
