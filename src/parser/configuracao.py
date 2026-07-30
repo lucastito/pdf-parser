@@ -111,13 +111,25 @@ class Rota:
     campos_na_ordem: list[str] = field(default_factory=list)
     extras: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        """Aplica o padrão de resolução da rota, se houver um declarado.
+
+        Aqui, e não em `de_dados`, porque roda nos **dois** caminhos de
+        construção. Antes o padrão só valia para perfil vindo de JSON: um `Rota`
+        criado em código ficava com dpi 0, que é rejeitado na montagem do
+        extrator com "dpi deve ser positivo" — erro que não sugere a causa.
+        """
+        if not self.dpi:
+            chave = f"{self.nome}.dpi"
+            if chave in DEFAULTS:
+                self.dpi = _default(chave)
+
     @classmethod
     def de_dados(cls, nome: str, dados: dict[str, Any]) -> Rota:
         conhecidos = {"dpi", "modelo", "url", "timeout", "prompt", "layout", "campos_na_ordem"}
-        chave_dpi = f"{nome}.dpi"
         return cls(
             nome=nome,
-            dpi=dados.get("dpi", _default(chave_dpi) if chave_dpi in DEFAULTS else 0),
+            dpi=dados.get("dpi", 0),
             modelo=dados.get("modelo"),
             url=dados.get("url", _default("modelo.url")),
             timeout=dados.get("timeout", _default("modelo.timeout")),

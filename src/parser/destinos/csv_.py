@@ -40,7 +40,17 @@ class DestinoCSV:
             self.caminho.write_text("", encoding="utf-8")
             return
 
-        colunas = list(registros[0].campos)
+        # A união dos campos de **todos** os registros, na ordem em que aparecem.
+        # Usar só o primeiro registro fazia um lote heterogêneo perder coluna sem
+        # erro algum: o arquivo saía bem-formado e o dado não estava lá. Ordem de
+        # aparição, e não alfabética, para que duas execuções iguais produzam
+        # arquivos idênticos.
+        colunas: list[str] = []
+        for registro in registros:
+            for nome in registro.campos:
+                if nome not in colunas:
+                    colunas.append(nome)
+
         with self.caminho.open("w", encoding="utf-8", newline="") as arquivo:
             escritor = csv.DictWriter(arquivo, fieldnames=colunas)
             escritor.writeheader()

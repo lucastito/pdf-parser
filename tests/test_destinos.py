@@ -156,3 +156,73 @@ class TestDestinoEParametro:
 
         assert isinstance(DestinoCSV(tmp_path / "a.csv"), Destino)
         assert isinstance(DestinoJSON(tmp_path / "a.json"), Destino)
+
+
+class TestLoteHeterogeneo:
+    """Nenhum destino pode perder coluna em silêncio.
+
+    O cabeçalho vinha do **primeiro** registro. Um lote em que o segundo trouxesse
+    um campo a mais perdia esse campo sem erro: o arquivo saía bem-formado, e o
+    dado simplesmente não estava lá.
+
+    A validação de esquema (`parser.esquema`) pega isso — mas só quando o perfil
+    declara um esquema. Sem declaração, o destino precisa se defender sozinho.
+    """
+
+    def _registro(self, fonte, **campos):
+        from parser.modelo import Campo, Evidencia, Registro
+
+        ev = Evidencia(pagina=1, texto_bruto="x")
+        return Registro(
+            campos={
+                nome: Campo[float].extraido(valor=valor, evidencia=ev)
+                for nome, valor in campos.items()
+            },
+            fonte=fonte,
+        )
+
+    def test_csv_preserva_coluna_que_so_aparece_depois(self, tmp_path):
+        from parser.destinos.csv_ import DestinoCSV
+
+        saida = tmp_path / "s.csv"
+        DestinoCSV(saida).gravar(
+            [
+                self._registro("a.pdf", energia=124.0),
+                self._registro("b.pdf", energia=360.0, proteina=7.3),
+            ]
+        )
+
+        conteudo = saida.read_text(encoding="utf-8")
+        assert "proteina" in conteudo, "a coluna do segundo registro sumiu"
+        assert "7.3" in conteudo, "o valor do segundo registro sumiu"
+
+    def test_csv_mantem_a_ordem_de_aparicao_das_colunas(self, tmp_path):
+        """Ordem estável: duas execuções iguais devem produzir arquivo idêntico."""
+        from parser.destinos.csv_ import DestinoCSV
+
+        saida = tmp_path / "s.csv"
+        DestinoCSV(saida).gravar(
+            [
+                self._registro("a.pdf", energia=124.0),
+                self._registro("b.pdf", proteina=7.3, energia=360.0),
+            ]
+        )
+
+        cabecalho = saida.read_text(encoding="utf-8").splitlines()[0]
+        assert cabecalho == "energia,proteina"
+
+    def test_json_preserva_todos_os_campos(self, tmp_path):
+        import json
+
+        from parser.destinos.json_ import DestinoJSON
+
+        saida = tmp_path / "s.json"
+        DestinoJSON(saida).gravar(
+            [
+                self._registro("a.pdf", energia=124.0),
+                self._registro("b.pdf", energia=360.0, proteina=7.3),
+            ]
+        )
+
+        dados = json.loads(saida.read_text(encoding="utf-8"))
+        assert any("proteina" in r["campos"] for r in dados)

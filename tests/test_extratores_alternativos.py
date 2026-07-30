@@ -172,3 +172,66 @@ class TestNormalizacaoCompartilhada:
         from parser.extratores.ocr import ExtratorOCR
 
         assert hasattr(ExtratorOCR, "extrair")
+
+
+class TestTemporarioDeDesrotacao:
+    """O temporário da desrotação não pode colidir entre documentos.
+
+    O nome era derivado só do nome do arquivo (`_desrot_<stem>.pdf`). Como o lote
+    percorre subpastas, dois documentos homônimos em pastas diferentes — um
+    `relatorio.pdf` em cada cliente — escreviam no mesmo caminho. Em execução
+    sequencial, o segundo sobrescreve o primeiro; o risco real é entregar dados
+    do documento errado, sem erro algum.
+    """
+
+    def _pdf_rotacionado(self, caminho, texto):
+        import fitz
+
+        caminho.parent.mkdir(parents=True, exist_ok=True)
+        documento = fitz.open()
+        pagina = documento.new_page()
+        pagina.set_rotation(90)
+        pagina.insert_text((72, 72), texto)
+        documento.save(caminho)
+        documento.close()
+        return caminho
+
+    def test_documentos_homonimos_nao_colidem(self, tmp_path):
+        from pathlib import Path
+
+        from parser.extratores.pdfplumber_ import ExtratorPdfplumber
+
+        a = self._pdf_rotacionado(tmp_path / "cliente-a" / "relatorio.pdf", "PRIMEIRO")
+        b = self._pdf_rotacionado(tmp_path / "cliente-b" / "relatorio.pdf", "SEGUNDO")
+
+        caminho_a, _ = ExtratorPdfplumber(str(a))._preparar(a)
+        caminho_b, _ = ExtratorPdfplumber(str(b))._preparar(b)
+        try:
+            assert (
+                caminho_a != caminho_b
+            ), "dois documentos com o mesmo nome escreveram no mesmo temporário"
+        finally:
+            # `_preparar` não limpa: quem limpa é `extrair`. Chamando o método
+            # direto, a limpeza é deste teste.
+            for caminho in (caminho_a, caminho_b):
+                if caminho != str(a) and caminho != str(b):
+                    Path(caminho).unlink(missing_ok=True)
+
+    def test_extracao_nao_deixa_temporario_para_tras(self, tmp_path):
+        """Temporário esquecido enche o disco num lote longo."""
+        import tempfile
+        from pathlib import Path
+
+        from parser.extratores.pdfplumber_ import ExtratorPdfplumber
+        from parser.portas import DocumentoCanonico
+
+        pasta = Path(tempfile.gettempdir())
+        antes = set(pasta.glob("_desrot_*"))
+
+        arquivo = self._pdf_rotacionado(tmp_path / "d.pdf", "TEXTO")
+        ExtratorPdfplumber(str(arquivo)).extrair(
+            DocumentoCanonico(identificador="d.pdf", paginas=[])
+        )
+
+        novos = set(pasta.glob("_desrot_*")) - antes
+        assert not novos, f"temporários não removidos: {novos}"

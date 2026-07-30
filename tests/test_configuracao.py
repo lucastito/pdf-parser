@@ -183,3 +183,42 @@ class TestPerfisDoProjeto:
         assert prompts, "nenhum prompt no projeto"
         for caminho in prompts:
             carregar_prompt(caminho)
+
+
+class TestPadraoDeRotaIndependeDeComoFoiCriada:
+    """O padrão por rota tem de valer nos dois caminhos de construção.
+
+    `Rota.de_dados("vlm", {})` aplicava o padrão declarado (`vlm.dpi = 150`), mas
+    `Rota(nome="vlm")` deixava dpi em 0 — e 0 é rejeitado na montagem do extrator,
+    com "dpi deve ser positivo".
+
+    O mesmo objeto lógico com padrões diferentes conforme o caminho de construção
+    é uma armadilha: o perfil vindo de JSON funciona, o construído em código
+    quebra, e a mensagem de erro não sugere a causa.
+    """
+
+    def test_dpi_padrao_vale_para_o_construtor(self):
+        from parser.configuracao import DEFAULTS, Rota
+
+        assert Rota(nome="vlm").dpi == DEFAULTS["vlm.dpi"]["valor"]
+        assert Rota(nome="ocr").dpi == DEFAULTS["ocr.dpi"]["valor"]
+
+    def test_construtor_e_de_dados_concordam(self):
+        from parser.configuracao import Rota
+
+        for nome in ("vlm", "ocr", "llm", "posicional"):
+            assert (
+                Rota(nome=nome).dpi == Rota.de_dados(nome, {}).dpi
+            ), f"padrão de dpi diverge para a rota {nome!r}"
+
+    def test_dpi_explicito_continua_mandando(self):
+        from parser.configuracao import Rota
+
+        assert Rota(nome="vlm", dpi=72).dpi == 72
+        assert Rota.de_dados("vlm", {"dpi": 72}).dpi == 72
+
+    def test_rota_sem_padrao_declarado_fica_em_zero(self):
+        """Rota que não renderiza imagem não tem dpi — 0 é o valor correto."""
+        from parser.configuracao import Rota
+
+        assert Rota(nome="posicional").dpi == 0

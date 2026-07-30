@@ -21,6 +21,7 @@ nosso código, não limitação da biblioteca.
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -124,9 +125,14 @@ class ExtratorPdfplumber:
                 nova.show_pdf_page(nova.rect, origem, indice, rotate=-rotacao)
                 mapa[posicao] = indice + 1
 
-            temporario = Path(tempfile.gettempdir()) / f"_desrot_{arquivo.stem}.pdf"
-            destino.save(str(temporario))
+            # Nome único por execução. Antes era `_desrot_<nome do arquivo>.pdf`:
+            # como o lote percorre subpastas, dois documentos homônimos — um
+            # `relatorio.pdf` por cliente — escreviam no mesmo caminho, e o
+            # segundo sobrescrevia o primeiro sem erro algum.
+            descritor, caminho_temporario = tempfile.mkstemp(prefix="_desrot_", suffix=".pdf")
+            os.close(descritor)
+            destino.save(caminho_temporario)
             destino.close()
-            return str(temporario), mapa
+            return caminho_temporario, mapa
         finally:
             origem.close()

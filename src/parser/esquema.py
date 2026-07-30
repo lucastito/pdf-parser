@@ -4,11 +4,12 @@ O modelo já valida **campo a campo**, na construção do `Registro`. O que falt
 era o **conjunto**: coluna ausente, tipo divergente entre registros, lote
 heterogêneo.
 
-O caso concreto que motivou o módulo está no destino CSV, que monta o cabeçalho a
-partir do primeiro registro. Um lote em que o segundo registro traga um campo a
-mais perde a coluna **sem erro algum** — o pipeline completa, o arquivo parece
-bom, e o dado não está lá. É a falha muda que a spec repudia: um extrator que roda
-sem erro e grava lixo é pior que um que falha alto.
+O caso concreto que motivou o módulo estava no destino CSV, que montava o cabeçalho
+a partir do primeiro registro: um lote em que o segundo trouxesse um campo a mais
+perdia a coluna **sem erro algum**. O destino foi corrigido para unir os campos de
+todos os registros, mas a validação continua valendo por outro motivo — ela verifica
+o que o perfil **declarou esperar**, e um campo que nenhum documento trouxe não
+aparece em registro algum para ser unido.
 
 Como toda configuração deste projeto, o esquema é declarativo e vem do perfil: o
 núcleo não conhece nome de campo nem domínio. Sem esquema declarado, o validador
