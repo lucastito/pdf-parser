@@ -157,23 +157,42 @@ na máquina de referência, e vão fixados no script.
 
 | Parâmetro | Valor | Por quê |
 |---|---|---|
-| `num_predict` (teto de saída) | **16384** | com ~2048 a geração é cortada no meio e a resposta volta **vazia**; 16384 deixou a página inteira caber |
+| **contexto** (`num_ctx`) | **declarar sempre** | o padrão do servidor é **4096** e limita entrada **mais** saída; uma imagem consome ~2200 só de entrada. Foi a causa real das respostas vazias — ver a nota abaixo |
+| `num_predict` (teto de saída) | **16384** | necessário, mas **não suficiente**: sozinho não impede o corte, porque o limite que corta é o contexto |
 | `dpi` da imagem | **150** | ADR-0003 — compromisso entre legibilidade e custo |
 | degrau de saída | **fixado, não livre** | ADR-0013 — descer livremente faz cada máquina medir uma restrição diferente |
 | medições simultâneas | **nunca** | duas concorrentes inflam o tempo das duas, e aqui o tempo é o resultado |
 | `done_reason` | **sempre registrado** | `stop` = terminou; `length` = cortado. Foi ele que revelou a causa do vazio |
 
-> **Fechado em 2026-07-31: não há como desligar o raciocínio** nesta combinação de
-> servidor e modelo. As duas formas foram medidas:
+> ### ⚠ O contexto é o parâmetro que faltava — não repita este erro
 >
-> | Forma | Raciocínio gerado |
-> |---|---|
-> | `think: false` | 4043 caracteres |
-> | `/no_think` no prompt | **6254 caracteres** — piorou |
+> Durante uma sessão inteira, o projeto acreditou que o teto de **saída** era o
+> limite atuante. Não era. Elevá-lo para 16384 não removeu o corte: as respostas
+> continuaram parando em ~1900 tokens.
 >
-> O raciocínio é o gargalo da rota de visão: consome o orçamento de tokens que a
-> resposta precisaria. Na rota de texto o mesmo pedido gasta **zero** raciocinando
-> e produz 16767 caracteres de resposta.
+> A prova é aritmética. Somando **entrada + saída**, quatro casos com prompts de
+> tamanhos diferentes pararam na mesma soma exata:
+>
+> | Caso | entrada + saída | soma | motivo |
+> |---|---|---|---|
+> | coube | 2184 + 1581 | 3765 | `stop` |
+> | cortado | 2175 + 1921 | **4096** | `length` |
+> | cortado | 2227 + 1869 | **4096** | `length` |
+> | cortado | 2233 + 1863 | **4096** | `length` |
+>
+> **Regra que fica: nunca confiar em padrão de servidor para parâmetro que decide
+> resultado.** Um padrão não declarado é número mágico com dono externo.
+>
+> **Sempre registrar tokens de entrada e de saída, e verificar a soma.** Eles
+> vinham em toda resposta e eram descartados; foi a soma que revelou a causa.
+
+> **Sobre o raciocínio: não há como desligá-lo** nesta combinação de servidor e
+> modelo. As duas formas foram medidas — `think: false` gerou 4043 caracteres,
+> `/no_think` gerou **6254** e piorou.
+>
+> Ele **consome** orçamento, mas chamá-lo de "o gargalo" atribuía a ele um efeito
+> que era do contexto não declarado. Com contexto suficiente, ele passa a ser
+> custo, não impedimento.
 
 ## O que cada máquina roda
 

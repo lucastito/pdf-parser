@@ -153,15 +153,21 @@ Um modelo pequeno pode devolver **resposta vazia** sem erro algum: o servidor
 responde `200`, a resposta é `""`, e o extrator recebe zero item como se a página
 estivesse em branco. Numa execução em lote isso vira "processado, 0 registros".
 
-**Causa medida: corte pelo limite de tokens de saída.** Três hipóteses foram
-levantadas, e as duas primeiras foram refutadas por medição — registradas aqui
-porque hipótese invalidada é resultado, e sem o registro a busca se repete.
+**Causa medida: corte pelo limite de CONTEXTO** — que limita entrada e saída
+**somadas**, e não pelo teto de saída. Quatro hipóteses foram levantadas, e as
+refutadas ficam registradas porque hipótese invalidada é resultado; sem o
+registro, a busca se repete.
 
 | Hipótese | Veredito | Evidência |
 |---|---|---|
 | Esquema restringido torna o caminho inalcançável | **refutada** | texto livre, sem restrição, também vem vazio |
 | Canal de raciocínio consome tudo | **refutada como causa isolada** | desligar não mudou os números (152 × 152) |
-| Limite de saída corta a geração | **confirmada** | `done_reason` muda de `stop` para `length` |
+| O teto de **saída** corta a geração | **refutada** | elevá-lo a 16384 não removeu o corte: continuou parando em ~1900 |
+| O **contexto** corta, limitando entrada + saída | **confirmada** | quatro casos, prompts de tamanhos diferentes, mesma soma exata: **4096** |
+
+O sinal que revelou *que havia* corte foi o `done_reason` mudando de `stop` para
+`length`. O que revelou **qual limite** cortava foi a **soma de entrada e
+saída** — dado que vinha em toda resposta e era descartado.
 
 Cinco prompts na mesma página real, medidos um por vez:
 
@@ -173,15 +179,18 @@ Cinco prompts na mesma página real, medidos um por vez:
 | leia em JSON | `length` | 1912 | vazia |
 | leia com guardrails | `length` | 1887 | vazia |
 
-Descrever uma página cabe; enumerar dezenas de itens não. Elevando o teto para
-8192, a chamada passou a devolver a lista de alimentos correta — mas **ainda
-cortada**. É onde as duas hipóteses se encontram: o raciocínio não é a causa, é o
-que **consome** o orçamento que o limite restringe.
+Descrever uma página cabe; enumerar dezenas de itens não. Note que os totais
+cortados batem no mesmo valor mesmo com prompts de tamanhos diferentes — é a
+assinatura de um teto fixo sendo atingido, não de o modelo parar por conta
+própria.
 
-**Consequência de desenho:** pedir a página inteira de uma vez a um modelo pequeno
-não é viável. Ou se eleva muito o teto, ou se pede menos itens por chamada — as
-duas são variáveis de experimento, não padrões a adivinhar. Nenhum valor de
-`tokens_maximos` é embutido no código (ADR-0008).
+**Consequência de desenho:** o **contexto** e o teto de saída são **ambos**
+declaráveis, e nenhum tem padrão embutido no código (ADR-0008). Declarar só o
+teto de saída não basta: o contexto tem padrão do servidor — invisível — e é ele
+que corta quando a entrada é grande, como acontece com imagem.
+
+O valor certo do contexto depende de quanto a **entrada** consome, que precisa
+ser **medido**, não suposto. Numa página renderizada, a entrada é a maior parte.
 
 Os degraus permanecem por outro motivo, e é real: impedir que resposta vazia vire
 "página sem dados" em silêncio, e registrar sob qual restrição cada resultado foi

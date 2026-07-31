@@ -1,6 +1,37 @@
 # ADR-0015 — Limite de saída do modelo: nenhum padrão embutido
 
-**Status:** aceito · **Data:** 2026-07-31
+**Status:** aceito, **com retificação de 2026-07-31** · **Data:** 2026-07-31
+
+> ## ⚠ Retificação — leia antes do resto
+>
+> **O parâmetro identificado neste ADR estava errado.** A decisão continua
+> válida; o diagnóstico não.
+>
+> O servidor tem **dois** limites, e este ADR só conhecia um:
+>
+> | Parâmetro | O que limita | Padrão |
+> |---|---|---|
+> | teto de **saída** | quantos tokens o modelo gera | sem padrão baixo |
+> | **contexto** | entrada **mais** saída, somadas | **4096** |
+>
+> Elevar o teto de saída para 16384 **não removeu o corte**: as respostas
+> continuaram parando em ~1900 tokens. A prova é aritmética — somando entrada e
+> saída, quatro casos com prompts de tamanhos diferentes pararam na **mesma soma
+> exata de 4096**. A imagem consome ~2200 de entrada; sobrava o resto.
+>
+> **Consequência 1 — a conclusão "a rota de visão não preenche planilha nesta
+> classe de hardware" mede um artefato de configuração, não o modelo.** Ela
+> aparece mais abaixo neste documento e está errada.
+>
+> **Consequência 2 — a conclusão sobre o raciocínio perde peso.** Ele continua
+> consumindo orçamento (isso foi medido de forma independente), mas chamá-lo de
+> "o gargalo" atribuía a ele um efeito que era do contexto não declarado.
+>
+> **O que se sabe com o contexto correto:** a chamada **não termina em uma hora**
+> em processador — o cliente desiste por tempo, o modelo não é cortado. A
+> limitação desta máquina é de **tempo**, não de capacidade.
+>
+> Detalhe completo e o que fazer: seção 0 de `experimentos/PLANO.md`.
 
 ## Contexto
 
@@ -52,29 +83,44 @@ foram medidas na mesma página:
 | `think: false` | 4043 caracteres | 185 caracteres |
 | `/no_think` no prompt | **6254 caracteres** | **vazia** |
 
-A segunda forma **piorou**. A questão fica fechada: o raciocínio é inevitável nesta
-combinação de servidor e modelo, e é o gargalo da rota de visão.
+A segunda forma **piorou**. O raciocínio é inevitável nesta combinação de servidor
+e modelo.
 
-Consequência medida: pedir extração **com valores** — o caso de uso real — devolve
-resposta vazia nas duas configurações. A rota de visão lista nomes, mas não preenche
-planilha nesta classe de hardware. A rota de **texto**, no mesmo pedido, gasta zero
-raciocinando e produz 16767 caracteres com 100% de acurácia.
+> **Retificado:** o parágrafo abaixo dizia que a rota de visão *"não preenche
+> planilha nesta classe de hardware"*. **Está errado** — as duas configurações
+> rodaram sob contexto padrão de 4096, e a resposta vazia era o corte descrito na
+> retificação do topo. Com contexto suficiente, a mesma chamada não é cortada;
+> ela simplesmente não termina em uma hora **em processador**.
+>
+> O que permanece verdadeiro: o raciocínio consome orçamento, e a rota de
+> **texto**, no mesmo pedido, gasta zero raciocinando e produz 16767 caracteres
+> com 100% de acurácia. A comparação entre as duas rotas continua favorecendo a
+> de texto **nesta máquina** — mas por tempo, não por incapacidade.
 
 ## Decisão
 
-**O teto de saída é declarável e não tem padrão embutido no código.**
+**Os limites de saída *e de contexto* são declaráveis, e nenhum tem padrão
+embutido no código.**
 
 Um valor fixo no código seria número mágico sem procedência, contra o ADR-0008. E
-o valor certo depende de três coisas que variam: quantos itens a página tem,
-quanto o modelo gasta raciocinando, e qual modelo é.
+o valor certo depende de coisas que variam: quantos itens a página tem, quanto o
+modelo gasta raciocinando, qual modelo é, e — no caso do contexto — **quanto a
+entrada consome**, que numa imagem é a maior parte.
+
+**Declarar só o teto de saída não basta**, e foi o erro deste ADR: o contexto
+tinha padrão do servidor, invisível, e era ele que cortava.
 
 **Resposta cortada é diagnosticada como tal, não como vazia.** São exceções e
 tipos de falha distintos — `resposta-cortada` × `resposta-vazia` × `sem-estrutura`.
-A distinção decide onde procurar: vazio manda investigar modelo ou prompt; corte
-manda aumentar o limite. Confundi-los custou duas hipóteses erradas.
+A distinção decide onde procurar. Confundi-los custou duas hipóteses erradas.
 
-**`done_reason` é sempre registrado com o resultado.** Foi ele, e só ele, que
-revelou a causa.
+**`done_reason` é sempre registrado com o resultado.** Foi ele que revelou que
+havia corte.
+
+**Os tokens de entrada e de saída são sempre registrados, e a soma verificada
+contra o contexto.** Foi a **soma** que revelou *qual* limite cortava — e ela
+vinha em toda resposta, descartada. Sem isso, o diagnóstico parou no parâmetro
+errado por uma sessão inteira.
 
 ## Consequência de desenho
 
@@ -88,7 +134,12 @@ reserva, contra ~1000 s da rota por modelo.
 
 A rota por modelo continua valendo por outra razão: documentos que a rota
 determinística não alcança. O que a medição fecha é a expectativa de que ela seja
-alternativa geral — não é, nesta classe de hardware.
+alternativa geral **em processador** — o custo por página a torna inviável para
+volume, e essa parte não muda com configuração.
+
+> **Ressalva de escopo:** "nesta classe de hardware" significa **processador de
+> baixo consumo**. Máquinas com placa de vídeo funcional não foram medidas, e é
+> justamente para isso que existe o experimento multimáquina (ADR-0013).
 
 ## Consequências
 
