@@ -29,7 +29,7 @@ from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from parser.pipeline import Pipeline
 from parser.portas import Extrator, FonteDocumento
@@ -128,23 +128,75 @@ def _gpu() -> tuple[str | None, str | None]:
         except Exception:
             pass
     if platform.system() == "Windows":
+        # Sem ferramenta de fabricante, o registro do sistema é a fonte correta
+        # e **neutra**: campo de 64 bits, presente em qualquer placa dedicada.
+        #
+        # O caminho que NÃO se usa aqui: `Win32_VideoController.AdapterRAM`
+        # reporta em 32 bits e satura em 4 GB — uma placa de 12 GB apareceria
+        # como 4, e dimensionar modelo por esse número faria a máquina grande
+        # rodar como pequena (ADR-0019).
+        consulta = (
+            "$b='HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\"
+            "{4d36e968-e325-11ce-bfc1-08002be10318}';"
+            "Get-ChildItem $b -EA SilentlyContinue | "
+            "Where-Object { $_.PSChildName -match '^\\d{4}$' } | ForEach-Object {"
+            "  $p = Get-ItemProperty $_.PSPath -EA SilentlyContinue;"
+            "  if ($p.DriverDesc) {"
+            "    $m = $p.'HardwareInformation.qwMemorySize';"
+            "    '{0}|{1}' -f $p.DriverDesc, $(if ($m) { [math]::Round($m/1MB) } else { '' })"
+            "  } }"
+        )
         try:
             saida = subprocess.run(
-                [
-                    "powershell",
-                    "-NoProfile",
-                    "-Command",
-                    "(Get-CimInstance Win32_VideoController | Select-Object -First 1).Name",
-                ],
+                ["powershell", "-NoProfile", "-Command", consulta],
                 capture_output=True,
                 text=True,
                 timeout=20,
             )
-            if saida.stdout.strip():
-                return saida.stdout.strip().splitlines()[0], None
+            # Placas sem memória dedicada (gráfico integrado) não declaram o
+            # campo: usam memória do sistema dinamicamente. É caso distinto, não
+            # erro — e a dedicada é a que interessa, por isso vem primeiro.
+            candidatas = [
+                (nome.strip(), mib.strip())
+                for linha in saida.stdout.strip().splitlines()
+                if "|" in linha
+                for nome, mib in [linha.split("|", 1)]
+                if nome.strip()
+            ]
+            for nome, mib in sorted(candidatas, key=lambda c: not c[1]):
+                return nome, (f"{mib} MiB" if mib else None)
         except Exception:
             pass
     return None, None
+
+
+def versao_do_servidor(
+    url: str = "http://localhost:11434",
+    *,
+    consultar: Callable[[str, int], dict] | None = None,
+) -> str | None:
+    """Versão do servidor de inferência, ou `None` se não houver servidor.
+
+    **Versões diferentes entre máquinas invalidam a comparação.** Mudanças no
+    servidor alteram padrões de contexto e alocação de memória — precisamente o
+    que este projeto descobriu ser decisivo (ADR-0018). Sem o registro, a
+    divergência passaria em silêncio e apareceria como diferença de hardware.
+
+    Args:
+        consultar: injetável para teste. Recebe url e timeout, devolve o JSON.
+    """
+    consultar = consultar or _consultar_json
+    try:
+        return consultar(f"{url.rstrip('/')}/api/version", 10).get("version") or None
+    except Exception:
+        return None
+
+
+def _consultar_json(url: str, timeout: int) -> dict:
+    import urllib.request
+
+    with urllib.request.urlopen(url, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8"))
 
 
 def modelos_disponiveis(url: str = "http://localhost:11434") -> list[dict]:
@@ -184,6 +236,14 @@ class Ambiente:
     vram: str | None
     python: str
     data_utc: str
+    versao_do_servidor: str | None = None
+    """Versão do servidor de inferência, quando há um.
+
+    Campo sempre presente, mesmo vazio: se aparecesse só quando há valor, o
+    registro não distinguiria "não foi medido" de "não havia servidor" — e a
+    comparação entre máquinas depende dessa distinção (ADR-0019).
+    """
+
     modelos: list[dict] = field(default_factory=list)
 
     @classmethod
@@ -209,6 +269,10 @@ class Ambiente:
             vram=vram,
             python=platform.python_version(),
             data_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            # Só quando já se vai falar com o servidor: numa rodada apenas
+            # determinística não há servidor, e esperar pela conexão custaria
+            # tempo sem acrescentar nada.
+            versao_do_servidor=versao_do_servidor() if consultar_modelos else None,
             modelos=modelos_disponiveis() if consultar_modelos else [],
         )
 

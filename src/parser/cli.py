@@ -73,6 +73,9 @@ def _ambiente(opcoes: argparse.Namespace) -> int:
     print(f"  memória     : {ambiente.ram_total_gb} GB ({ambiente.ram_livre_gb} GB livre)")
     print(f"  gpu         : {ambiente.gpu or 'nenhuma detectada'} {ambiente.vram or ''}")
     print(f"  python      : {ambiente.python}")
+    # Versões diferentes entre máquinas invalidam a comparação (ADR-0019), e
+    # quem executa precisa poder conferir isso antes de rodar.
+    print(f"  servidor    : {ambiente.versao_do_servidor or 'não respondeu'}")
 
     print("\nSERVIDOR DE INFERÊNCIA\n")
     if not ambiente.modelos:

@@ -209,19 +209,31 @@ do experimento, e por isso não têm acurácia calculada da mesma forma.
       `rotas-por-modelo.json`, à parte, e a comparação entre as oito não fecha
 - [ ] Varredura de degraus contra o servidor real, gravada no experimento
 
-### O que o registro de ambiente ainda não guarda
+### O registro de ambiente
 
-`ambiente.json` registra máquina, processador, memória, placa e modelos. **Falta
-o que o ADR-0019 aponta como capaz de invalidar a comparação:**
+Resolvido nesta sessão:
 
-- [ ] **versão do servidor de inferência** — versões diferentes entre máquinas
-      tornam os resultados incomparáveis, e hoje isso passaria despercebido
+- [x] **versão do servidor de inferência** — versões diferentes entre máquinas
+      tornam os resultados incomparáveis, e antes isso passaria despercebido.
+      Agora vai no `ambiente.json` e no comando `ambiente`
+- [x] **memória de vídeo por caminho neutro de fabricante** — lida do registro do
+      sistema (64 bits), não da interface que satura em 4 GB. Placa dedicada tem
+      prioridade sobre gráfico integrado, que não declara o campo (ADR-0019)
+
+Falta:
+
 - [ ] **versão do driver de vídeo** — afeta desempenho e alocação de memória
-- [ ] **memória de vídeo lida do registro do sistema** — a leitura atual reporta
-      2048 MiB aqui, correto por acaso: a interface padrão trunca em 4 GB, e numa
-      placa de 12 GB reportaria 4 (ADR-0019)
 - [ ] **contexto efetivamente usado** e **tokens de entrada/saída** por chamada —
       o tipo `Uso` já os carrega; falta gravá-los no resultado
+
+> **Armadilha de ambiente, encontrada na máquina de referência.** O pacote
+> instalado apontava para um **clone antigo**, e `python -m parser.cli` executava
+> código desatualizado enquanto os testes rodavam o fonte correto. Uma medição
+> feita assim mediria a versão errada sem nada denunciar.
+>
+> Verificar antes de medir: `python -c "import parser; print(parser.__file__)"`
+> tem de apontar para o repositório em uso. O script das outras máquinas precisa
+> conferir isso e falhar alto se divergir.
 
 ## 2. Consolidação por campo
 
