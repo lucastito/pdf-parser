@@ -80,6 +80,32 @@ pediria ~45 GB.
 **`min` dos três.** Pedir mais contexto do que se precisa custa memória sem
 retorno.
 
+### Errar para cima não é seguro — e o erro é assimétrico ao contrário do óbvio
+
+A intuição natural é que errar para cima é inofensivo: no pior caso sobra
+espaço. **Não é o caso**, e o modo de falha é o pior dos dois:
+
+| Erro | Consequência | Diagnóstico |
+|---|---|---|
+| para baixo | corte, resposta vazia | enganoso, mas **detectável** pela soma |
+| para cima demais | não cabe → despejo para o processador | **silencioso** |
+
+Um modelo que não cabe na memória não falha: fica ordens de grandeza mais lento,
+e o número sai como *"esta máquina é lenta"*. É a contaminação silenciosa do
+ADR-0019 — resultado plausível e errado, o modo de falha que este projeto mais
+evita.
+
+Daí a regra: **errar para cima até o limite de memória, nunca além dele.** E
+quando nem o peso do modelo couber, **falhar alto** em vez de rodar — porque o
+tempo medido descreveria a configuração, não a máquina.
+
+### Implementado em `src/parser/contexto.py`
+
+O cálculo é código, não recomendação em documento — 14 testes, escritos antes.
+Inclui como regressão o caso que produziu a conclusão errada: entrada de 2227
+com o padrão de 4096 não deixa espaço para a resposta, e o cálculo tem de pedir
+mais que isso.
+
 ### Corolário: a soma é verificada e registrada
 
 Entrada, saída e a soma vão no resultado de toda chamada, e a soma é conferida

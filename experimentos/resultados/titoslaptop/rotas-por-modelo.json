@@ -6,7 +6,8 @@
   "parametros_fixos": {
     "num_predict": 16384,
     "dpi": 150,
-    "think": false
+    "think": false,
+    "num_ctx": "NAO DECLARADO — valeu o padrao do servidor (4096)"
   },
   "nota": "Uma medição por vez. O tempo é resultado, então concorrência invalidaria. Casos 2 e 3 foram refeitos: os tempos da primeira rodada ficaram contaminados por execução concorrente.",
   "casos": {
@@ -15,35 +16,55 @@
       "done_reason": "stop",
       "tokens_gerados": 1581,
       "chars_resposta": 185,
-      "chars_raciocinio": 4043
+      "chars_raciocinio": 4043,
+      "tokens_entrada": 2184,
+      "tokens_total": 3765,
+      "bateu_no_contexto_4096": false,
+      "valido": true
     },
     "3-llm-texto": {
       "segundos": 2904.2,
       "done_reason": "stop",
       "tokens_gerados": 5948,
       "chars_resposta": 16767,
-      "chars_raciocinio": 0
+      "chars_raciocinio": 0,
+      "tokens_entrada": 1819,
+      "tokens_total": 7767,
+      "bateu_no_contexto_4096": false,
+      "valido": true
     },
     "4-no_think": {
       "segundos": 1320.3,
       "done_reason": "length",
       "tokens_gerados": 1921,
       "chars_resposta": 0,
-      "chars_raciocinio": 6254
+      "chars_raciocinio": 6254,
+      "tokens_entrada": 2175,
+      "tokens_total": 4096,
+      "bateu_no_contexto_4096": true,
+      "valido": false
     },
     "5-vlm-com-valores": {
       "segundos": 1025.7,
       "done_reason": "length",
       "tokens_gerados": 1869,
       "chars_resposta": 0,
-      "chars_raciocinio": 5006
+      "chars_raciocinio": 5006,
+      "tokens_entrada": 2227,
+      "tokens_total": 4096,
+      "bateu_no_contexto_4096": true,
+      "valido": false
     },
     "6-vlm-com-valores-no_think": {
       "segundos": 931.1,
       "done_reason": "length",
       "tokens_gerados": 1863,
       "chars_resposta": 0,
-      "chars_raciocinio": 5818
+      "chars_raciocinio": 5818,
+      "tokens_entrada": 2233,
+      "tokens_total": 4096,
+      "bateu_no_contexto_4096": true,
+      "valido": false
     }
   },
   "achados": [
@@ -52,5 +73,12 @@
     "ROTA DE VISÃO, extraindo COM VALORES: resposta VAZIA nas duas configurações (casos 5 e 6). done_reason=length, ~1865 tokens, 5000+ chars gastos no canal de raciocínio e zero de resposta. É o caso de uso real — preencher planilha — e a rota de visão não o atende nesta classe de hardware.",
     "/no_think NÃO funciona: 6254 chars de raciocínio contra 4043 com think:false. Piorou. As duas formas de desligar o raciocínio foram medidas e nenhuma surte efeito nesta combinação de servidor e modelo.",
     "O raciocínio é o gargalo: consome o orçamento de tokens que a resposta precisaria. A rota de texto gasta ZERO raciocinando e produz 16767 chars."
-  ]
+  ],
+  "retificacao": {
+    "data": "2026-07-31",
+    "o_que_muda": "Esta rodada NAO declarava o contexto. O num_predict de 16384 registrado acima nunca foi o limite atuante: quem cortou foi o contexto padrao de 4096, que limita entrada MAIS saida.",
+    "como_verificar": "Some tokens_entrada + tokens_gerados em cada caso. Os que terminaram em \"length\" somam exatamente 4096; os que terminaram em \"stop\" somam menos.",
+    "consequencia": "Os casos com done_reason=length mediram um artefato de configuracao, nao o modelo. Precisam ser refeitos com contexto declarado. Os casos com done_reason=stop continuam validos — cabiam no contexto.",
+    "ver": "docs/adr/0018-dimensionamento-de-contexto.md"
+  }
 }
