@@ -101,6 +101,65 @@ pessoal precisa como entrada.
       planilha errado (péssimo). Hoje contam igual na acurácia
 - [ ] ADR da decisão
 
+## 2b. Escopo: triagem e preenchimento são fases distintas
+
+**O problema, com números.** Se cada modelo rodar todas as hipóteses em todas as
+páginas, a conta explode:
+
+| | Cálculo | Resultado |
+|---|---|---|
+| Modelos × hipóteses | (4 visão + 5 texto) × 8 | 72 execuções por página |
+| × páginas de dados | 72 × 23 | **1.656 execuções** |
+| × tempo medido (~2900 s) | | **~56 dias de máquina** |
+
+Inviável. A saída não é cortar hipóteses no escuro — é separar o que cada fase
+responde.
+
+### Fase 1 — triagem: **1 página, muitas hipóteses**
+
+**Pergunta:** qual a melhor configuração de cada modelo?
+
+Uma página basta. Se um modelo erra a leitura numa página, erra em 23. Variar
+hipótese aqui é barato e informativo.
+
+Ao fim, cada modelo tem **uma** configuração vencedora — e os que não atingirem um
+mínimo são eliminados, não avançam.
+
+Custo: ~29 h se reduzirmos a 4 hipóteses (as que discriminaram nesta sessão).
+
+### Fase 2 — preenchimento: **23 páginas, 1 configuração**
+
+**Pergunta:** qual planilha cada estratégia produz, para consolidar?
+
+Só os sobreviventes da triagem, cada um com a configuração que venceu. Nenhuma
+hipótese varia aqui — variar tornaria as planilhas incomparáveis.
+
+Custo: ~56 h para 3 modelos sobreviventes. As 6 rotas determinísticas fazem as 23
+páginas em segundos.
+
+### Por que a separação é metodologicamente correta
+
+Não é só economia. **As duas fases medem coisas diferentes:**
+
+- A triagem mede **configuração** — variar é o objetivo.
+- O preenchimento mede **estratégia** — variar seria confundir a comparação.
+
+Rodar tudo em tudo produziria 1.656 planilhas incomparáveis entre si, porque cada
+uma teria configuração diferente. A consolidação por campo exige o oposto: todas as
+planilhas da mesma página, produzidas sob a mesma condição.
+
+### Onde o escopo fica baixo, e onde abre
+
+| Momento | Escopo | Por quê |
+|---|---|---|
+| Triagem | 1 página, 5 campos | descobrir configuração não exige o documento inteiro |
+| Preenchimento | 23 páginas, todos os campos | é a planilha que vai para o consumidor |
+| Consolidação | todas as planilhas da fase 2 | votação por campo exige o conjunto completo |
+
+**O vencedor final aceita empate.** Três rotas determinísticas já empatam em 100%
+contra o conjunto de reserva — e é justamente por isso que a consolidação por campo
+é melhor que escolher uma: onde empatam, a concordância vira confiança.
+
 ## 3. TACO completo
 
 **Escopo real, medido:** 23 páginas de dados, ~15 campos por alimento, pelo menos 3
