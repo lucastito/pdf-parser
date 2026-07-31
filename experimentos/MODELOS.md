@@ -19,33 +19,71 @@ quem executa não precise descobrir os parâmetros sozinho: eles vão resolvidos
 
 ## Escada de visão (o modelo lê a página como imagem)
 
-| Degrau | Modelo | Tamanho | Cabe em 12 GB | Papel no experimento |
-|---|---|---|---|---|
-| 1 | `qwen3-vl:4b` | 3,3 GB | sim | **denominador comum** — é o que roda na máquina de referência |
-| 2 | `qwen2.5vl:7b` | ~6 GB | sim | o mais recomendado para documento e tabela em benchmarks independentes |
-| 3 | `qwen3-vl:8b` | 6,1 GB | sim | mesma família do degrau 1, maior — isola o efeito do tamanho |
-| 4 | `qwen3-vl:30b` | 20 GB | **não** | **teto esperado** — a falha marca o limite real da máquina |
+| Degrau | Modelo | Origem | Tamanho | Cabe em 12 GB | Papel no experimento |
+|---|---|---|---|---|---|
+| 1 | `qwen3-vl:4b` | Alibaba | 3,3 GB | sim | **denominador comum** — é o que roda na máquina de referência |
+| 2 | `minicpm-v:8b` | OpenBMB | 5,5 GB | sim | **família diferente**; melhor da classe em reconhecimento de texto, e gera 75% menos tokens por imagem |
+| 3 | `llava:7b` | Universidade (aberto) | 4,7 GB | sim | **terceira família**; linha tradicional, referência histórica |
+| 4 | `qwen2.5vl:7b` | Alibaba | ~6 GB | sim | geração anterior da família 1 — isola o efeito da versão |
+| 5 | `qwen3-vl:30b` | Alibaba | 20 GB | **não** | **teto esperado** — a falha marca o limite real da máquina |
+
+**Três famílias distintas de propósito.** A primeira versão desta escada tinha
+todos os degraus da mesma família — concentração que enviesaria o resultado: se
+aquela família fosse ruim no documento-caso, a conclusão seria "modelos não
+servem", quando o certo seria "aquela família não serve".
+
+O degrau 2 é o mais promissor por uma razão técnica registrada, não por
+reputação: ele produz ~640 tokens para uma imagem grande, contra os ~2164 que a
+página custa hoje. **Como a causa medida das respostas vazias foi corte por
+limite de tokens, gerar menos tokens ataca a raiz do problema.**
 
 O degrau 1 é o único comparável com a máquina de referência. Os demais vivem no
 eixo exploratório (ADR-0013): comparam-se **entre as máquinas maiores**, não com a
 pequena.
 
-O degrau 4 existe para falhar. Uma escada que só sobe enquanto funciona não revela
+O degrau 5 existe para falhar. Uma escada que só sobe enquanto funciona não revela
 o teto, e o teto é justamente o que orienta a compra.
 
 ## Escada de texto (o modelo recebe o texto já extraído)
 
-| Degrau | Modelo | Tamanho | Cabe em 12 GB | Papel |
-|---|---|---|---|---|
-| 1 | `qwen3:1.7b` | 1,4 GB | sim | piso — cabe em quase qualquer máquina |
-| 2 | `qwen3:4b` | 2,5 GB | sim | **denominador comum** com a máquina de referência |
-| 3 | `qwen3:8b` | 5,2 GB | sim | isola o efeito do tamanho |
-| 4 | `qwen3:14b` | 9,3 GB | apertado | limite prático dos 12 GB |
-| 5 | `qwen3:30b` | 19 GB | **não** | teto esperado |
+| Degrau | Modelo | Origem | Tamanho | Cabe em 12 GB | Papel |
+|---|---|---|---|---|---|
+| 1 | `qwen3:4b` | Alibaba | 2,5 GB | sim | **denominador comum** com a máquina de referência |
+| 2 | `llama3.1:8b` | Meta | ~4,7 GB | sim | **segunda família** — a mais usada em produção |
+| 3 | `gemma3:12b` | Google | 8,1 GB | sim | **terceira família**, e multimodal: serve às duas rotas |
+| 4 | `qwen3:14b` | Alibaba | 9,3 GB | apertado | limite prático dos 12 GB |
+| 5 | `qwen3:30b` | Alibaba | 19 GB | **não** | teto esperado |
+
+Mesma correção da escada de visão: **três famílias, não uma**. Sem isso, um
+resultado ruim seria atribuído à abordagem quando poderia ser de uma família só.
+
+O `gemma3:12b` aparece nas duas escadas de propósito — é multimodal. Isso permite
+comparar **a mesma família lendo texto e lendo imagem**, o que isola a diferença
+entre as duas rotas sem trocar de fabricante junto. É a comparação mais limpa
+disponível.
 
 A rota de texto é intrinsecamente mais barata: recebe ~649 tokens de entrada
 contra ~2164 da imagem, na mesma página. Se produzir resultado comparável, é a
 rota preferível — e essa comparação nunca foi feita.
+
+## Viés de fabricante: um erro corrigido, e a regra que fica
+
+A primeira versão desta escada tinha **nove degraus da mesma família**. Não foi
+decisão — foi consequência de pesquisar mal: os benchmarks citam muito uma família,
+e eu segui a citação em vez de procurar as alternativas.
+
+O risco é concreto e vale enunciar: se aquela família tivesse desempenho ruim neste
+documento, a conclusão registrada seria *"modelos abertos não servem para tabela"*.
+A conclusão correta seria *"aquela família não serve"* — e a diferença entre as duas
+muda a decisão de infraestrutura.
+
+**Regra que fica: escada de comparação precisa de pelo menos três origens
+distintas.** Uma família pode ter viés de treinamento, licença restritiva, ou
+simplesmente ir mal num tipo de documento. Três origens tornam o resultado
+atribuível à abordagem, não ao fabricante.
+
+Vale para o dimensionamento também: recomendar servidor com base em uma família só
+amarra a decisão a um fornecedor.
 
 ## Descartados, e por quê
 
@@ -104,3 +142,7 @@ Levantamento de julho de 2026:
 - [Local Vision-Language OCR Benchmark](https://nullmirror.com/en/blog/2026-05-24-local-vision-language-ocr-benchmark/)
 - [Best Open-Weight OCR and Document AI Models 2026](https://presenc.ai/research/best-open-weight-ocr-document-ai-models-2026)
 - [Ollama — biblioteca de modelos](https://ollama.com/library/qwen3-vl)
+- [Comparação de VLMs auto-hospedados](https://gigagpu.com/self-hosted-vision-language-model-comparison/)
+- [Multimodal AI: open-source VLMs 2026](https://www.bentoml.com/blog/multimodal-ai-a-guide-to-open-source-vision-language-models)
+- [MiniCPM-V no Ollama](https://ollama.com/library/minicpm-v)
+- [Gemma 3 no Ollama](https://ollama.com/library/gemma3)
