@@ -24,6 +24,8 @@ vale mais que argumento.
 | [0011](0011-unidade-e-esquema-declarados.md) | Unidade e esquema de saída declarados no perfil | `Origem.DERIVADO` definido e validado, produzido por nada |
 | [0012](0012-alinhamento-do-gabarito.md) | Alinhamento por descrição antes de número | Conjunto de reserva media **0%** em rotas que acertam 100% |
 | [0013](0013-desenho-do-experimento-multimaquina.md) | Três eixos de comparação entre máquinas | Confrontar máquinas diferentes mede hardware, não estratégia |
+| [0014](0014-selecao-de-modelos-para-comparacao.md) | Critérios de seleção de modelos, com trade-offs | Nove candidatos da mesma família enviesariam a conclusão |
+| [0015](0015-limite-de-saida-do-modelo.md) | Teto de saída declarável, sem padrão embutido | `done_reason` `length` em 1887–1927 tokens: a resposta era **cortada**, não ausente |
 
 ## Em aberto
 

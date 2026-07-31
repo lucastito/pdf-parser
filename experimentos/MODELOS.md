@@ -19,52 +19,101 @@ quem executa não precise descobrir os parâmetros sozinho: eles vão resolvidos
 
 ## Escada de visão (o modelo lê a página como imagem)
 
-| Degrau | Modelo | Origem | Tamanho | Cabe em 12 GB | Papel no experimento |
-|---|---|---|---|---|---|
-| 1 | `qwen3-vl:4b` | Alibaba | 3,3 GB | sim | **denominador comum** — é o que roda na máquina de referência |
-| 2 | `minicpm-v:8b` | OpenBMB | 5,5 GB | sim | **família diferente**; melhor da classe em reconhecimento de texto, e gera 75% menos tokens por imagem |
-| 3 | `llava:7b` | Universidade (aberto) | 4,7 GB | sim | **terceira família**; linha tradicional, referência histórica |
-| 4 | `qwen2.5vl:7b` | Alibaba | ~6 GB | sim | geração anterior da família 1 — isola o efeito da versão |
-| 5 | `qwen3-vl:30b` | Alibaba | 20 GB | **não** | **teto esperado** — a falha marca o limite real da máquina |
+Cada degrau precisa responder a uma pergunta que os outros não respondem. Modelo
+que não isola variável nova não entra, por melhor que seja sua reputação.
 
-**Três famílias distintas de propósito.** A primeira versão desta escada tinha
-todos os degraus da mesma família — concentração que enviesaria o resultado: se
-aquela família fosse ruim no documento-caso, a conclusão seria "modelos não
-servem", quando o certo seria "aquela família não serve".
+| # | Modelo | Origem | Tam. | OCRBench | DocVQA | Pergunta que só ele responde |
+|---|---|---|---|---|---|---|
+| 1 | `qwen3-vl:4b` | Alibaba | 3,3 GB | — | — | **denominador comum**: é o que roda na máquina de referência |
+| 2 | `minicpm-v:8b` | OpenBMB | 5,5 GB | **852** | — | codificador visual diferente **sobre a mesma base de linguagem** |
+| 3 | `qwen2.5vl:7b` | Alibaba | ~6 GB | ~888 | **96,4** | o melhor medido da classe: define o **teto de qualidade** alcançável |
+| 4 | `gemma3:12b` | Google | 8,1 GB | — | 82,3 | **família independente**, e multimodal: mesma família nas duas rotas |
+| 5 | `qwen3-vl:30b` | Alibaba | 20 GB | — | — | **teto de capacidade**: existe para falhar e marcar o limite da máquina |
 
-O degrau 2 é o mais promissor por uma razão técnica registrada, não por
-reputação: ele produz ~640 tokens para uma imagem grande, contra os ~2164 que a
-página custa hoje. **Como a causa medida das respostas vazias foi corte por
-limite de tokens, gerar menos tokens ataca a raiz do problema.**
+### Por que cada um está aqui
 
-O degrau 1 é o único comparável com a máquina de referência. Os demais vivem no
-eixo exploratório (ADR-0013): comparam-se **entre as máquinas maiores**, não com a
-pequena.
+**Degrau 1 — o único comparável com a máquina de referência.** Sem ele, nenhuma
+comparação entre as máquinas seria legítima (ADR-0013).
 
-O degrau 5 existe para falhar. Uma escada que só sobe enquanto funciona não revela
-o teto, e o teto é justamente o que orienta a compra.
+**Degrau 2 — o mais interessante tecnicamente, e não por reputação.** Duas razões
+medidas:
+
+1. Ele é construído sobre a **mesma base de linguagem** da família do degrau 1
+   (Qwen2-7B), com codificador visual diferente (SigLip-400M). Isso isola a
+   variável *codificador visual* mantendo a base constante — comparação mais
+   limpa que trocar tudo de uma vez.
+2. Produz **~640 tokens** para uma imagem grande, contra os ~2164 que a página
+   custa hoje. Como a causa medida das respostas vazias foi **corte por limite de
+   tokens**, gerar menos tokens ataca a raiz do problema, não o sintoma.
+
+**Degrau 3 — o teto de qualidade.** 96,4 em DocVQA é quase o desempenho humano
+(98,1). Serve de referência superior: se nem ele resolver este documento, a
+conclusão sobre a rota por modelo é forte, não circunstancial.
+
+**Degrau 4 — a única família verdadeiramente independente.** Os degraus 1 a 3
+compartilham base de linguagem; este não. E por ser multimodal, permite comparar
+**a mesma família lendo texto e lendo imagem**, isolando a diferença entre as duas
+rotas sem trocar de fabricante junto.
+
+Seu DocVQA (82,3) é claramente inferior ao do degrau 3 — e é por isso que ele
+entra como **controle de independência**, não como candidato a vencedor.
+
+**Degrau 5 — existe para falhar.** Escada que só sobe enquanto funciona não revela
+o teto, e o teto é o que orienta a decisão de infraestrutura.
+
+### Descartado depois de verificar: `llava:7b`
+
+Estava na versão anterior desta escada como "referência histórica" — justificativa
+fraca, e os números a derrubam: **OCRBench 536** contra 852 e ~888 dos demais, com
+apenas 82 pontos em compreensão de documento, que é exatamente a nossa tarefa.
+
+Custaria 4,7 GB de download e horas de execução em cada máquina para produzir um
+resultado previsivelmente ruim. "Referência histórica" não é pergunta científica;
+é curiosidade — e curiosidade não justifica ocupar um degrau.
 
 ## Escada de texto (o modelo recebe o texto já extraído)
 
-| Degrau | Modelo | Origem | Tamanho | Cabe em 12 GB | Papel |
-|---|---|---|---|---|---|
-| 1 | `qwen3:4b` | Alibaba | 2,5 GB | sim | **denominador comum** com a máquina de referência |
-| 2 | `llama3.1:8b` | Meta | ~4,7 GB | sim | **segunda família** — a mais usada em produção |
-| 3 | `gemma3:12b` | Google | 8,1 GB | sim | **terceira família**, e multimodal: serve às duas rotas |
-| 4 | `qwen3:14b` | Alibaba | 9,3 GB | apertado | limite prático dos 12 GB |
-| 5 | `qwen3:30b` | Alibaba | 19 GB | **não** | teto esperado |
+| # | Modelo | Origem | Tam. | Pergunta que só ele responde |
+|---|---|---|---|---|
+| 1 | `qwen3:4b` | Alibaba | 2,5 GB | **denominador comum** com a máquina de referência |
+| 2 | `qwen3:8b` | Alibaba | 5,2 GB | **efeito do tamanho**, com todo o resto constante |
+| 3 | `gemma3:12b` | Google | 8,1 GB | **família independente**, e a mesma das duas rotas |
+| 4 | `qwen3:14b` | Alibaba | 9,3 GB | limite prático dos 12 GB |
+| 5 | `qwen3:30b` | Alibaba | 19 GB | **teto**: existe para falhar |
 
-Mesma correção da escada de visão: **três famílias, não uma**. Sem isso, um
-resultado ruim seria atribuído à abordagem quando poderia ser de uma família só.
+### Por que cada um está aqui
 
-O `gemma3:12b` aparece nas duas escadas de propósito — é multimodal. Isso permite
-comparar **a mesma família lendo texto e lendo imagem**, o que isola a diferença
-entre as duas rotas sem trocar de fabricante junto. É a comparação mais limpa
-disponível.
+**Degrau 1** — único comparável com a máquina de referência.
 
-A rota de texto é intrinsecamente mais barata: recebe ~649 tokens de entrada
-contra ~2164 da imagem, na mesma página. Se produzir resultado comparável, é a
-rota preferível — e essa comparação nunca foi feita.
+**Degrau 2 — o experimento mais limpo da escada.** Mesma família, mesma geração,
+mesmo treinamento; só o tamanho muda. Qualquer diferença de resultado é atribuível
+ao tamanho, e não a mais nada. É o degrau que responde diretamente *"modelo maior
+lê melhor?"* — a pergunta que sustenta o dimensionamento.
+
+**Degrau 3 — controle de independência.** Os degraus 1, 2, 4 e 5 são a mesma
+família. Sem uma origem externa, um resultado ruim seria indistinguível de "esta
+família é ruim". Ele também é multimodal, o que permite comparar **a mesma família
+lendo texto e lendo imagem** — isolando a diferença entre as rotas sem trocar de
+fabricante junto.
+
+**Degraus 4 e 5** — a escada de capacidade, até falhar.
+
+### Uma alternativa considerada e não incluída: `llama3.1:8b`
+
+Foi cogitada como "a família mais usada em produção". **A justificativa não
+resistiu à verificação:** não encontrei benchmark de extração estruturada que a
+coloque à frente das alternativas nesta tarefa. O que os comparativos mostram é
+vantagem da família do degrau 1 em raciocínio e uso de ferramentas.
+
+Popularidade não é evidência para *esta* tarefa. Se o degrau 3 mostrar que a
+escolha de família importa muito, aí sim vale acrescentar uma quarta origem — mas
+com hipótese, não por prestígio.
+
+### Por que a rota de texto importa
+
+Recebe ~649 tokens de entrada contra ~2164 da imagem, na mesma página. Se produzir
+resultado comparável, é a rota preferível por custo — e essa comparação nunca foi
+feita neste projeto. É a lacuna que a bateria atual está fechando.
 
 ## Viés de fabricante: um erro corrigido, e a regra que fica
 
