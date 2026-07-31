@@ -9,11 +9,11 @@
 
 | | |
 |---|---|
-| Testes | 507 passando, 6 saltados |
-| Cobertura | 81% |
+| Testes | **535 passando**, 6 saltados |
 | Estilo | `flake8` e `black` limpos |
 | Guarda de confidencialidade | 9/9 |
-| ADRs | 17 |
+| ADRs | **19** |
+| Ciclos de importação | **nenhum** (39 módulos) |
 | Rotas com resultado gravado | 8 de 8 — mas a de **visão** precisa ser refeita (seção 0) |
 
 ## O que já está medido
@@ -505,6 +505,26 @@ digitalização; tabela que cruza páginas; identificação do programa gerador.
 - [ ] Mapa de aderência à especificação de referência — vai em `docs/_private/`
 
 ---
+
+## Acoplamento — medido, não afirmado
+
+Verificado em 2026-07-31 sobre os 39 módulos do pacote:
+
+| Indicador | Resultado |
+|---|---|
+| **Ciclos de importação** | **nenhum** |
+| Fan-in mais alto | `modelo` (20) e `portas` (15) — as abstrações |
+| Fan-out mais alto | `cli` (17) e `fabrica` (11) — os pontos de composição |
+| Módulos folha | 9, entre eles `contexto` e `degraus` |
+
+A leitura: ausência de ciclos em 39 módulos indica camadas de verdade. Fan-in
+concentrado nas abstrações é o padrão de ports & adapters — todos dependem do
+contrato, ninguém de implementação. Fan-out alto **só** onde é trabalho conhecer
+as peças; se `fabrica` tivesse fan-out baixo, a fiação estaria espalhada.
+
+Observação sem ação por ora: `lote` importa `extratores.posicional` dentro de
+funções, para calibrar layout. É import local, não dependência estrutural — mas
+é o único ponto onde um módulo de orquestração cita implementação pelo nome.
 
 ## Regras que valem para tudo acima
 
