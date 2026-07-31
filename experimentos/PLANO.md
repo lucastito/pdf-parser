@@ -14,7 +14,7 @@
 | Estilo | `flake8` e `black` limpos |
 | Guarda de confidencialidade | 9/9 |
 | ADRs | 15 |
-| Rotas com resultado gravado | **6 de 8** — faltam as duas de modelo |
+| Rotas com resultado gravado | **8 de 8** — as duas de modelo medidas em 2026-07-31 |
 
 ## O que já está medido
 
@@ -33,9 +33,28 @@ cegas):
 A coluna da direita é a que vale: mede **generalização** para layout que não foi
 usado no ajuste. Três rotas a 100% é evidência forte.
 
-**Rota por modelo:** o modelo lê a página corretamente, mas custa ~1061 s contra
-0,2 s da rota determinística (ADR-0015). Nenhum resultado dela está gravado no
-experimento ainda.
+**Rotas por modelo — medido em 2026-07-31**, uma medição por vez, na página 29:
+
+| Rota | Tarefa | Tempo | Resultado |
+|---|---|---|---|
+| texto (`qwen3:4b`) | página inteira | 2904 s | **31 itens, 100% de acurácia** em `energia_kcal` (31/31) |
+| visão (`qwen3-vl:4b`) | 5 itens | 1078 s | 4 de 5 — leu `135` onde o documento diz `358` |
+| determinística | página inteira | **0,2 s** | 100% |
+
+**A rota de texto funciona de ponta a ponta**, e isso nunca tinha sido medido. Ela
+recebe o texto já extraído, então não comete o erro de leitura de dígito que a
+rota de visão cometeu.
+
+O custo por página inteira é ~14.500× o da rota determinística. Isso não a
+descarta — ela resolve documentos que a determinística não alcança — mas define
+onde cada uma serve.
+
+Um dado que explica muito: na rota de visão, **4043 caracteres foram gastos
+raciocinando para produzir 185 de resposta**. Na de texto, zero raciocínio e 16767
+de resposta. O raciocínio consome o orçamento que o limite de tokens restringe
+(ADR-0015).
+
+Detalhe completo em `resultados/titoslaptop/rotas-por-modelo.json`.
 
 ---
 
@@ -73,6 +92,11 @@ não sabe vira pendência" — e ao mesmo tempo produz a planilha única que o c
 pessoal precisa como entrada.
 
 - [ ] Implementar a consolidação com proveniência (quantas rotas concordaram)
+- [ ] **A votação precisa lidar com conjuntos diferentes de rotas.** Máquinas com
+      mais capacidade rodam modelos que a de referência não roda, e são elas que se
+      parecem com o servidor de destino. Uma rota ausente numa máquina não pode
+      invalidar a consolidação, nem contar como discordância — é ausência, não voto
+      contrário
 - [ ] Métrica **erro × omissão**: omitir vira pendência (bom); errar entra na
       planilha errado (péssimo). Hoje contam igual na acurácia
 - [ ] ADR da decisão

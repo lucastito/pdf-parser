@@ -1,0 +1,34 @@
+{
+  "medicao": "rotas por modelo — viabilidade e custo",
+  "quando": "2026-07-31T04:26:28+00:00",
+  "maquina": "titoslaptop",
+  "documento": "TACO.pdf, página 29",
+  "parametros_fixos": {
+    "num_predict": 16384,
+    "dpi": 150,
+    "think": false
+  },
+  "nota": "Uma medição por vez. O tempo é resultado, então concorrência invalidaria. Casos 2 e 3 foram refeitos: os tempos da primeira rodada ficaram contaminados por execução concorrente.",
+  "casos": {
+    "2-vlm-fatiado-5itens": {
+      "segundos": 1078.4,
+      "done_reason": "stop",
+      "tokens_gerados": 1581,
+      "chars_resposta": 185,
+      "chars_raciocinio": 4043
+    },
+    "3-llm-texto": {
+      "segundos": 2904.2,
+      "done_reason": "stop",
+      "tokens_gerados": 5948,
+      "chars_resposta": 16767,
+      "chars_raciocinio": 0
+    }
+  },
+  "achados": [
+    "A rota de TEXTO extraiu a página inteira: 31 itens em JSON válido, 100% de acurácia em energia_kcal contra o gabarito (31/31), sem corte.",
+    "A rota de VISÃO, fatiada em 5 itens, acertou 4 de 5 — leu 135 onde o documento diz 358. Erro de leitura visual de dígitos, que a rota de texto não comete porque recebe o texto já extraído.",
+    "Custo: texto 2904 s para a página inteira; visão 1078 s para 5 itens. A rota determinística faz a mesma página em 0,2 s com 100%.",
+    "chars_raciocinio: a rota de visão gastou 4043 caracteres raciocinando e produziu 185 de resposta. A de texto gastou 0 e produziu 16767."
+  ]
+}
