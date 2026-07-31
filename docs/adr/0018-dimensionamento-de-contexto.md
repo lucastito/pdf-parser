@@ -134,10 +134,24 @@ alguém sem compromisso com a hipótese em curso.
 - **Duas afirmações publicadas foram retificadas**, não apagadas: a de que a rota
   de visão não preenche planilha, e a de que o raciocínio é o gargalo. Quem leu a
   versão anterior precisa encontrar a correção.
-- **A conclusão correta sobre esta máquina é outra**: com contexto suficiente, a
-  chamada não é cortada — ela não termina em uma hora **em processador**. A
-  limitação é de tempo, não de capacidade, e não se aplica a máquina com placa de
-  vídeo funcional.
+- **A conclusão correta sobre esta máquina é outra.** Medido em três contextos, a
+  falha muda de natureza:
+
+  | Contexto | Desfecho | Quem parou |
+  |---|---|---|
+  | 4096 (padrão) | cortado em **exatamente 4096**, 21 min | o servidor |
+  | 16384 | **>1 h sem terminar** | o cliente, por tempo |
+  | 32768 | **>1 h sem terminar** | o cliente, por tempo |
+
+  Declarar o contexto **não tornou a rota viável nesta máquina** — trocou falha
+  rápida e de diagnóstico enganoso por falha lenta e de diagnóstico claro. A
+  limitação passa a ser **tempo em processador**, não capacidade: o modelo lê a
+  página corretamente, como o caso de 5 itens mostrou.
+
+  Que os dois contextos maiores **não tenham cortado** é a confirmação: se o
+  contexto não fosse o limite atuante, os três teriam parado igual.
+
+  Dado bruto em `experimentos/resultados/titoslaptop/contexto-limite.json`.
 - As medições da rota de visão precisam ser **refeitas** sob contexto declarado.
   Elas mediram o artefato.
 - Os scripts das outras máquinas não configuravam nenhum dos dois parâmetros.

@@ -107,27 +107,36 @@ contexto de 16384 e o modelo cresceu de 3,6 GB para 5,5 GB.
 **Consequência: a conclusão "a rota de visão não preenche planilha nesta classe
 de hardware" mede um artefato de configuração, não o modelo.**
 
-### O que aconteceu ao corrigir o contexto
+### O que aconteceu ao corrigir o contexto — medido, três casos
 
-Com contexto de 16384, a mesma chamada **não terminou em uma hora** — o cliente
-desistiu por tempo limite, não o modelo por corte.
+Dado bruto em `resultados/titoslaptop/contexto-limite.json`.
 
-Isso confirma a causa e **reformula a conclusão**:
+| Caso | Contexto | Desfecho | Quem parou |
+|---|---|---|---|
+| A | 4096 (padrão) | cortado em **exatamente 4096**, 21 min | o servidor |
+| B | 16384 | **>1 h sem terminar** | o cliente, por tempo |
+| C | 32768 | **>1 h sem terminar** | o cliente, por tempo |
 
-| Formulação | Veredito |
-|---|---|
-| ~~"o modelo não consegue preencher planilha"~~ | **errado** — era configuração |
-| "em processador, uma página não cabe em tempo útil" | correto |
+**A causa está confirmada.** O caso A bateu a parede; B e C não bateram parede
+nenhuma. Se o contexto não fosse o limite atuante, os três teriam cortado igual.
 
-A diferença importa para o dimensionamento: a limitação é de **tempo em
-processador**, não de capacidade do modelo. Numa máquina com placa de vídeo
-funcional o mesmo trabalho é ordens de grandeza mais rápido — e é por isso que a
-comparação entre máquinas (ADR-0013) responde uma pergunta que esta máquina
-sozinha não responde.
+**E a conclusão prática mudou de forma, não de veredito.** Corrigir o parâmetro
+**não tornou a rota viável nesta máquina** — trocou uma falha por outra:
 
-**Pendência de medição:** quanto tempo a chamada realmente levaria com contexto
-suficiente. O tempo limite de uma hora foi escolha do script, não resposta do
-servidor.
+| | Antes | Depois |
+|---|---|---|
+| Falha | resposta vazia por corte | não termina em tempo útil |
+| Velocidade | rápida (21 min) | lenta (>1 h) |
+| Diagnóstico | **enganoso** — parecia incapacidade | claro — é a máquina |
+
+Formulação correta: *em processador de baixo consumo, uma página inteira pela
+rota de visão não termina em tempo utilizável*. Isso não é limitação do modelo
+nem de configuração — ele **lê a página corretamente**, como o caso de 5 itens
+mostrou. É capacidade computacional.
+
+**Não medido, e vale medir:** quanto a chamada realmente levaria sem limite de
+cliente, e o comportamento em máquina com placa de vídeo funcional — que é
+justamente o que o experimento multimáquina existe para responder (ADR-0013).
 
 - [ ] Código (TDD): `degraus.py` envia `num_ctx`; propagar por `fabrica.py`,
       `ollama.py`, `extratores/vlm.py`; declarar no perfil
