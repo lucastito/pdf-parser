@@ -2,29 +2,34 @@
 
 Requisitos funcionais + ferramentas/modelos candidatos + plano de avaliação. Requisitos numerados (RF-N). Onde há **várias opções**, estão listadas como candidatas — a escolha sai de trade-off medido e vira um ADR em [docs/adr/](docs/adr/).
 
-> **proposto** = ainda não implementado.
+> **atendido** = implementado **e** medido · **parcial** = implementado, com
+> limite declarado · **proposto** = ainda não implementado.
+>
+> Estado revisado em 2026-07-31 contra o código e as medições. A acurácia citada
+> é contra o **conjunto de reserva** — layout não usado no ajuste —, que é o
+> número que vale.
 
 ---
 
 ## Requisitos funcionais
 
 ### Etapa 1 — Extração determinística
-- **RF-1 — PDF digital (texto real).** Extrair texto e tabelas de PDFs com texto nativo, de forma rápida e barata (sem VLM). *(proposto)*
-- **RF-2 — Fallback OCR.** Em PDFs escaneados de baixa qualidade, cair para OCR clássico. *(proposto)*
-- **RF-3 — Triagem de página.** Decidir por página se é texto nativo (rota determinística) ou imagem/layout complexo (rota Etapa 2). *(proposto)*
+- **RF-1 — PDF digital (texto real).** Extrair texto e tabelas de PDFs com texto nativo, de forma rápida e barata (sem VLM). ***(atendido)*** — quatro rotas independentes; três a **100%**: posicional, pdfplumber e camelot. Uma página em **0,2 s**. Ver ADR-0002, ADR-0006.
+- **RF-2 — Fallback OCR.** Em PDFs escaneados de baixa qualidade, cair para OCR clássico. ***(parcial)*** — rota implementada e medida (**78%** no conjunto de reserva, 99,5% no gabarito principal), mas **nunca exercitada em documento realmente digitalizado**: não temos nenhum. Ver ADR-0007.
+- **RF-3 — Triagem de página.** Decidir por página se é texto nativo (rota determinística) ou imagem/layout complexo (rota Etapa 2). ***(parcial)*** — `triagem.py` classifica por densidade numérica e volume de texto, e toda página recebe classe e motivo. O que falta é **rotear** para estratégias diferentes conforme a classe.
 
 ### Etapa 2 — VLM/LLM
-- **RF-4 — Página como imagem → schema.** Para páginas-imagem ou layout complexo, um VLM lê a página inteira como imagem e extrai direto para o schema (pula parser separado). *(proposto)*
-- **RF-5 — LLM de texto pós-Etapa 1.** Quando a Etapa 1 já extraiu o texto (PDF digital), usar um LLM de texto para estruturar — não precisa VLM. *(proposto)*
-- **RF-6 — On-premise/open-weight.** Sem depender de API proprietária (OpenAI/Claude); modelo roda localmente, limitado à VRAM da máquina. *(proposto)*
+- **RF-4 — Página como imagem → schema.** Para páginas-imagem ou layout complexo, um VLM lê a página inteira como imagem e extrai direto para o schema (pula parser separado). ***(parcial)*** — implementado e medido: o modelo **lê a página corretamente**. O limite é de **tempo em processador**, não de capacidade — ver ADR-0018. Precisa ser remedido sob contexto declarado.
+- **RF-5 — LLM de texto pós-Etapa 1.** Quando a Etapa 1 já extraiu o texto (PDF digital), usar um LLM de texto para estruturar — não precisa VLM. ***(atendido)*** — 31 itens em JSON válido, **100%** em `energia_kcal` contra o gabarito, sem raciocínio. Custo: ~14.500× a rota determinística.
+- **RF-6 — On-premise/open-weight.** Sem depender de API proprietária; modelo roda localmente, limitado à memória da máquina. ***(atendido)*** — tudo local. A relação entre contexto e memória está medida e **prevê fora do intervalo de ajuste** (ADR-0018).
 
 ### Saída estruturada
-- **RF-7 — JSON validado contra schema.** A saída é constrangida a JSON válido contra o schema (um campo por vez, com tipo e unidade quando aplicável), não texto livre pós-processado. O schema é definido por quem usa; o parser é agnóstico ao domínio. *(proposto)*
-- **RF-8 — Destino configurável.** JSON validado → grava no destino escolhido (CSV, banco, API…), sem parsing manual. O destino é parâmetro, não fixo. *(proposto)*
+- **RF-7 — JSON validado contra schema.** A saída é constrangida a JSON válido contra o schema, não texto livre pós-processado. O schema é definido por quem usa; o parser é agnóstico ao domínio. ***(atendido)*** — degraus de saída (esquema completo → JSON livre → texto livre), com o degrau usado registrado junto do resultado. Validação tabular por Pandera. Ver SPEC §4.4, ADR-0011.
+- **RF-8 — Destino configurável.** JSON validado → grava no destino escolhido, sem parsing manual. O destino é parâmetro, não fixo. ***(parcial)*** — porta `Destino` com CSV e JSON implementados. Banco e API ainda não têm adaptador.
 
 ### Operação
-- **RF-9 — Sem prompt manual.** System prompt fixo, versionado, chamado por script/job (disparo ao chegar PDF novo ou em batch agendado). *(proposto)*
-- **RF-10 — Eval antes de produção.** Nenhuma ida a produção com dado real sem avaliação medida (ver plano de eval). *(obrigatório)*
+- **RF-9 — Sem prompt manual.** Prompt fixo, versionado, chamado por script/job. ***(atendido)*** — prompts versionados em `prompts/`, fora do código (ADR-0008); execução em lote sobre pasta (ADR-0010).
+- **RF-10 — Eval antes de produção.** Nenhuma ida a produção com dado real sem avaliação medida. *(obrigatório)* — mecanismo pronto e em uso: gabarito conferido à mão, conjunto de reserva transcrito às cegas, acurácia por campo (ADR-0009, ADR-0012).
 
 ---
 
@@ -51,6 +56,15 @@ Requisitos funcionais + ferramentas/modelos candidatos + plano de avaliação. R
 | **Llama 3.3 / Qwen3 / Mistral / Gemma 3** | LLM texto puro | Usar **depois** do Docling/Marker extrair o texto — não precisa VLM se PDF for digital | 7B–32B: 1 GPU |
 
 **Dimensionamento:** 7B ≈ 24GB · 32B ≈ 24–32GB quantizado · 72B ≈ 2–4× 80GB. **O modelo escolhido deve ser o que a máquina suporta.**
+
+> **Medido neste projeto, e refina os números acima:** o peso do modelo é só uma
+> parte. O **contexto** cobra memória à parte, e a conta é linear e previsível —
+> um modelo de 4B quantizado ocupa 3,6 GB com contexto de 4096 e **8,0 GB** com
+> 32768. A curva ajustada com dois pontos previu o terceiro com **0,4% de erro**.
+>
+> Consequência prática: contexto de 64k pediria ~13 GB **só neste modelo
+> pequeno** e não caberia numa placa de 12 GB. Dimensionar por peso do modelo
+> subestima. Ver [ADR-0018](docs/adr/0018-dimensionamento-de-contexto.md).
 
 **Recomendação prática (a validar):** PDF digital limpo → MinerU/Marker (mais barato/rápido que VLM 7B+ por página). PDF escaneado/foto ruim → VLM ou olmOCR direto na imagem.
 
