@@ -196,16 +196,31 @@ na máquina de referência, e vão fixados no script.
 
 ## O que cada máquina roda
 
-**Máquina de referência (~2 GB):** só o degrau 1 de cada escada. É o denominador
-comum, e é onde a comparação entre todas as máquinas é legítima.
+Quatro envelopes, de fabricantes diferentes. Cada modelo roda na **menor máquina
+que o comporta**; quando couber em mais de uma, roda também na maior — comparar o
+mesmo modelo em envelopes distintos é o que responde "mais capacidade ajuda?".
 
-**Máquinas com folga:** a escada inteira, **um modelo por vez**, do menor ao maior,
-até falhar. Dois modelos disputando memória de vídeo falham por contenção, não por
-incapacidade — e isso produziria um teto falso.
+| Envelope | Escada de visão | Escada de texto |
+|---|---|---|
+| **2 GB** (processador) | `qwen3-vl:4b` | `qwen3:4b` |
+| **6 GB** | + `minicpm-v:8b`, `qwen2.5vl:7b` | + `qwen3:8b` |
+| **12 GB** | + `gemma3:12b` | + `gemma3:12b`, `qwen3:14b` |
+| **16 GB** | + `qwen3-vl:30b` (teto) | + `qwen3:30b` (teto) |
 
-**Entre as máquinas maiores:** se tiverem a mesma capacidade e placas diferentes, a
-comparação isola arquitetura de memória. Se tiverem capacidades diferentes, isola o
-efeito da memória. As duas perguntas são úteis e independentes.
+**O envelope de 6 GB é o mais informativo**, e quase ficou de fora do
+levantamento: ocupa o vão entre "não roda quase nada" e "roda quase tudo", que é
+onde a curva custo × qualidade deve dobrar. Uma escada 2 → 12 → 16 mediria os
+extremos e perderia o joelho.
+
+**O piso de 2 GB executa só o denominador comum** — o modelo que as quatro
+compartilham. Ali uma página pela rota de visão leva **77 minutos** (medido, sem
+limite de cliente), então a bateria inteira custaria semanas. Mas o ponto é
+necessário: sem ele a curva perde o extremo onde a coisa quebra, e "que qualidade
+se consegue sem placa de vídeo" fica sem resposta.
+
+**Um modelo por vez, do menor ao maior, até falhar.** Dois modelos disputando
+memória falham por contenção, não por incapacidade — e isso produziria um teto
+falso.
 
 ## Fontes
 

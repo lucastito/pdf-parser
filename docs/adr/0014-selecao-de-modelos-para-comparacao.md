@@ -1,6 +1,10 @@
 # ADR-0014 — Seleção de modelos: critérios e trade-offs
 
-**Status:** aceito · **Data:** 2026-07-31
+**Status:** aceito, **com revisão de 2026-07-31 (envelopes reais)** · **Data:** 2026-07-31
+
+> **Revisão.** A versão original supunha dois envelopes: ~2 GB e "12 GB". As
+> máquinas disponíveis são **quatro**, com capacidades distintas — e uma delas,
+> de 6 GB, não estava prevista. A alocação das escadas foi refeita abaixo.
 
 ## Contexto
 
@@ -14,6 +18,36 @@ de infraestrutura é direta: **mais capacidade melhora o resultado, ou satura?**
 
 Errar essa resposta custa dinheiro nas duas direções — servidor grande demais
 desperdiça, pequeno demais entrega um sistema que não roda.
+
+## Os quatro envelopes
+
+| Envelope | Papel na escada | O que roda |
+|---|---|---|
+| **2 GB** (processador) | **piso da curva** | denominador comum, e as rotas determinísticas |
+| **6 GB** | degrau baixo | modelos de 4B e 7-8B |
+| **12 GB** | degrau médio | até 12-14B |
+| **16 GB** | teto | 14B com folga; 24-30B quantizado, apertado |
+
+**O envelope de 6 GB é o mais informativo da escada, e quase ficou de fora.** Ele
+ocupa o vão entre "não roda nada" e "roda quase tudo" — que é onde a curva
+custo × qualidade deve dobrar. Uma escada 2 → 12 → 16 mediria os extremos e
+perderia o joelho.
+
+### O piso não é descartável
+
+A máquina de 2 GB roda em processador, e uma página pela rota de visão leva
+**77 minutos** ali (medido, sem limite de cliente). É lento demais para a bateria
+completa — mas isso a torna o **ponto extremo da curva**, não um estorvo.
+
+A pergunta Q2 do protocolo (ADR-0020) é *"mais capacidade melhora ou satura?"*.
+Uma curva 6 → 12 → 16 sem o ponto de 2 GB perde justamente o extremo onde a coisa
+quebra. E "que qualidade se consegue sem placa de vídeo" é pergunta legítima para
+quem decide infraestrutura, raramente respondida porque a literatura mede em
+hardware de centro de dados.
+
+**O que o piso executa:** o **denominador comum** — o modelo que as quatro
+máquinas compartilham, sob as mesmas hipóteses. Não a bateria inteira, que ali
+custaria semanas.
 
 ## O erro que motivou este registro
 
@@ -31,9 +65,11 @@ infraestrutura e amarra a decisão a um fornecedor.
 Um modelo entra se, e só se, responde a uma pergunta que os outros não respondem.
 Quatro critérios, aplicados nesta ordem:
 
-**1. Cabe no envelope.** Máquina de referência: ~2 GB. Máquinas maiores: 12 GB.
-Modelo que não cabe só entra como **teto declarado** — para falhar e marcar o
-limite.
+**1. Cabe no envelope.** Quatro envelopes: 2, 6, 12 e 16 GB. Cada modelo roda na
+**menor máquina que o comporta** — e, quando couber em mais de uma, também numa
+maior, porque comparar o *mesmo* modelo em envelopes diferentes é o que responde
+Q2. Modelo que não cabe em nenhuma só entra como **teto declarado** — para falhar
+e marcar o limite.
 
 **2. Isola uma variável.** Tamanho, codificador visual, família de origem ou
 geração. Modelo que varia tudo ao mesmo tempo não permite atribuir causa.
@@ -73,7 +109,7 @@ forte em vez de circunstancial.
 | 1 | `qwen3:4b` | Alibaba | 2,5 GB | denominador comum |
 | 2 | `qwen3:8b` | Alibaba | 5,2 GB | **tamanho, com todo o resto constante** |
 | 3 | `gemma3:12b` | Google | 8,1 GB | família independente; mesma família nas duas rotas |
-| 4 | `qwen3:14b` | Alibaba | 9,3 GB | limite prático dos 12 GB |
+| 4 | `qwen3:14b` | Alibaba | 9,3 GB | limite prático do envelope de 12 GB |
 | 5 | `qwen3:30b` | Alibaba | 19 GB | teto (falha esperada) |
 
 O degrau 2 é o experimento mais limpo das duas escadas: mesma família, mesma
@@ -91,7 +127,24 @@ as rotas sem trocar de fabricante junto.
 | `llama3.1:8b` | Cogitado por popularidade. Não há benchmark de extração estruturada que o coloque à frente nesta tarefa; os comparativos mostram vantagem da família 1 em raciocínio e ferramentas. **Popularidade não é evidência para esta tarefa** |
 | `granite3.2-vision` | Desqualificado em benchmark independente: saídas malformadas |
 | `deepseek-ocr` | Desqualificado por gerar arquivos vazios **reportando sucesso e tempo baixo** — exatamente a patologia que custou uma sessão de investigação aqui |
-| 32B+ | Não cabem em 12 GB nem quantizados |
+| 32B+ | Não cabem nem no envelope de 16 GB com contexto utilizável |
+
+## Alocação por envelope
+
+Cada modelo na menor máquina que o comporta. Os que couberem em mais de uma
+rodam também na maior — é a comparação do mesmo modelo em hardware diferente que
+responde Q2 (ADR-0020), e ela não custa vaga nova.
+
+| Envelope | Escada de visão | Escada de texto |
+|---|---|---|
+| 2 GB (processador) | `qwen3-vl:4b` (denominador) | `qwen3:4b` (denominador) |
+| 6 GB | + `minicpm-v:8b`, `qwen2.5vl:7b` | + `qwen3:8b` |
+| 12 GB | + `gemma3:12b` | + `gemma3:12b`, `qwen3:14b` |
+| 16 GB | + `qwen3-vl:30b` (teto, falha esperada) | + `qwen3:30b` (teto, falha esperada) |
+
+**O denominador comum é o que amarra a escada.** Sem um modelo que rode nas
+quatro, as máquinas produziriam resultados sem ponto de contato, e a diferença
+entre elas seria indistinguível da diferença entre os modelos que cada uma roda.
 
 Os dois últimos descartes vêm de fonte externa, não de medição própria — e isso
 fica declarado. Se houver tempo sobrando, medir o `deepseek-ocr` tem valor
@@ -112,6 +165,12 @@ justamente por já sabermos diagnosticar a falha dele.
   local é que decide — e pode contradizê-los.
 - O conjunto de máquinas é pequeno e não é amostra estatística. Os resultados
   descrevem aquelas máquinas; extrapolar é hipótese, não conclusão.
+- **As placas são de fabricantes diferentes.** Nada no procedimento pode depender
+  de ferramenta de um fabricante só — vale para detecção de memória, de contenção
+  e de versão de driver (ADR-0019).
+- **Envelope não é o mesmo que desempenho.** Caber na memória diz que o modelo
+  roda, não quanto tempo leva. A máquina de 2 GB executa em processador e é
+  ordens de grandeza mais lenta — por isso recebe só o denominador comum.
 
 ## Fontes
 
