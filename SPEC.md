@@ -151,69 +151,52 @@ Regras que a conversão obedece:
 
 Um modelo pequeno pode devolver **resposta vazia** sem erro algum: o servidor
 responde `200`, a resposta é `""`, e o extrator recebe zero item como se a página
-estivesse em branco.
+estivesse em branco. Numa execução em lote isso vira "processado, 0 registros".
 
-O que distingue esse modo de falha: **ele não se parece com falha**. Não há
-exceção, não há JSON malformado, não há timeout. Uma execução em lote registraria
-"processado, 0 registros" e seguiria.
+**Causa medida: corte pelo limite de tokens de saída.** Três hipóteses foram
+levantadas, e as duas primeiras foram refutadas por medição — registradas aqui
+porque hipótese invalidada é resultado, e sem o registro a busca se repete.
 
-A hipótese inicial atribuía o vazio ao esquema restringido — a gramática de
-decodificação tornando o caminho válido inalcançável. **A medição refutou**, e o
-registro fica porque hipótese invalidada também é resultado:
-
-| Degrau | Segundos | `done_reason` | Tokens gerados | Resposta |
-|---|---|---|---|---|
-| esquema completo | 306,2 | `stop` | 153 | vazia |
-| `format: "json"` | 81,9 | `stop` | 152 | vazia |
-| texto livre, sem restrição | 1055,4 | `length` | 1844 | vazia |
-
-O texto livre, sem restrição alguma, também devolve vazio: a restrição não é a
-causa. Em todos os casos o modelo gera tokens e nada chega ao campo de resposta.
-
-A investigação seguinte descartou também a segunda suspeita — o canal de raciocínio
-do modelo. Repetidos os três degraus com o raciocínio desligado:
-
-| Degrau | Raciocínio ligado | Raciocínio desligado |
+| Hipótese | Veredito | Evidência |
 |---|---|---|
-| esquema completo | 306 s · 153 tokens | 77 s · 152 tokens |
-| `format: "json"` | 82 s · 152 tokens | 79 s · 152 tokens |
-| texto livre | 1055 s · 1844 tokens | 953 s · 1817 tokens |
+| Esquema restringido torna o caminho inalcançável | **refutada** | texto livre, sem restrição, também vem vazio |
+| Canal de raciocínio consome tudo | **refutada como causa isolada** | desligar não mudou os números (152 × 152) |
+| Limite de saída corta a geração | **confirmada** | `done_reason` muda de `stop` para `length` |
 
-Todas vazias. A contagem de tokens quase idêntica indica que o pedido de desligar o
-raciocínio **não está sendo respeitado** por esta combinação de servidor e modelo.
+Cinco prompts na mesma página real, medidos um por vez:
 
-**Correção de registro:** uma versão anterior desta seção dava o raciocínio como
-causa confirmada, a partir de um único teste com prompt de descrição. A medição
-completa não sustentou. Fica registrado porque hipótese invalidada é resultado — e
-porque a próxima pessoa não deve refazer a mesma busca.
+| prompt | `done_reason` | tokens | resposta |
+|---|---|---|---|
+| descreva a imagem | `stop` | 689 | 794 chars |
+| leia a tabela | `length` | 1927 | vazia |
+| leia com campos | `length` | 1923 | vazia |
+| leia em JSON | `length` | 1912 | vazia |
+| leia com guardrails | `length` | 1887 | vazia |
 
-**A única pista firme é o prompt:** um pedido de descrição responde (521 tokens), o
-de extração não (152). Investigação em aberto.
+Descrever uma página cabe; enumerar dezenas de itens não. Elevando o teto para
+8192, a chamada passou a devolver a lista de alimentos correta — mas **ainda
+cortada**. É onde as duas hipóteses se encontram: o raciocínio não é a causa, é o
+que **consome** o orçamento que o limite restringe.
 
-Os degraus permanecem, porque resolvem um problema **diferente e real**: impedem
-que resposta vazia vire "página sem dados" em silêncio, e registram sob qual
-restrição cada resultado foi obtido.
+**Consequência de desenho:** pedir a página inteira de uma vez a um modelo pequeno
+não é viável. Ou se eleva muito o teto, ou se pede menos itens por chamada — as
+duas são variáveis de experimento, não padrões a adivinhar. Nenhum valor de
+`tokens_maximos` é embutido no código (ADR-0008).
 
-A rota por modelo, portanto, tenta a saída em **degraus**, do mais restrito ao mais
-livre:
-
-| Degrau | Como restringe | Custo quando funciona |
-|---|---|---|
-| 1 | esquema completo como gramática | nenhum: a saída já é conforme |
-| 2 | `format: "json"` + validação em Python | uma validação a mais |
-| 3 | texto livre + extração do JSON embutido | validação e recorte do texto |
+Os degraus permanecem por outro motivo, e é real: impedir que resposta vazia vire
+"página sem dados" em silêncio, e registrar sob qual restrição cada resultado foi
+obtido. No experimento, **todos** rodam — parar no primeiro sucesso destrói a
+comparação entre máquinas (ADR-0013).
 
 Regras que a estratégia obedece:
 
-- **O degrau usado é registrado com o resultado.** Sem isso duas execuções não são
-  comparáveis, e a matriz de comparação passaria a medir também a diferença de
-  restrição — o mesmo erro que o ADR-0005 evita na normalização.
-- **A descida é registrada como achado**, não silenciosa: cair de degrau é
-  informação sobre o modelo, não detalhe de implementação.
-- **Resposta vazia é falha, não resultado vazio.** É a distinção que impede uma
+- **O degrau usado é registrado com o resultado**, e o tipo da falha também:
+  `resposta-cortada`, `resposta-vazia` e `sem-estrutura` mandam procurar em
+  lugares diferentes.
+- **Resposta vazia é falha, não resultado vazio** — a distinção que impede uma
   página não lida de virar "página sem dados".
 - O degrau final ainda valida contra o schema. Degradar a *forma* da restrição
-  nunca degrada a **validação** — RF-7 vale nos três degraus.
+  nunca degrada a **validação**: RF-7 vale nos três degraus.
 
 ### 4.5 Validação da saída tabular
 

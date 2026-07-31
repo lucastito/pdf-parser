@@ -46,41 +46,35 @@ não são comparáveis entre si, e o valor é registrado com cada resultado. Ver
 ADR-0007 para a curva medida na rota de reconhecimento óptico — que não é monotônica,
 e o mesmo pode valer aqui.
 
-**Resposta vazia — a causa não é o esquema.** A hipótese inicial era que o esquema
-restringido tornava o caminho válido inalcançável. **A medição refutou.** Os três
-degraus de saída foram medidos com a mesma imagem e a mesma instrução:
+**Resposta vazia: a causa é corte por limite de tokens.** Três hipóteses foram
+levantadas; duas caíram na medição.
 
-| Degrau | Segundos | `done_reason` | Tokens gerados | Resposta |
-|---|---|---|---|---|
-| esquema completo | 306,2 | `stop` | 153 | vazia |
-| `format: "json"` | 81,9 | `stop` | 152 | vazia |
-| texto livre, sem restrição | 1055,4 | `length` | 1844 | vazia |
+*Não é o esquema restringido* — o texto livre, sem restrição alguma, também vinha
+vazio.
 
-O texto livre, sem restrição alguma, também devolve vazio — logo a restrição não é a
-causa. Em todos os casos o modelo **gera tokens** e nada chega ao campo de resposta;
-no último, o orçamento inteiro é consumido.
+*Não é só o raciocínio* — desligá-lo não mudou os números.
 
-**Segunda suspeita, também descartada: o canal de raciocínio.** O modelo declara
-`thinking` entre as capacidades, e a suspeita era que gastasse a geração toda ali.
-Repetidos os três degraus com o raciocínio desligado, a contagem de tokens mudou
-quase nada (152 contra 152; 1817 contra 1844) e as respostas continuaram vazias — o
-pedido de desligar aparentemente não é respeitado por esta combinação de servidor e
-modelo.
+*É o limite de saída.* O motivo do encerramento denuncia: `stop` quando o modelo
+termina, `length` quando é cortado. Pedidos de descrição terminam em ~689 tokens e
+respondem; pedidos de leitura da tabela batem o teto perto de 1900 e voltam vazios,
+cortados antes de fechar.
 
-**O que resta, e é a pista firme: o prompt.** Um pedido de *descrição* da imagem
-responde corretamente (521 tokens, 237 s) — o modelo lê a tabela, identifica os
-nutrientes, as colunas e até a sentinela `Tr`. Este prompt de *extração* devolve
-vazio. Mesma imagem, mesmo modelo, mesma configuração.
+| prompt | `done_reason` | tokens | resposta |
+|---|---|---|---|
+| descreva a imagem | `stop` | 689 | 794 chars |
+| leia a tabela | `length` | 1927 | vazia |
+| leia com estes guardrails | `length` | 1887 | vazia |
 
-Se você está adaptando este prompt e obtém resposta vazia, comece por um prompt
-curto que funcione e vá acrescentando as regras uma a uma — é assim que se descobre
-qual delas trava a geração. Não perca tempo com a restrição de formato nem com o
-raciocínio: os dois já foram medidos e descartados.
+Elevando o teto para 8192, a lista de alimentos saiu correta — e **ainda cortada**.
+É aí que as duas hipóteses se encontram: o raciocínio não é a causa, é o que
+consome o orçamento que o limite restringe.
 
-Os degraus de saída continuam justificados — impedem que resposta vazia vire "página
-sem dados" em silêncio —, mas **não** resolvem este problema.
+**O que fazer ao adaptar este prompt.** Se a resposta vier vazia, verifique o
+`done_reason` antes de mexer nas regras. Se for `length`, o problema não está no
+texto: eleve `tokens_maximos` no perfil, ou peça menos itens por chamada. Mexer nos
+guardrails não vai resolver, e você vai perder tempo como se perdeu aqui.
 
-**Custo medido:** de 82 s a 1055 s por página, em processador. Confirma a rota por
+**Custo medido:** de 569 s a 1057 s por página, em processador. Confirma a rota por
 modelo como processamento em lote, nunca interativo.
 
 ## Histórico

@@ -1,57 +1,60 @@
 """Degraus de saída do modelo: do mais restrito ao mais livre (SPEC §4.4).
 
-Um modelo pequeno pode devolver **resposta vazia** sem erro algum. O que torna
-esse modo de falha traiçoeiro é que **ele não se parece com falha**: não há
-exceção, não há JSON malformado, não há tempo esgotado. O servidor responde `200`,
-a resposta é `""` com `done_reason=stop`, e o extrator recebe zero item — como se
-a página estivesse em branco. Numa execução em lote isso vira "processado, 0
+Um modelo pequeno pode devolver **resposta vazia** sem erro algum: o servidor
+responde `200`, a resposta é `""`, e o extrator recebe zero item — como se a
+página estivesse em branco. Numa execução em lote isso vira "processado, 0
 registros" e segue adiante.
 
-**A causa não é a restrição, e ainda não foi identificada.** A hipótese inicial
-culpava o esquema restringido — a gramática de decodificação tornando o caminho
-válido inalcançável. Medição de 2026-07-30 com `qwen3-vl:4b`, mesma imagem e mesma
-instrução, variando só a restrição e o canal de raciocínio:
+**A causa foi medida: corte pelo limite de tokens.** Três hipóteses foram
+levantadas neste projeto e duas foram refutadas; o registro das três fica porque
+hipótese invalidada também é resultado, e sem ele a próxima pessoa refaz a busca.
 
-| Degrau | Raciocínio ligado | Raciocínio desligado |
-|---|---|---|
-| esquema completo | 306 s · 153 tokens · vazia | 77 s · 152 tokens · vazia |
-| `format: "json"` | 82 s · 152 tokens · vazia | 79 s · 152 tokens · vazia |
-| texto livre | 1055 s · 1844 tokens · vazia | 953 s · 1817 tokens · vazia |
+*Refutada — o esquema restringido.* A suspeita era que a gramática de
+decodificação tornasse o caminho válido inalcançável. Mas o texto livre, **sem
+restrição alguma**, também devolvia vazio.
 
-Duas conclusões, ambas negativas:
+*Refutada como causa isolada — o canal de raciocínio.* Desligá-lo não mudou os
+números (152 contra 152 tokens; 1817 contra 1844).
 
-**A restrição não é a culpada** — o texto livre, sem restrição alguma, também
-devolve vazio.
+*Confirmada — o limite de saída.* Cinco prompts na mesma página real, medidos um
+por vez:
 
-**O raciocínio também não explica** — desligá-lo praticamente não muda os números
-(152 contra 152; 1817 contra 1844). A contagem quase idêntica sugere que
-`think: false` **não está sendo respeitado** por esta combinação de servidor e
-modelo. Uma hipótese anterior dava esta causa como confirmada, a partir de um único
-teste com prompt de descrição; a medição completa não sustentou.
+| prompt | `done_reason` | tokens | resposta |
+|---|---|---|---|
+| descreva a imagem | `stop` | 689 | 794 chars |
+| leia a tabela | `length` | 1927 | vazia |
+| leia com campos | `length` | 1923 | vazia |
+| leia em JSON | `length` | 1912 | vazia |
+| leia com guardrails | `length` | 1887 | vazia |
 
-A única pista firme é o **prompt**: um pedido de descrição responde (521 tokens),
-o de extração não (152). Investigação em aberto.
+O sinal está no motivo do encerramento: `stop` é o modelo terminando, `length` é
+a geração sendo cortada. Descrever uma página cabe em 689 tokens; enumerar
+dezenas de itens não cabe em ~1900, e o corte vem antes de a resposta fechar.
 
-`raciocinar` existe como parâmetro porque poder ligar e desligar é condição para
-medir. O padrão é desligado por ser o caso mais simples, **não** por estar provado
-que resolve.
+Elevando o teto para 8192, a mesma chamada que devolvia vazio passou a devolver a
+lista dos alimentos — corretos e na ordem do documento. Mas a geração **ainda foi
+cortada**, e é aí que as duas hipóteses se encontram: o modelo gasta a maior parte
+do orçamento no canal de raciocínio e só o restante vira resposta. O raciocínio
+não era a causa; é o que **consome** o orçamento que o limite restringe.
 
-Os degraus permanecem porque resolvem um problema **diferente e real** — impedir
+Consequência prática: pedir a página inteira de uma vez a um modelo pequeno não é
+viável. Ou se eleva muito o teto, ou se pede menos itens por chamada — e as duas
+escolhas são variáveis de experimento, não padrões a adivinhar.
+
+Os degraus permanecem porque resolvem um problema **diferente e real**: impedir
 que resposta vazia vire "página sem dados" em silêncio, e registrar sob qual
-restrição cada resultado foi obtido. Eles não consertam o vazio.
+restrição cada resultado foi obtido.
 
-A saída é, então, tentada em degraus:
+A saída é tentada em degraus:
 
 1. **esquema completo** — gramática de decodificação; nada a validar depois;
 2. **`format: "json"`** — sem gramática, com validação em Python;
 3. **texto livre** — o JSON é recortado da prosa e validado.
 
-Duas regras governam a descida, e ambas existem por causa da comparabilidade
-(ADR-0005):
+Duas regras governam a descida, ambas por causa da comparabilidade (ADR-0005):
 
 **O degrau usado é registrado com o resultado.** Sem isso, duas execuções não são
-comparáveis — a matriz passaria a medir também a diferença de restrição, e não a
-diferença entre estratégias.
+comparáveis — a matriz mediria também a diferença de restrição.
 
 **A descida é achado, não detalhe.** Cair de degrau diz algo sobre o modelo, e
 essa informação tem de chegar a quem lê o resultado.
