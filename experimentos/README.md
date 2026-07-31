@@ -7,6 +7,14 @@ em [../docs/adr/](../docs/adr/).
 pode ignorar este diretório por completo — o produto vive na raiz e em
 [../src/parser/](../src/parser/).
 
+## Onde retomar
+
+**[PLANO.md](PLANO.md)** — o que falta, em ordem, com o porquê de cada passo.
+É o ponto de entrada de quem volta ao projeto depois de um tempo.
+
+**[MODELOS.md](MODELOS.md)** — modelos candidatos, com trade-offs e o que foi
+descartado. Ver também [ADR-0014](../docs/adr/0014-selecao-de-modelos-para-comparacao.md).
+
 ## O que há aqui
 
 | Diretório | Conteúdo |
@@ -14,6 +22,7 @@ pode ignorar este diretório por completo — o produto vive na raiz e em
 | `golden/` | gabarito conferido à mão e conjunto de reserva |
 | `resultados/` | uma pasta por máquina, com procedência e dados brutos |
 | `scripts/` | preparação de ambiente e execução de rodada |
+| `documentos/` | as entradas medidas, com impressão digital verificada |
 
 ## Por que existe
 

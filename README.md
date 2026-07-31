@@ -190,3 +190,6 @@ Cada decisão de arquitetura está em [docs/adr/](docs/adr/), com a medição qu
 sustenta. Vale a leitura de quem for evoluir o código: várias registram o número que
 resultaria de fazer diferente, incluindo casos em que a hipótese inicial se mostrou
 errada.
+
+O que ainda falta, com ordem e justificativa, está em
+[experimentos/PLANO.md](experimentos/PLANO.md).

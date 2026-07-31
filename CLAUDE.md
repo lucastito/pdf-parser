@@ -10,6 +10,11 @@ Entrada e saída são **parametrizáveis**: o núcleo não conhece formato de ar
 
 Ver [README.md](README.md) e [REQUISITOS.md](REQUISITOS.md).
 
+**Ao retomar o trabalho:** o plano do que falta, em ordem e com justificativa, está
+em [experimentos/PLANO.md](experimentos/PLANO.md). As decisões e as medições que as
+sustentam estão em [docs/adr/](docs/adr/) — inclusive hipóteses que a medição
+refutou, registradas de propósito para que a busca não se repita.
+
 ## Regra de confidencialidade — leia antes de escrever qualquer coisa
 
 Parte do contexto deste projeto vem de material sob **NDA**.
