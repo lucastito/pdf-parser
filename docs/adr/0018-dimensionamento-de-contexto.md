@@ -1,0 +1,148 @@
+# ADR-0018 — Dimensionamento de contexto: calcular, nunca herdar o padrão
+
+**Status:** aceito · **Data:** 2026-07-31
+
+## Contexto
+
+Uma sessão inteira de medição concluiu que a rota por modelo de visão *"não
+preenche planilha nesta classe de hardware"*. **A conclusão estava errada**, e o
+erro custou caro: virou ADR, foi publicada, e teria ido para os scripts das
+outras máquinas.
+
+A causa não foi falta de medição — foram cinco medições, uma por vez, com o
+motivo de encerramento registrado. Foi **medir bem o parâmetro errado**.
+
+Este ADR registra o achado, o método que falhou, e a regra que impede a
+repetição.
+
+## Dois limites, e o projeto declarava um
+
+O servidor expõe dois parâmetros que soam intercambiáveis e não são:
+
+| Parâmetro | Limita | Padrão |
+|---|---|---|
+| teto de **saída** | quantos tokens o modelo gera | alto |
+| **contexto** | entrada **mais** saída, somadas | **4096** |
+
+O projeto declarava só o primeiro. O segundo herdava o padrão do servidor —
+invisível na configuração, invisível no resultado, e decisivo.
+
+Numa página renderizada como imagem, a **entrada** consome ~2200 tokens. Com
+contexto de 4096, sobram ~1900 para a resposta, e a geração é cortada ali por
+mais alto que esteja o teto de saída.
+
+## A medição que provou
+
+Somando entrada e saída de cada chamada — dois números que vinham em **toda**
+resposta e eram descartados:
+
+| Caso | entrada + saída | soma | encerramento |
+|---|---|---|---|
+| 5 itens (coube) | 2184 + 1581 | 3765 | `stop` |
+| rota de texto (coube) | 1819 + 5948 | 7767 | `stop` |
+| página, com valores | 2227 + 1869 | **4096** | `length` |
+| idem, sem raciocínio | 2233 + 1863 | **4096** | `length` |
+| idem, outra instrução | 2175 + 1921 | **4096** | `length` |
+| controle, teto a 16384 | 2189 + 1907 | **4096** | `length` |
+
+**Quatro casos, com prompts de tamanhos diferentes, parando na mesma soma
+exata.** Isso não é comportamento de modelo — é teto sendo atingido.
+
+O caso que funcionou funcionou porque **coube**, não por ser qualitativamente
+diferente. E a rota de texto ultrapassou 4096 porque, sem imagem, o servidor
+dimensiona o contexto pelo pedido.
+
+Verificação independente: declarando o contexto, o servidor passou a reportar o
+valor pedido e o processo cresceu de 3,6 GB para 5,5 GB. O parâmetro é
+respeitado; só nunca havia sido enviado.
+
+## Decisão
+
+**O contexto é calculado a cada chamada, a partir de medição, e nunca herdado do
+padrão do servidor.**
+
+```
+necessário = entrada_medida + saída_esperada + margem
+viável     = (memória_livre − peso_do_modelo) / custo_por_token
+usar       = min(nativo_do_modelo, viável, necessário)
+```
+
+Três decisões embutidas, cada uma com razão:
+
+**`entrada_medida`, não estimada.** É o termo que faltou. O custo de uma imagem
+em tokens depende da resolução e do codificador visual — não se adivinha. Uma
+chamada barata mede.
+
+**`viável` limita por memória, não por capacidade do modelo.** O limite nativo
+quase nunca é o que aperta: um modelo de 4B suporta 256k de contexto, mas 256k
+pediria ~45 GB.
+
+**`min` dos três.** Pedir mais contexto do que se precisa custa memória sem
+retorno.
+
+### Corolário: a soma é verificada e registrada
+
+Entrada, saída e a soma vão no resultado de toda chamada, e a soma é conferida
+contra o contexto declarado. **Soma igual ao contexto é assinatura de corte**, e
+o diagnóstico deve dizê-lo — não deixar quem lê descobrir sozinho.
+
+## A curva de memória tem poder preditivo
+
+Medindo o processo em três contextos, com um modelo de visão de 4B:
+
+| Contexto | Memória medida | Previsto pela reta de 2 pontos | Erro |
+|---|---|---|---|
+| 4096 | 3,6 GB | — | ajuste |
+| 16384 | 5,5 GB | — | ajuste |
+| 32768 | **8,0 GB** | 8,03 GB | **0,4%** |
+
+A reta foi ajustada com os dois primeiros pontos e **previu o terceiro** — que é
+a diferença entre curva ajustada e curva com poder preditivo. Só a segunda
+sustenta dimensionar máquina que ainda não se tem.
+
+Projeção que isso autoriza: **contexto de 64k pede ~13 GB e não cabe numa placa
+de 12 GB**, mesmo com modelo pequeno.
+
+> **Limites declarados:** a medida é do **processo inteiro** (cache de atenção,
+> buffers e codificador visual), não do cache isolado que a literatura calcula. E
+> vale para **um** modelo — a inclinação depende da arquitetura. Generalizar
+> exige medir outros, e é o que a instrumentação do experimento vai levantar.
+
+## O erro de método, e por que ele fica registrado
+
+Três falhas encadeadas, todas evitáveis:
+
+**1. Aceitar que o sintoma sumiu sem conferir o número.** Elevar o teto de saída
+"resolveu" um caso e a investigação seguiu. As respostas continuaram cortando em
+~1900 tokens com teto declarado de 16384 — contradição visível no dado, não
+conferida.
+
+**2. Descartar o que a resposta já entregava.** Entrada e saída vinham em cada
+chamada. Foi a **soma** delas que revelou a causa. O dado estava ali o tempo
+todo.
+
+**3. Confiar em padrão de servidor.** Um padrão não declarado é número mágico com
+dono externo — contraria o ADR-0008 tanto quanto um número no código, e é pior,
+porque nem aparece.
+
+**A contradição foi apontada de fora**, por quem não estava medindo: *"o teto era
+16384, por que cortou em 1870?"* Vale registrar que a pergunta certa veio de
+alguém sem compromisso com a hipótese em curso.
+
+## Consequências
+
+- **Duas afirmações publicadas foram retificadas**, não apagadas: a de que a rota
+  de visão não preenche planilha, e a de que o raciocínio é o gargalo. Quem leu a
+  versão anterior precisa encontrar a correção.
+- **A conclusão correta sobre esta máquina é outra**: com contexto suficiente, a
+  chamada não é cortada — ela não termina em uma hora **em processador**. A
+  limitação é de tempo, não de capacidade, e não se aplica a máquina com placa de
+  vídeo funcional.
+- As medições da rota de visão precisam ser **refeitas** sob contexto declarado.
+  Elas mediram o artefato.
+- Os scripts das outras máquinas não configuravam nenhum dos dois parâmetros.
+  Teriam medido a mesma parede, com modelos maiores — que consomem **mais**
+  contexto por imagem — e produzido conclusão de infraestrutura errada.
+- Custo: mais um parâmetro por rota, e uma chamada de medição antes da primeira
+  extração. Aceito — a alternativa é herdar em silêncio um limite que decide o
+  resultado.
