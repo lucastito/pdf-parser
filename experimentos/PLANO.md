@@ -107,6 +107,28 @@ contexto de 16384 e o modelo cresceu de 3,6 GB para 5,5 GB.
 **Consequência: a conclusão "a rota de visão não preenche planilha nesta classe
 de hardware" mede um artefato de configuração, não o modelo.**
 
+### O que aconteceu ao corrigir o contexto
+
+Com contexto de 16384, a mesma chamada **não terminou em uma hora** — o cliente
+desistiu por tempo limite, não o modelo por corte.
+
+Isso confirma a causa e **reformula a conclusão**:
+
+| Formulação | Veredito |
+|---|---|
+| ~~"o modelo não consegue preencher planilha"~~ | **errado** — era configuração |
+| "em processador, uma página não cabe em tempo útil" | correto |
+
+A diferença importa para o dimensionamento: a limitação é de **tempo em
+processador**, não de capacidade do modelo. Numa máquina com placa de vídeo
+funcional o mesmo trabalho é ordens de grandeza mais rápido — e é por isso que a
+comparação entre máquinas (ADR-0013) responde uma pergunta que esta máquina
+sozinha não responde.
+
+**Pendência de medição:** quanto tempo a chamada realmente levaria com contexto
+suficiente. O tempo limite de uma hora foi escolha do script, não resposta do
+servidor.
+
 - [ ] Código (TDD): `degraus.py` envia `num_ctx`; propagar por `fabrica.py`,
       `ollama.py`, `extratores/vlm.py`; declarar no perfil
 - [ ] Corrigir as mensagens de erro — hoje mandam aumentar `tokens_maximos`, que
@@ -123,13 +145,27 @@ de hardware" mede um artefato de configuração, não o modelo.**
 O limite **nativo** do modelo quase nunca é o que aperta: um modelo de 4B suporta
 256k de contexto, mas 256k pediria ~45 GB. **Quem manda é a memória.**
 
-Medido: contexto de 4096 → 3,6 GB; contexto de 16384 → 5,5 GB. Ou seja ~0,16 MB
-por token de contexto neste modelo.
+Medido, com um modelo de visão de 4B:
 
-> **Limite da medição, declarado:** são **dois pontos**, e dois pontos definem
-> qualquer reta. A linearidade foi assumida, não testada. Além disso, o número
-> compara o crescimento do **processo inteiro** (cache + buffers + codificador
-> visual), não o cache de atenção isolado que a literatura calcula.
+| Contexto | Memória medida | Previsto pela reta de 2 pontos | Erro |
+|---|---|---|---|
+| 4096 | 3,6 GB | — | — |
+| 16384 | 5,5 GB | — | — |
+| 32768 | **8,0 GB** | 8,03 GB | **0,4%** |
+
+Ou seja ~0,16 MB por token de contexto neste modelo.
+
+**A linearidade foi testada, não assumida.** A reta foi ajustada com os dois
+primeiros pontos e **previu o terceiro** com 0,4% de erro — que é a diferença
+entre curva ajustada e curva com poder preditivo.
+
+Projeção que isso sustenta: **64k de contexto pediria ~13 GB e não cabe em uma
+placa de 12 GB**, mesmo com um modelo pequeno. Com modelos maiores, o teto cai.
+
+> **Limite que continua declarado:** o número compara o crescimento do **processo
+> inteiro** (cache + buffers + codificador visual), não o cache de atenção
+> isolado que a literatura calcula. E vale para **um** modelo — a inclinação
+> depende da arquitetura, e é isso que a instrumentação abaixo vai levantar.
 
 Forma proposta, com uma entrada **medida** e não suposta:
 
