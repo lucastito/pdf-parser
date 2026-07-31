@@ -586,7 +586,9 @@ class TestUsoNoResultado:
         json.dumps(dados)  # levanta se não for serializável
 
         uso = dados["tentativas"][0]["uso"]
-        assert uso == {"entrada": 2189, "saida": 1907, "total": 4096}
+        assert uso["entrada"] == 2189
+        assert uso["saida"] == 1907
+        assert uso["total"] == 4096
 
     def test_o_uso_e_registrado_tambem_em_sucesso(self):
         """Em falha diagnostica; em sucesso alimenta a curva de memória.
@@ -607,11 +609,10 @@ class TestUsoNoResultado:
         resultado = _saida(transporte, contexto=8192).obter("prompt")
 
         assert resultado.tentativas[-1].sucesso
-        assert resultado.tentativas[-1].uso.como_dados() == {
-            "entrada": 2184,
-            "saida": 1581,
-            "total": 3765,
-        }
+        uso = resultado.tentativas[-1].uso.como_dados()
+        assert uso["entrada"] == 2184
+        assert uso["saida"] == 1581
+        assert uso["total"] == 3765
 
     def test_resposta_sem_os_contadores_nao_quebra(self):
         """Servidor que omite os campos não pode derrubar a execução.
@@ -623,8 +624,105 @@ class TestUsoNoResultado:
 
         resultado = _saida(transporte).obter("prompt")
 
-        assert resultado.tentativas[-1].uso.como_dados() == {
-            "entrada": 0,
-            "saida": 0,
-            "total": 0,
+        uso = resultado.tentativas[-1].uso.como_dados()
+        assert uso["entrada"] == 0
+        assert uso["saida"] == 0
+        assert uso["total"] == 0
+
+
+class TestRaciocinioRegistrado:
+    """O canal de raciocínio precisa ser gravado, mesmo desligado no pedido.
+
+    Custou uma medição de 77 minutos: a chamada terminou sozinha, sobrou
+    contexto, gerou 5684 tokens — e a resposta veio **vazia**. O conteúdo tinha
+    ido para o canal de raciocínio, que o servidor devolve preenchido **mesmo
+    com `think: false`**, e que o registro descartava.
+
+    Sem este dado, o sintoma ("vazio") é indistinguível de incapacidade do
+    modelo. Com ele, a causa é imediata.
+    """
+
+    def test_o_raciocinio_e_medido_mesmo_com_think_falso(self):
+        transporte = TransporteRoteirizado(
+            {
+                "response": json.dumps(ITENS),
+                "thinking": "<think>divagando</think>",
+                "eval_count": 100,
+                "prompt_eval_count": 50,
+            }
+        )
+
+        resultado = _saida(transporte).obter("prompt")
+
+        assert resultado.tentativas[-1].uso.raciocinio_chars == 24
+
+    def test_resposta_vazia_com_raciocinio_longo_fica_evidente(self):
+        """O caso real: nada na resposta, tudo no raciocínio.
+
+        Reproduz a medição de 77 min — `stop`, contexto de sobra, milhares de
+        tokens gerados, resposta vazia. Os dois números juntos dizem o que
+        aconteceu; nenhum deles sozinho diria.
+        """
+        so_raciocinio = {
+            "response": "",
+            "thinking": "x" * 4043,
+            "done_reason": "stop",
+            "eval_count": 5684,
+            "prompt_eval_count": 2376,
         }
+        transporte = TransporteRoteirizado(
+            so_raciocinio, dict(so_raciocinio), dict(so_raciocinio)
+        )
+
+        varredura = _saida(transporte, contexto=12271).varrer("prompt")
+        uso = varredura.tentativas[0].uso
+
+        assert uso.raciocinio_chars == 4043
+        assert not uso.bate_no_teto(12271), "não foi corte — sobrou contexto"
+
+    def test_sem_campo_de_raciocinio_registra_zero(self):
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+        resultado = _saida(transporte).obter("prompt")
+
+        assert resultado.tentativas[-1].uso.raciocinio_chars == 0
+
+
+class TestDuracoesDoServidor:
+    """As durações vêm em toda resposta e eram descartadas.
+
+    `eval_duration` separa o tempo de **gerar** do tempo de carregar o modelo e
+    de processar a entrada. Sem essa separação, uma primeira execução — que paga
+    o carregamento — parece mais lenta que as seguintes, e a diferença viraria
+    "resultado" na comparação entre máquinas.
+
+    Tokens por segundo é a métrica que torna máquinas de capacidade diferente
+    comparáveis: tempo absoluto por página mistura tamanho da tarefa com
+    velocidade do hardware.
+    """
+
+    def test_tokens_por_segundo_sai_da_duracao_de_geracao(self):
+        transporte = TransporteRoteirizado(
+            {
+                "response": json.dumps(ITENS),
+                "eval_count": 1000,
+                "prompt_eval_count": 500,
+                # Nanossegundos, como o servidor reporta: 2 s de geração.
+                "eval_duration": 2_000_000_000,
+                "load_duration": 500_000_000,
+                "total_duration": 3_000_000_000,
+            }
+        )
+
+        uso = _saida(transporte).obter("prompt").tentativas[-1].uso
+
+        assert uso.tokens_por_segundo == 500.0
+        assert uso.como_dados()["eval_s"] == 2.0
+        assert uso.como_dados()["load_s"] == 0.5
+
+    def test_sem_duracao_nao_inventa_taxa(self):
+        """Dividir por zero ou supor duração produziria número plausível e falso."""
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS), "eval_count": 1000})
+
+        uso = _saida(transporte).obter("prompt").tentativas[-1].uso
+
+        assert uso.tokens_por_segundo is None

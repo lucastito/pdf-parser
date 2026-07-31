@@ -163,6 +163,14 @@ def main() -> int:
     uso = Uso(
         entrada=dados.get("prompt_eval_count") or 0,
         saida=dados.get("eval_count") or 0,
+        # O canal de raciocínio vem preenchido mesmo com think=false, e
+        # descartá-lo foi o que tornou a primeira rodada desta medição
+        # ininterpretável: 5684 tokens gerados e resposta vazia, sem saber onde
+        # o conteúdo tinha ido parar.
+        raciocinio_chars=len(dados.get("thinking") or ""),
+        eval_ns=dados.get("eval_duration") or 0,
+        load_ns=dados.get("load_duration") or 0,
+        total_ns=dados.get("total_duration") or 0,
     )
     texto = dados.get("response", "")
 
@@ -184,14 +192,22 @@ def main() -> int:
             "uso": uso.como_dados(),
             "bateu_no_contexto": uso.bate_no_teto(contexto),
             "chars_resposta": len(texto),
+            "chars_raciocinio": uso.raciocinio_chars,
             "itens_extraidos": itens,
             "resposta": texto,
+            # Guardado na íntegra: se a resposta vier vazia de novo, é aqui que
+            # se vê o que o modelo produziu, e o diagnóstico não depende de
+            # refazer 77 minutos de medição.
+            "raciocinio": dados.get("thinking") or "",
         }
     )
     saida.write_text(json.dumps(registro, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(f"concluído em {registro['minutos']} min")
     print(f"tokens: entrada {uso.entrada} + saída {uso.saida} = {uso.total}")
+    print(f"raciocínio: {uso.raciocinio_chars} chars  resposta: {len(texto)} chars")
+    if uso.tokens_por_segundo is not None:
+        print(f"velocidade: {uso.tokens_por_segundo:.2f} tokens/s")
     print(f"done_reason: {registro['done_reason']}  itens: {itens}")
     print(f"gravado em {saida}")
     return 0

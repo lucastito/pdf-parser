@@ -147,9 +147,48 @@ class Uso:
     entrada: int = 0
     saida: int = 0
 
+    raciocinio_chars: int = 0
+    """Tamanho do canal de raciocínio.
+
+    Registrado **mesmo quando o raciocínio é pedido desligado**, porque o
+    servidor o devolve preenchido de qualquer forma. Custou uma medição de 77
+    minutos: a chamada terminou sozinha, sobrou contexto, gerou 5684 tokens — e a
+    resposta veio vazia, porque o conteúdo tinha ido para cá.
+
+    Sem este número, "resposta vazia" é indistinguível de incapacidade do modelo.
+    """
+
+    eval_ns: int = 0
+    """Nanossegundos gerando. Separado do total, que inclui carregar o modelo."""
+
+    load_ns: int = 0
+    """Nanossegundos carregando o modelo.
+
+    A primeira execução paga isto e as seguintes não. Sem separar, a primeira
+    pareceria mais lenta e a diferença viraria "resultado" na comparação entre
+    máquinas.
+    """
+
+    total_ns: int = 0
+
     @property
     def total(self) -> int:
         return self.entrada + self.saida
+
+    @property
+    def tokens_por_segundo(self) -> float | None:
+        """Velocidade de geração, ou `None` se o servidor não informou a duração.
+
+        É o que torna máquinas de capacidade diferente comparáveis: tempo
+        absoluto por página mistura tamanho da tarefa com velocidade do
+        hardware.
+
+        Devolve `None` em vez de zero ou de uma estimativa: número inventado aqui
+        entraria na comparação entre máquinas sem nada denunciar.
+        """
+        if not self.eval_ns or not self.saida:
+            return None
+        return self.saida / (self.eval_ns / 1_000_000_000)
 
     def bate_no_teto(self, contexto: int | None) -> bool:
         """A soma atingiu exatamente o contexto configurado?
@@ -159,8 +198,22 @@ class Uso:
         """
         return bool(contexto) and self.total >= (contexto or 0)
 
-    def como_dados(self) -> dict[str, int]:
-        return {"entrada": self.entrada, "saida": self.saida, "total": self.total}
+    def como_dados(self) -> dict[str, Any]:
+        dados: dict[str, Any] = {
+            "entrada": self.entrada,
+            "saida": self.saida,
+            "total": self.total,
+            "raciocinio_chars": self.raciocinio_chars,
+        }
+        if self.eval_ns:
+            dados["eval_s"] = round(self.eval_ns / 1_000_000_000, 3)
+        if self.load_ns:
+            dados["load_s"] = round(self.load_ns / 1_000_000_000, 3)
+        if self.total_ns:
+            dados["total_s"] = round(self.total_ns / 1_000_000_000, 3)
+        if self.tokens_por_segundo is not None:
+            dados["tokens_por_s"] = round(self.tokens_por_segundo, 2)
+        return dados
 
 
 @dataclass(frozen=True)
@@ -516,10 +569,16 @@ class SaidaEmDegraus:
             f"{self.cliente.url}/api/generate", carga, self.cliente.timeout
         )
         # O motivo do encerramento distingue "não respondeu" de "foi cortado";
-        # a soma dos tokens distingue **qual limite** cortou.
+        # a soma dos tokens distingue **qual limite** cortou; e o raciocínio
+        # distingue "não gerou nada" de "gerou no canal errado" (ADR-0018).
+        # Todos já vinham na resposta e eram descartados.
         self._ultimo_uso = Uso(
             entrada=resposta.get("prompt_eval_count") or 0,
             saida=resposta.get("eval_count") or 0,
+            raciocinio_chars=len(resposta.get("thinking") or ""),
+            eval_ns=resposta.get("eval_duration") or 0,
+            load_ns=resposta.get("load_duration") or 0,
+            total_ns=resposta.get("total_duration") or 0,
         )
         return resposta.get("response", ""), resposta.get("done_reason")
 
