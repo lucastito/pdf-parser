@@ -222,6 +222,12 @@ class TestGuardaDeConfidencialidade:
             "extracao posicional de tabela sem grade",
             "conversao de unidade com proveniencia por campo",
             "o parser grava o resultado com procedencia",
+            # Texto científico do próprio documento-caso: os métodos analíticos
+            # citados na tabela nutricional. Bloquear isto impediria versionar o
+            # documento que o experimento mede.
+            "transferidos para eter de petroleo e eter etilico",
+            "American Oil Chemists Society (AOCS)",
+            "determinacao por cromatografia gasosa",
         ]
         termos = self._termos_restritos()
 

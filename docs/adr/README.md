@@ -22,14 +22,18 @@ vale mais que argumento.
 | [0009](0009-avaliacao-como-ferramenta-de-produto.md) | O mecanismo de avaliação é produto; os dados de uma validação não | Quem aponta o parser para documentos próprios faz as mesmas perguntas |
 | [0010](0010-lote-e-diagnostico.md) | Lote como unidade de execução, com decisão de layout por arquivo | Rotação derrubava quatro ferramentas a **zero** de acurácia |
 | [0011](0011-unidade-e-esquema-declarados.md) | Unidade e esquema de saída declarados no perfil | `Origem.DERIVADO` definido e validado, produzido por nada |
+| [0012](0012-alinhamento-do-gabarito.md) | Alinhamento por descrição antes de número | Conjunto de reserva media **0%** em rotas que acertam 100% |
+| [0013](0013-desenho-do-experimento-multimaquina.md) | Três eixos de comparação entre máquinas | Confrontar máquinas diferentes mede hardware, não estratégia |
 
 ## Em aberto
 
 - **Estratégia de saída estruturada por modelo** — chamada de função × decodificação
   guiada × validação com retentativa. Decidir ao implementar a rota por modelo.
 - **Motor de inferência** — depende da infraestrutura disponível.
-- **Composição final do conjunto de validação** — definir o subconjunto não visto
-  reservado para o julgamento final, separado do usado para iterar.
+- ~~**Composição final do conjunto de validação**~~ — **resolvido**. O conjunto de
+  reserva cobre 10 itens em 9 páginas de seções distintas do documento, transcritos
+  às cegas. Foi ele que revelou os defeitos de alinhamento do ADR-0012 e passou a
+  demonstrar generalização: três rotas a 100% em layout não usado no ajuste.
 - **Triagem de página por modelo** — a triagem atual é heurística determinística
   (densidade numérica e volume de texto). Classificar por conteúdo é decisão
   semântica e pode se beneficiar de um modelo. Hipótese a medir contra a baseline.

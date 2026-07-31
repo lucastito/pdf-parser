@@ -253,6 +253,13 @@ Cada item vira teste antes da implementação (TDD).
 | **A1** | Extrator é intercambiável | Um extrator alternativo roda o mesmo golden set sem mudar o núcleo |
 | **A2** | Formato não implementado falha explicitamente | Stub levanta erro claro; nunca simula sucesso |
 | **Q1** | Cobertura de teste ≥ 80% | `pytest --cov` |
+| **G1** | O alinhamento do gabarito não pareia itens diferentes | Numeração divergente casa pela descrição, não por número (ADR-0012) |
+| **G2** | Sentinela é comparada pelo que afirma, não pela grafia | `Tr` do documento casa com a sentinela; `Tr` nunca casa com `NA` nem com zero |
+| **G3** | O conjunto de reserva mede generalização | Cobre seções não usadas no ajuste; acurácia medida contra layout novo |
+| **X1** | Toda rodada registra máquina, entrada, parâmetros e condição | `experimentos/resultados/<maquina>/` com procedência (ADR-0013) |
+| **X2** | O documento medido é o mesmo em todas as máquinas | Impressão digital verificada na suíte |
+| **X3** | Duas medições não rodam ao mesmo tempo na mesma máquina | A segunda falha alto em vez de contaminar as duas |
+| **X4** | No experimento, todos os degraus rodam — não só até o primeiro sucesso | Cada degrau registra sucesso, tipo de falha e tempo |
 
 ## 6. Avaliação
 
