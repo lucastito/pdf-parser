@@ -138,16 +138,27 @@ mostrou. É capacidade computacional.
 cliente, e o comportamento em máquina com placa de vídeo funcional — que é
 justamente o que o experimento multimáquina existe para responder (ADR-0013).
 
-- [ ] Código (TDD): `degraus.py` envia `num_ctx`; propagar por `fabrica.py`,
-      `ollama.py`, `extratores/vlm.py`; declarar no perfil
-- [ ] Corrigir as mensagens de erro — hoje mandam aumentar `tokens_maximos`, que
+- [x] Código (TDD): `degraus.py` envia `num_ctx`; propagar por `fabrica.py`,
+      `ollama.py`, `extratores/vlm.py`
+- [x] **Declarar no perfil** — feito em 2026-07-31. Estava aberto enquanto o
+      resto já funcionava, que é a pior combinação: a correção existia no código
+      e ficava **desligada** no arquivo que as medições usam, então a próxima
+      rodada herdaria o defeito em silêncio. `vlm` recebeu 12271 e `llm` 11650,
+      valores devolvidos por `parser.contexto.dimensionar` a partir da entrada
+      medida — não escolhidos à mão. Procedência em `DEFAULTS`, guarda em
+      `TestPerfisDoProjeto.test_rotas_por_modelo_declaram_contexto`
+- [x] Corrigir as mensagens de erro — hoje mandam aumentar `tokens_maximos`, que
       a medição refuta
-- [ ] **Registrar sempre** `prompt_eval_count`, `eval_count` e a soma: foi a soma
-      que revelou a causa, e ela era descartada
-- [ ] Retificar ADR-0015, `SPEC.md`, `MODELOS.md` e a memória do projeto
-- [ ] ADR novo: dimensionamento de contexto, com a regra — **nunca confiar em
-      padrão de servidor para parâmetro que decide resultado**
-- [ ] Remedir o caso que falhou (extração com valores) sob `num_ctx` correto
+- [x] **Registrar sempre** `prompt_eval_count`, `eval_count` e a soma: foi a soma
+      que revelou a causa, e ela era descartada. `Uso` grava os três, em falha
+      **e** em sucesso, e sobrevive à serialização — coberto por
+      `TestUsoNoResultado`, que faltava: o dado ia para o JSON sem teste algum
+      garantindo que continuasse indo
+- [x] Retificar ADR-0015, `SPEC.md` e a memória do projeto
+- [x] ADR novo: dimensionamento de contexto, com a regra — **nunca confiar em
+      padrão de servidor para parâmetro que decide resultado** (ADR-0018)
+- [ ] Remedir o caso que falhou (extração com valores) sob `num_ctx` correto —
+      **em andamento**, página inteira, sem limite de tempo do cliente
 
 ### Fórmula de dimensionamento de memória
 
