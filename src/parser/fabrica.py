@@ -108,6 +108,7 @@ def _llm(perfil: Perfil, rota: Rota) -> Extrator:
         instrucao=_instrucao(rota),
         degrau_maximo=_degrau_maximo(rota),
         raciocinar=bool(rota.extras.get("raciocinar", False)),
+        tokens_maximos=rota.extras.get("tokens_maximos"),
     )
 
 
@@ -122,6 +123,7 @@ def _vlm(perfil: Perfil, rota: Rota) -> Extrator:
         dpi=rota.dpi,
         degrau_maximo=_degrau_maximo(rota),
         raciocinar=bool(rota.extras.get("raciocinar", False)),
+        tokens_maximos=rota.extras.get("tokens_maximos"),
     )
 
 

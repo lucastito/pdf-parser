@@ -47,6 +47,7 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
         dpi: int = DPI_PADRAO,
         degrau_maximo: Degrau | None = None,
         raciocinar: bool = False,
+        tokens_maximos: int | None = None,
     ) -> None:
         """
         Args:
@@ -69,7 +70,11 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
         self.caminho_pdf = caminho_pdf
         self.dpi = dpi
         self.saida = SaidaEmDegraus(
-            cliente, campos, degrau_maximo=degrau_maximo, raciocinar=raciocinar
+            cliente,
+            campos,
+            degrau_maximo=degrau_maximo,
+            raciocinar=raciocinar,
+            tokens_maximos=tokens_maximos,
         )
         self.degraus_usados: list[Degrau] = []
         """O degrau que produziu cada página, na ordem.

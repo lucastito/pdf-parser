@@ -72,6 +72,7 @@ from typing import Any
 __all__ = [
     "Degrau",
     "Varredura",
+    "RespostaCortada",
     "RespostaVazia",
     "ResultadoDegrau",
     "SaidaEmDegraus",
@@ -102,6 +103,19 @@ class RespostaVazia(ValueError):
     Distinta de `RespostaInvalida`: ali o modelo falou algo inaproveitável; aqui
     ele não falou nada. É a assinatura do colapso do esquema restringido, e
     tratá-la como "página sem dados" é o erro que este módulo existe para impedir.
+    """
+
+
+class RespostaCortada(ValueError):
+    """A geração foi interrompida pelo limite de tokens, antes de terminar.
+
+    Distinta de `RespostaVazia`: ali o modelo não produziu nada; aqui produziu e
+    foi cortado no meio, e o que chega é o pedaço — ou nada, se o corte veio
+    antes de qualquer conteúdo utilizável.
+
+    A distinção decide onde procurar. Vazio manda investigar modelo ou prompt;
+    corte manda aumentar o limite. Confundir os dois custou uma sessão inteira
+    de investigação neste projeto.
     """
 
 
@@ -206,6 +220,7 @@ class SaidaEmDegraus:
         chave: str = "itens",
         degrau_maximo: Degrau | None = None,
         raciocinar: bool = False,
+        tokens_maximos: int | None = None,
     ) -> None:
         """
         Args:
@@ -218,12 +233,18 @@ class SaidaEmDegraus:
             raciocinar: liga o canal de raciocínio do modelo. **Desligado por
                 padrão, por medição** — ver o cabeçalho do módulo. Ligá-lo é
                 escolha legítima para medir o efeito, não o comportamento padrão.
+            tokens_maximos: teto de tokens da resposta. Omitido, vale o padrão do
+                servidor — que **foi a causa medida** das respostas vazias: uma
+                tabela com dezenas de itens não cabe em ~2048 tokens, e a geração
+                era cortada no meio. Nenhum valor é inventado aqui: um teto
+                arbitrário viraria número mágico sem procedência (ADR-0008).
         """
         self.cliente = cliente
         self.campos = campos
         self.chave = chave
         self.degrau_maximo = degrau_maximo
         self.raciocinar = raciocinar
+        self.tokens_maximos = tokens_maximos
 
     def _permitidos(self) -> tuple[Degrau, ...]:
         if self.degrau_maximo is None:
@@ -317,6 +338,16 @@ class SaidaEmDegraus:
             + "\n".join(linhas)
         )
 
+        if all("limite de tokens" in t.motivo for t in tentativas):
+            relato += (
+                "\n\nTodos os degraus foram cortados pelo limite de tokens. É a "
+                "causa medida das respostas vazias neste projeto: a resposta não "
+                "cabe no padrão do servidor e a geração para no meio. Declare "
+                "tokens_maximos (num_predict) maior, ou peça menos itens por "
+                "chamada."
+            )
+            return relato
+
         if all("vazia" in t.motivo for t in tentativas):
             relato += (
                 "\n\nTodos os degraus vieram vazios — inclusive o menos restrito. "
@@ -329,20 +360,25 @@ class SaidaEmDegraus:
         return relato
 
     def _tentar(self, degrau: Degrau, prompt: str, imagens: list[str] | None) -> Any:
-        bruto = self._chamar(degrau, prompt, imagens)
+        bruto, motivo = self._chamar(degrau, prompt, imagens)
 
         if not bruto or not bruto.strip():
-            raise RespostaVazia(
-                "resposta vazia — sinal típico de esquema restringido inalcançável "
-                "para este modelo"
-            )
+            if motivo == "length":
+                raise RespostaCortada(
+                    "geração interrompida pelo limite de tokens antes de terminar. "
+                    "Uma tabela com muitos itens não cabe no padrão do servidor; "
+                    "declare tokens_maximos (num_predict) maior."
+                )
+            raise RespostaVazia("resposta vazia — o modelo encerrou sem emitir conteúdo")
 
         dados = self._estruturar(degrau, bruto)
         if not isinstance(dados, dict) or self.chave not in dados:
             raise ValueError(f"resposta sem a chave {self.chave!r}")
         return dados
 
-    def _chamar(self, degrau: Degrau, prompt: str, imagens: list[str] | None) -> str:
+    def _chamar(
+        self, degrau: Degrau, prompt: str, imagens: list[str] | None
+    ) -> tuple[str, str | None]:
         """Fala com o servidor no formato do degrau.
 
         Usa o transporte do cliente diretamente, em vez de `cliente.gerar`, porque
@@ -365,11 +401,14 @@ class SaidaEmDegraus:
             carga["format"] = "json"
         if imagens:
             carga["images"] = imagens
+        if self.tokens_maximos:
+            carga["options"] = {"num_predict": self.tokens_maximos}
 
         resposta = self.cliente.transporte.enviar(
             f"{self.cliente.url}/api/generate", carga, self.cliente.timeout
         )
-        return resposta.get("response", "")
+        # O motivo do encerramento distingue "não respondeu" de "foi cortado".
+        return resposta.get("response", ""), resposta.get("done_reason")
 
     def _prompt_do_degrau(self, degrau: Degrau, prompt: str) -> str:
         """Quanto menos a gramática restringe, mais a instrução precisa dizer.
@@ -499,6 +538,8 @@ def _classificar_falha(erro: Exception) -> str:
     Colapsar os dois em "falhou" perderia justamente a informação que separa uma
     causa da outra.
     """
+    if isinstance(erro, RespostaCortada):
+        return "resposta-cortada"
     if isinstance(erro, RespostaVazia):
         return "resposta-vazia"
     return "sem-estrutura"

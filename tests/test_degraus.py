@@ -348,3 +348,73 @@ class TestVarredura:
         transporte = TransporteRoteirizado(VAZIO, VAZIO, VAZIO)
         varredura = _saida(transporte, degrau_maximo=Degrau.ESQUEMA_COMPLETO).varrer("prompt")
         assert len(varredura.tentativas) == 3
+
+
+class TestLimiteDeSaida:
+    """Resposta cortada por limite de tokens é a causa medida do vazio.
+
+    Cinco prompts na mesma imagem, com o raciocínio desligado:
+
+    | prompt              | `done_reason` | tokens | resposta |
+    |---------------------|---------------|--------|----------|
+    | descreva a imagem   | `stop`        |    689 | 794 chars|
+    | leia a tabela       | `length`      |   1927 | vazia    |
+    | com campos          | `length`      |   1923 | vazia    |
+    | com formato JSON    | `length`      |   1912 | vazia    |
+    | com guardrails      | `length`      |   1887 | vazia    |
+
+    O que separa os casos não é a restrição nem o texto do prompt: é o
+    **tamanho da resposta pedida**. Descrever uma página cabe; enumerar dezenas
+    de itens não, e a resposta é cortada no meio — voltando vazia.
+
+    O modelo suporta 262144 tokens de contexto. O teto de ~2048 é do servidor.
+    """
+
+    def test_declara_o_limite_de_saida(self):
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+        _saida(transporte, tokens_maximos=8192).obter("prompt")
+
+        opcoes = transporte.chamadas[0].get("options", {})
+        assert opcoes.get("num_predict") == 8192
+
+    def test_sem_limite_declarado_nao_envia_a_opcao(self):
+        """Não inventar valor: sem declaração, vale o padrão do servidor."""
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+        _saida(transporte).obter("prompt")
+
+        assert "num_predict" not in transporte.chamadas[0].get("options", {})
+
+    def test_resposta_cortada_e_diagnosticada_como_corte(self):
+        """`length` com resposta vazia não é 'página sem dados' — é corte.
+
+        Diagnosticar como resposta vazia genérica mandaria quem depura procurar
+        no modelo ou no prompt, quando a correção é aumentar o limite.
+        """
+        cortada = {"response": "", "done_reason": "length", "eval_count": 1927}
+        transporte = TransporteRoteirizado(cortada, cortada, cortada)
+
+        with pytest.raises(TodosOsDegrausFalharam) as erro:
+            _saida(transporte).obter("prompt")
+
+        mensagem = str(erro.value).lower()
+        assert "cortada" in mensagem or "limite" in mensagem
+        assert "num_predict" in mensagem or "tokens_maximos" in mensagem
+
+    def test_corte_e_distinguido_de_vazio_na_varredura(self):
+        """Tipos de falha diferentes agrupam resultados diferentes entre máquinas."""
+        cortada = {"response": "", "done_reason": "length", "eval_count": 1927}
+        transporte = TransporteRoteirizado(cortada, VAZIO, {"response": json.dumps(ITENS)})
+
+        varredura = _saida(transporte).varrer("prompt")
+
+        assert varredura.tentativas[0].tipo_de_falha == "resposta-cortada"
+        assert varredura.tentativas[1].tipo_de_falha == "resposta-vazia"
+
+    def test_o_limite_vale_em_todos_os_degraus(self):
+        transporte = TransporteRoteirizado(
+            VAZIO, {"response": "x"}, {"response": json.dumps(ITENS)}
+        )
+        _saida(transporte, tokens_maximos=4096).obter("prompt")
+
+        for chamada in transporte.chamadas:
+            assert chamada["options"]["num_predict"] == 4096
