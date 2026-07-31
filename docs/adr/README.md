@@ -30,6 +30,7 @@ vale mais que argumento.
 | [0017](0017-consolidacao-por-campo.md) | Consolidar por célula, não escolher planilha *(proposto)* | Três rotas empatam em **100%**; escolher uma descarta a concordância |
 | [0018](0018-dimensionamento-de-contexto.md) | Contexto calculado por medição, nunca herdado do padrão do servidor | Quatro casos, prompts de tamanhos diferentes, parando na **mesma soma exata** de entrada+saída |
 | [0019](0019-ambiente-de-execucao-em-maquina-de-terceiro.md) | O que não se controla em máquina alheia: detectar e declarar, não impedir | Leitura padrão de memória de vídeo **trunca em 4 GB**; exclusividade de placa é impossível |
+| [0020](0020-pre-registro-do-protocolo.md) | Hipóteses, métricas e critério de corte fixados **antes** da bateria *(proposto)* | Registrar depois é indistinguível de escolher o que favorece a conclusão; as "8 hipóteses" eram citadas desde o ADR-0016 **sem nunca terem sido enumeradas** |
 
 ## Em aberto
 
