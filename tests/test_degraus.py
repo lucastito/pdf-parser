@@ -244,16 +244,19 @@ class TestRaciocinio:
     def test_vazio_em_todos_os_degraus_orienta_a_investigacao(self):
         """A mensagem tem de dizer o que já foi descartado, não repetir a busca.
 
-        Sem isso, quem esbarrar nisso vai refazer as mesmas medições que já foram
-        feitas — e chegar às mesmas duas conclusões negativas.
+        São **três** hipóteses medidas e refutadas: restrição de formato,
+        raciocínio, e o teto de saída. A terceira custou uma sessão inteira, e é
+        a que mais engana — o sintoma de corte é idêntico ao de resposta vazia.
         """
         transporte = TransporteRoteirizado(VAZIO, VAZIO, VAZIO)
         with pytest.raises(TodosOsDegrausFalharam) as erro:
             _saida(transporte).obter("prompt")
 
         mensagem = str(erro.value).lower()
-        assert "prompt" in mensagem, "a mensagem precisa apontar a pista atual"
         assert "restrição" in mensagem or "restricao" in mensagem
+        assert "raciocínio" in mensagem or "raciocinio" in mensagem
+        assert "contexto" in mensagem, "a causa real precisa ser a primeira a checar"
+        assert "prompt" in mensagem, "a pista para quando não há corte"
 
 
 class TestVarredura:
@@ -350,8 +353,12 @@ class TestVarredura:
         assert len(varredura.tentativas) == 3
 
 
-class TestLimiteDeSaida:
-    """Resposta cortada por limite de tokens é a causa medida do vazio.
+class TestTetoDeSaida:
+    """O teto de saída é declarável — mas **não** é o limite que corta.
+
+    Renomeada de `TestLimiteDeSaida`: "limite" sem qualificação sugeria que esta
+    classe cobria o limite atuante, e ela cobre o outro parâmetro. Quem corta é
+    o contexto — ver `TestContexto`.
 
     Cinco prompts na mesma imagem, com o raciocínio desligado:
 
@@ -367,10 +374,10 @@ class TestLimiteDeSaida:
     **tamanho da resposta pedida**. Descrever uma página cabe; enumerar dezenas
     de itens não, e a resposta é cortada no meio — voltando vazia.
 
-    **Retificado (ADR-0018):** o limite que corta é o **contexto**, que soma
-    entrada e saída, não o teto de saída. Ver `TestContexto`. O teto continua
-    declarável, e os testes desta classe seguem válidos — o que mudou foi
-    entender qual dos dois limites atua.
+    O que estes testes afirmam continua valendo: o teto é declarado quando
+    pedido, e omitido quando não. O que mudou é a leitura da tabela acima —
+    aqueles ~1900 tokens não eram o teto de saída sendo atingido, e sim a soma
+    de entrada e saída batendo no contexto (ADR-0018).
     """
 
     def test_declara_o_limite_de_saida(self):
@@ -391,7 +398,13 @@ class TestLimiteDeSaida:
         """`length` com resposta vazia não é 'página sem dados' — é corte.
 
         Diagnosticar como resposta vazia genérica mandaria quem depura procurar
-        no modelo ou no prompt, quando a correção é aumentar o limite.
+        no modelo ou no prompt, quando a causa é um limite.
+
+        **Aqui só se afirma que houve corte.** Qual parâmetro corrigir é assunto
+        de `TestContexto`: a primeira versão deste teste aceitava mensagem que
+        citasse `tokens_maximos`, e continuou verde depois de a medição refutar
+        esse conselho — porque a mensagem nova cita o mesmo termo para dizer que
+        **não** resolve. Asserção frouxa mantém teste vivo sem o sentido.
         """
         cortada = {"response": "", "done_reason": "length", "eval_count": 1927}
         transporte = TransporteRoteirizado(cortada, cortada, cortada)
@@ -399,9 +412,7 @@ class TestLimiteDeSaida:
         with pytest.raises(TodosOsDegrausFalharam) as erro:
             _saida(transporte).obter("prompt")
 
-        mensagem = str(erro.value).lower()
-        assert "cortada" in mensagem or "limite" in mensagem
-        assert "num_predict" in mensagem or "tokens_maximos" in mensagem
+        assert "cortad" in str(erro.value).lower() or "limite" in str(erro.value).lower()
 
     def test_corte_e_distinguido_de_vazio_na_varredura(self):
         """Tipos de falha diferentes agrupam resultados diferentes entre máquinas."""
@@ -499,6 +510,32 @@ class TestContexto:
         mensagem = str(erro.value).lower()
         assert "contexto" in mensagem
         assert "num_ctx" in mensagem
+
+    def test_a_mensagem_nao_manda_elevar_so_o_teto_de_saida(self):
+        """Guarda contra a regressão que já aconteceu.
+
+        Este é o teste que faltava: a versão anterior da mensagem mandava
+        elevar `tokens_maximos`, e o teste que a cobria aceitava a citação do
+        termo sem exigir o que se dizia dele. Aqui se afirma que, se o termo
+        aparecer, é para **negar** que resolva sozinho.
+        """
+        cortada = {
+            "response": "",
+            "done_reason": "length",
+            "eval_count": 1907,
+            "prompt_eval_count": 2189,
+        }
+        transporte = TransporteRoteirizado(cortada, cortada, cortada)
+
+        with pytest.raises(TodosOsDegrausFalharam) as erro:
+            _saida(transporte, tokens_maximos=16384).obter("prompt")
+
+        mensagem = str(erro.value).lower()
+        if "tokens_maximos" in mensagem:
+            assert "não resolve" in mensagem or "nao resolve" in mensagem, (
+                "citar tokens_maximos sem negar que resolva reintroduz o conselho "
+                f"que a medição refutou: {mensagem}"
+            )
 
     def test_a_soma_de_entrada_e_saida_e_registrada(self):
         """Foi a **soma** que revelou a causa, e ela vinha em toda resposta.

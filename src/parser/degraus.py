@@ -425,11 +425,14 @@ class SaidaEmDegraus:
         if all("vazia" in t.motivo for t in tentativas):
             relato += (
                 "\n\nTodos os degraus vieram vazios — inclusive o menos restrito. "
-                "Comportamento já medido neste projeto com modelo de visão pequeno: "
-                "a restrição de formato não é a causa, e desligar o raciocínio "
-                "também não resolveu. A pista é o prompt — um pedido de descrição "
-                "responde onde o de extração não. Comece por um prompt curto que "
-                "funcione e acrescente as regras uma a uma."
+                "Três hipóteses já foram medidas e refutadas neste projeto: a "
+                "restrição de formato não é a causa, desligar o raciocínio não "
+                "resolveu, e elevar só o teto de saída também não.\n"
+                "Confira primeiro os tokens: se houver corte, some entrada e "
+                "saída e compare com o contexto — foi essa a causa real, e o "
+                "sintoma é idêntico ao de resposta vazia (ADR-0018). Se não "
+                "houver corte, aí sim a pista é o prompt: um pedido de descrição "
+                "responde onde o de extração não."
             )
         return relato
 
