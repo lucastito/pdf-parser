@@ -44,6 +44,22 @@ resposta saiu correta e ainda cortada, porque a maior parte do orçamento foi ga
 raciocinando. O raciocínio não causa o vazio; consome o orçamento que o limite
 restringe.
 
+**Adendo de 2026-07-31 — não há como desligá-lo.** As duas formas documentadas
+foram medidas na mesma página:
+
+| Forma | Raciocínio gerado | Resposta |
+|---|---|---|
+| `think: false` | 4043 caracteres | 185 caracteres |
+| `/no_think` no prompt | **6254 caracteres** | **vazia** |
+
+A segunda forma **piorou**. A questão fica fechada: o raciocínio é inevitável nesta
+combinação de servidor e modelo, e é o gargalo da rota de visão.
+
+Consequência medida: pedir extração **com valores** — o caso de uso real — devolve
+resposta vazia nas duas configurações. A rota de visão lista nomes, mas não preenche
+planilha nesta classe de hardware. A rota de **texto**, no mesmo pedido, gasta zero
+raciocinando e produz 16767 caracteres com 100% de acurácia.
+
 ## Decisão
 
 **O teto de saída é declarável e não tem padrão embutido no código.**

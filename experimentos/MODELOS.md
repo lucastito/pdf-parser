@@ -163,10 +163,17 @@ na máquina de referência, e vão fixados no script.
 | medições simultâneas | **nunca** | duas concorrentes inflam o tempo das duas, e aqui o tempo é o resultado |
 | `done_reason` | **sempre registrado** | `stop` = terminou; `length` = cortado. Foi ele que revelou a causa do vazio |
 
-> **Em aberto:** como desligar o canal de raciocínio. O parâmetro `think: false` é
-> enviado e **não é respeitado** por esta combinação de servidor e modelo — a
-> contagem de tokens não muda. A forma alternativa (`/no_think` no prompt) está em
-> medição. O valor final entra aqui quando fechar.
+> **Fechado em 2026-07-31: não há como desligar o raciocínio** nesta combinação de
+> servidor e modelo. As duas formas foram medidas:
+>
+> | Forma | Raciocínio gerado |
+> |---|---|
+> | `think: false` | 4043 caracteres |
+> | `/no_think` no prompt | **6254 caracteres** — piorou |
+>
+> O raciocínio é o gargalo da rota de visão: consome o orçamento de tokens que a
+> resposta precisaria. Na rota de texto o mesmo pedido gasta **zero** raciocinando
+> e produz 16767 caracteres de resposta.
 
 ## O que cada máquina roda
 

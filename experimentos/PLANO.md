@@ -37,9 +37,19 @@ usado no ajuste. Três rotas a 100% é evidência forte.
 
 | Rota | Tarefa | Tempo | Resultado |
 |---|---|---|---|
-| texto (`qwen3:4b`) | página inteira | 2904 s | **31 itens, 100% de acurácia** em `energia_kcal` (31/31) |
-| visão (`qwen3-vl:4b`) | 5 itens | 1078 s | 4 de 5 — leu `135` onde o documento diz `358` |
+| texto (`qwen3:4b`) | página inteira, **com valores** | 2904 s | **31 itens, 100%** em `energia_kcal` (31/31) |
+| visão (`qwen3-vl:4b`) | 5 itens, só nomes+energia | 1078 s | 4 de 5 — leu `135` onde o documento diz `358` |
+| visão (`qwen3-vl:4b`) | página, **com valores** | 1026 s | **resposta vazia** — não atende o caso de uso |
 | determinística | página inteira | **0,2 s** | 100% |
+
+**A rota de visão não preenche planilha nesta classe de hardware.** Listar nomes
+funciona; extrair os campos com valores devolve vazio nas duas configurações
+testadas (`think: false` e `/no_think`). O motivo é o mesmo do ADR-0015: o
+raciocínio consome ~5000 caracteres do orçamento e não sobra nada para a resposta.
+
+**Não há como desligar o raciocínio** neste servidor com este modelo. As duas
+formas foram medidas: `think: false` gerou 4043 caracteres de raciocínio,
+`/no_think` gerou **6254** — piorou. A questão fica fechada.
 
 **A rota de texto funciona de ponta a ponta**, e isso nunca tinha sido medido. Ela
 recebe o texto já extraído, então não comete o erro de leitura de dígito que a

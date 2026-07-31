@@ -1,6 +1,6 @@
 {
   "medicao": "rotas por modelo — viabilidade e custo",
-  "quando": "2026-07-31T04:26:28+00:00",
+  "quando": "2026-07-31T06:04:27+00:00",
   "maquina": "titoslaptop",
   "documento": "TACO.pdf, página 29",
   "parametros_fixos": {
@@ -23,12 +23,34 @@
       "tokens_gerados": 5948,
       "chars_resposta": 16767,
       "chars_raciocinio": 0
+    },
+    "4-no_think": {
+      "segundos": 1320.3,
+      "done_reason": "length",
+      "tokens_gerados": 1921,
+      "chars_resposta": 0,
+      "chars_raciocinio": 6254
+    },
+    "5-vlm-com-valores": {
+      "segundos": 1025.7,
+      "done_reason": "length",
+      "tokens_gerados": 1869,
+      "chars_resposta": 0,
+      "chars_raciocinio": 5006
+    },
+    "6-vlm-com-valores-no_think": {
+      "segundos": 931.1,
+      "done_reason": "length",
+      "tokens_gerados": 1863,
+      "chars_resposta": 0,
+      "chars_raciocinio": 5818
     }
   },
   "achados": [
-    "A rota de TEXTO extraiu a página inteira: 31 itens em JSON válido, 100% de acurácia em energia_kcal contra o gabarito (31/31), sem corte.",
-    "A rota de VISÃO, fatiada em 5 itens, acertou 4 de 5 — leu 135 onde o documento diz 358. Erro de leitura visual de dígitos, que a rota de texto não comete porque recebe o texto já extraído.",
-    "Custo: texto 2904 s para a página inteira; visão 1078 s para 5 itens. A rota determinística faz a mesma página em 0,2 s com 100%.",
-    "chars_raciocinio: a rota de visão gastou 4043 caracteres raciocinando e produziu 185 de resposta. A de texto gastou 0 e produziu 16767."
+    "ROTA DE TEXTO: extraiu a página inteira — 31 itens em JSON válido, 100% de acurácia em energia_kcal (31/31), 2904 s, sem corte.",
+    "ROTA DE VISÃO, listando nomes: funciona (4 de 5 itens corretos; leu 135 onde o documento diz 358 — erro de leitura de dígito).",
+    "ROTA DE VISÃO, extraindo COM VALORES: resposta VAZIA nas duas configurações (casos 5 e 6). done_reason=length, ~1865 tokens, 5000+ chars gastos no canal de raciocínio e zero de resposta. É o caso de uso real — preencher planilha — e a rota de visão não o atende nesta classe de hardware.",
+    "/no_think NÃO funciona: 6254 chars de raciocínio contra 4043 com think:false. Piorou. As duas formas de desligar o raciocínio foram medidas e nenhuma surte efeito nesta combinação de servidor e modelo.",
+    "O raciocínio é o gargalo: consome o orçamento de tokens que a resposta precisaria. A rota de texto gasta ZERO raciocinando e produz 16767 chars."
   ]
 }
