@@ -47,6 +47,24 @@ funciona; extrair os campos com valores devolve vazio nas duas configurações
 testadas (`think: false` e `/no_think`). O motivo é o mesmo do ADR-0015: o
 raciocínio consome ~5000 caracteres do orçamento e não sobra nada para a resposta.
 
+> **REVISÃO EM CURSO (2026-07-31, madrugada).** O Lucas apontou uma contradição
+> que invalida parte da conclusão acima: o teto era 16384, mas os casos pararam em
+> **~1870 tokens** com `done_reason=length`. Se o teto fosse respeitado, não
+> cortaria ali.
+>
+> Causa provável, apontada por bug conhecido do Ollama: **`num_ctx` tem padrão
+> 2048 e limita entrada + saída juntas**. A imagem consome ~2164 tokens de
+> entrada — sobraria zero para a resposta, o que explicaria o vazio exatamente.
+> Ver [issue 11892](https://github.com/ollama/ollama/issues/11892).
+>
+> **Teste em andamento:** `scratchpad/numctx.py` compara `num_predict` sozinho,
+> com `num_ctx` explícito, e com contexto de 32k. Resultado em
+> `scratchpad/numctx.json`.
+>
+> **Se o `num_ctx` for a causa, a conclusão "a rota de visão não preenche
+> planilha" está ERRADA** — seria configuração faltando, não limitação do modelo.
+> Ler o resultado antes de usar a conclusão acima.
+
 **Não há como desligar o raciocínio** neste servidor com este modelo. As duas
 formas foram medidas: `think: false` gerou 4043 caracteres de raciocínio,
 `/no_think` gerou **6254** — piorou. A questão fica fechada.
