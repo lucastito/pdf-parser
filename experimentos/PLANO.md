@@ -13,8 +13,8 @@
 | Cobertura | 81% |
 | Estilo | `flake8` e `black` limpos |
 | Guarda de confidencialidade | 9/9 |
-| ADRs | 15 |
-| Rotas com resultado gravado | **8 de 8** — as duas de modelo medidas em 2026-07-31 |
+| ADRs | 17 |
+| Rotas com resultado gravado | 8 de 8 — mas a de **visão** precisa ser refeita (seção 0) |
 
 ## O que já está medido
 
@@ -42,28 +42,19 @@ usado no ajuste. Três rotas a 100% é evidência forte.
 | visão (`qwen3-vl:4b`) | página, **com valores** | 1026 s | **resposta vazia** — não atende o caso de uso |
 | determinística | página inteira | **0,2 s** | 100% |
 
-**A rota de visão não preenche planilha nesta classe de hardware.** Listar nomes
-funciona; extrair os campos com valores devolve vazio nas duas configurações
-testadas (`think: false` e `/no_think`). O motivo é o mesmo do ADR-0015: o
-raciocínio consome ~5000 caracteres do orçamento e não sobra nada para a resposta.
-
-> **REVISÃO EM CURSO (2026-07-31, madrugada).** O Lucas apontou uma contradição
-> que invalida parte da conclusão acima: o teto era 16384, mas os casos pararam em
-> **~1870 tokens** com `done_reason=length`. Se o teto fosse respeitado, não
-> cortaria ali.
+> ### ⚠ A linha "resposta vazia" acima está RETIFICADA — leia a seção 0
 >
-> Causa provável, apontada por bug conhecido do Ollama: **`num_ctx` tem padrão
-> 2048 e limita entrada + saída juntas**. A imagem consome ~2164 tokens de
-> entrada — sobraria zero para a resposta, o que explicaria o vazio exatamente.
-> Ver [issue 11892](https://github.com/ollama/ollama/issues/11892).
+> A conclusão registrada era *"a rota de visão não preenche planilha nesta classe
+> de hardware"*. **Ela mede um artefato de configuração, não o modelo.**
 >
-> **Teste em andamento:** `scratchpad/numctx.py` compara `num_predict` sozinho,
-> com `num_ctx` explícito, e com contexto de 32k. Resultado em
-> `scratchpad/numctx.json`.
+> A causa é o **limite de contexto**, que o projeto não declarava: o padrão do
+> servidor limita entrada e saída **juntas**, e a imagem consome quase todo o
+> espaço. Provado por aritmética — quatro casos, com prompts de tamanhos
+> diferentes, parando na **mesma soma exata**. Ver a seção 0.
 >
-> **Se o `num_ctx` for a causa, a conclusão "a rota de visão não preenche
-> planilha" está ERRADA** — seria configuração faltando, não limitação do modelo.
-> Ler o resultado antes de usar a conclusão acima.
+> A conclusão sobre o **raciocínio** continua de pé: foi medida de forma
+> independente. Mas o peso dela cai — se o contexto for suficiente, o raciocínio
+> deixa de ser fatal e passa a ser apenas custo.
 
 **Não há como desligar o raciocínio** neste servidor com este modelo. As duas
 formas foram medidas: `think: false` gerou 4043 caracteres de raciocínio,
@@ -86,15 +77,88 @@ Detalhe completo em `resultados/titoslaptop/rotas-por-modelo.json`.
 
 ---
 
+## 0. Retificação do limite de contexto — faça isto primeiro
+
+**Por que antes de tudo:** uma conclusão publicada está errada, e os scripts das
+outras máquinas reproduziriam o mesmo defeito com modelos maiores.
+
+### O que foi provado
+
+O teto declarado era `num_predict=16384`, mas as respostas cortavam em ~1870
+tokens com `done_reason=length`. Somando **entrada + saída** de cada medição:
+
+| Caso | entrada + saída | soma | motivo |
+|---|---|---|---|
+| fatiado, 5 itens | 2184 + 1581 | 3765 | `stop` |
+| rota de texto | 1819 + 5948 | 7767 | `stop` |
+| `/no_think` | 2175 + 1921 | **4096** | `length` |
+| com valores | 2227 + 1869 | **4096** | `length` |
+| valores + `/no_think` | 2233 + 1863 | **4096** | `length` |
+| controle | 2189 + 1907 | **4096** | `length` |
+
+**Quatro casos, prompts de tamanhos diferentes, mesma soma exata.** O padrão de
+`num_ctx` no Ollama é 4096 e limita entrada e saída **juntas**; a imagem consome
+~2200 de entrada. O `num_predict` nunca foi o limite atuante — o caso que
+funcionou funcionou porque **coube**.
+
+Verificação independente: com `num_ctx` explícito, o servidor passou a reportar
+contexto de 16384 e o modelo cresceu de 3,6 GB para 5,5 GB.
+
+**Consequência: a conclusão "a rota de visão não preenche planilha nesta classe
+de hardware" mede um artefato de configuração, não o modelo.**
+
+- [ ] Código (TDD): `degraus.py` envia `num_ctx`; propagar por `fabrica.py`,
+      `ollama.py`, `extratores/vlm.py`; declarar no perfil
+- [ ] Corrigir as mensagens de erro — hoje mandam aumentar `tokens_maximos`, que
+      a medição refuta
+- [ ] **Registrar sempre** `prompt_eval_count`, `eval_count` e a soma: foi a soma
+      que revelou a causa, e ela era descartada
+- [ ] Retificar ADR-0015, `SPEC.md`, `MODELOS.md` e a memória do projeto
+- [ ] ADR novo: dimensionamento de contexto, com a regra — **nunca confiar em
+      padrão de servidor para parâmetro que decide resultado**
+- [ ] Remedir o caso que falhou (extração com valores) sob `num_ctx` correto
+
+### Fórmula de dimensionamento de memória
+
+O limite **nativo** do modelo quase nunca é o que aperta: um modelo de 4B suporta
+256k de contexto, mas 256k pediria ~45 GB. **Quem manda é a memória.**
+
+Medido: contexto de 4096 → 3,6 GB; contexto de 16384 → 5,5 GB. Ou seja ~0,16 MB
+por token de contexto neste modelo.
+
+> **Limite da medição, declarado:** são **dois pontos**, e dois pontos definem
+> qualquer reta. A linearidade foi assumida, não testada. Além disso, o número
+> compara o crescimento do **processo inteiro** (cache + buffers + codificador
+> visual), não o cache de atenção isolado que a literatura calcula.
+
+Forma proposta, com uma entrada **medida** e não suposta:
+
+```
+necessário = entrada_medida + saída_esperada + margem
+viável     = (memória_livre − peso_do_modelo) / custo_por_token
+usar       = min(nativo_do_modelo, viável, necessário × folga)
+```
+
+Foi exatamente `entrada_medida` que faltou: supôs-se que o teto bastava sem
+medir quanto a imagem consumia.
+
+- [ ] Instrumentar o experimento para gravar, a cada execução: contexto pedido,
+      memória do processo, tokens de entrada e de saída, modelo, máquina.
+      **Custo zero de tempo** — os números já passam pela chamada e são
+      descartados. Com 10 modelos × várias máquinas, a fórmula deixa de ser
+      heurística de um ponto e vira ajuste sobre dezenas
+- [ ] Medir o custo por token do modelo de **texto** da mesma família e tamanho:
+      isola o custo do codificador visual, e é a comparação mais informativa
+      disponível
+
 ## 1. Fechar a medição das rotas por modelo
 
-**Por que primeiro:** sem isso, a comparação tem um buraco — 6 de 8 rotas medidas.
-E os parâmetros descobertos aqui vão fixados no script das outras máquinas.
+**Por que:** sem isso, a comparação tem um buraco — 6 de 8 rotas medidas. E os
+parâmetros descobertos aqui vão fixados no script das outras máquinas.
 
 - [ ] Bateria da rota de texto — 8 casos pareados com os da visão
-- [ ] Consolidar os parâmetros num só lugar: teto de saída, `dpi`, degrau, e
-      **como desligar o raciocínio** (em aberto: `think: false` não é respeitado;
-      falta medir `/no_think`)
+- [ ] Consolidar os parâmetros num só lugar: contexto, teto de saída, `dpi` e
+      degrau
 - [ ] Rodar `parser experimento` com as rotas de modelo e gravar em
       `experimentos/resultados/`
 - [ ] Varredura de degraus contra o servidor real, gravada no experimento
@@ -234,24 +298,133 @@ declara 9 páginas e 5 campos.
 
 ## 4. Preparar as outras máquinas
 
-**Por que depois:** os parâmetros descobertos no item 1 vão fixados no script. Rodar
-antes significaria mandar configuração mal ajustada, e a comparação mediria o ajuste
-em vez da máquina.
+**Por que depois:** os parâmetros descobertos nos itens 0 e 1 vão fixados no
+script. Rodar antes significaria mandar configuração mal ajustada, e a comparação
+mediria o ajuste em vez da máquina.
 
-- [ ] **Revisar os dois scripts**: sintaxe validada, ensaio antes de rodar, guarda
-      contra medições concorrentes, dependências e modelos baixados, log legível,
-      branch e PR automáticos
-- [ ] **Guia para leigos**: um comando, mensagem clara a cada passo, e o que enviar
-      ao Lucas se falhar
+**Premissa que mudou:** as máquinas têm placas de fabricantes **diferentes**
+(NVIDIA, AMD e Intel). Nada pode depender de ferramenta de um fabricante só.
+
+### 4.1 Detecção de ambiente — verificada, não suposta
+
+**A memória de vídeo reportada por WMI é errada acima de 4 GB.** O campo
+`AdapterRAM` é inteiro de 32 bits: uma placa de 12 GB reporta 4 GB. Um script que
+decidisse o modelo por esse número mandaria a máquina grande rodar como pequena.
+
+Fonte correta, **neutra de fabricante**: o registro do Windows, em
+`HardwareInformation.qwMemorySize` (64 bits). Verificado nesta máquina; as
+ferramentas de fabricante servem só para confirmar.
+
+- [ ] Ler do registro; cruzar com as demais fontes e **alertar em discordância**
+- [ ] **Gráfico integrado não tem esse campo** — usa memória do sistema
+      dinamicamente. É caso distinto, não erro
+- [ ] **Máquina com duas placas** (integrada + dedicada) é comum em portátil:
+      escolher a correta e reportar, **nunca somar**
+
+### 4.2 Contenção — o experimento divide a máquina com o dono dela
+
+Um jogo aberto durante a medição contamina o tempo, e **nada no número denuncia**.
+É a mesma classe de erro das duas medições concorrentes, que já custou uma
+refação.
+
+**Exclusividade de placa de vídeo não é possível**, e é limitação do sistema
+operacional: o agendador é multiplexado por projeto, não há como reservá-la, e
+quando a memória enche o driver despeja por prioridade — o processo em primeiro
+plano ganha do nosso. Impedir outro programa de abrir exigiria privilégio
+administrativo e interceptação de processos, que é comportamento de software
+malicioso.
+
+O que funciona: os **contadores de desempenho do sistema** expõem nome e
+identificador do processo sem depender de fabricante. Verificado.
+
+- [ ] Detectar o intruso e **nomeá-lo** no aviso — "feche o programa X"
+- [ ] **Pausar entre chamadas, nunca durante**: matar uma geração de 20 minutos
+      pela metade não recupera nada
+- [ ] **Chamada interrompida não retoma — refaz.** O servidor não expõe ponto de
+      retomada, e o tempo daquela medição já estaria contaminado de qualquer forma
+- [ ] **Blocos pequenos** (um modelo × uma configuração × uma página) limitam a
+      perda a uma chamada
+- [ ] Retomar **sozinho** quando o intruso fechar, **e** aceitar tecla — mas a
+      tecla **só vale com a placa livre**; senão recusa e repete o alerta
+
+### 4.3 Contaminação silenciosa — a que produz número plausível e errado
+
+- [ ] **Modelo que não cabe na memória cai para o processador** e fica ordens de
+      grandeza mais lento. Sairia como "esta máquina é lenta"
+- [ ] **Redução por temperatura**: as primeiras medições saem mais rápidas que as
+      últimas, e a diferença viraria "resultado"
+- [ ] Modo de economia de energia; modelo residual de rodada anterior na memória
+
+### 4.4 Robustez e integridade
+
+- [ ] Download falho, disco cheio, suspensão automática, reinicialização por
+      atualização, antivírus
+- [ ] **Servidor pré-instalado em versão diferente invalida a comparação** entre
+      máquinas: detectar e registrar, não só assumir
+- [ ] Impressão digital do documento: garantir que todas leem o **mesmo** arquivo
+- [ ] Registrar versão de tudo — servidor, driver, interpretador, modelo
+- [ ] Verificar o isolamento em clone limpo: nenhuma máquina vê o resultado da
+      outra
+
+### 4.5 Experiência de quem executa
+
+- [ ] **Execução em blocos sequenciais**, com log em arquivo e retomada do último
+      bloco concluído
+- [ ] **Estimativa de tempo calibrada na própria máquina** pelo primeiro bloco —
+      uma estimativa da máquina de referência erraria por fator grande
+- [ ] **Saída acessível a leitor de tela** — requisito real, não hipotético.
+      Barra desenhada com caracteres e sobrescrita no terminal não expõe objeto de
+      acessibilidade; a primitiva nativa do interpretador expõe. Usar a nativa
+- [ ] **Guia para leigos**: um comando, mensagem clara a cada passo, e o que
+      enviar de volta se falhar
 - [ ] **Escada de modelos** — ver `MODELOS.md` e ADR-0014. Um modelo por vez, do
       menor ao maior, até falhar
-- [ ] Verificar o isolamento em clone limpo: nenhuma máquina vê o resultado da outra
 
-## 5. Ampliar o alcance
+## 5. Vocabulário de características, e o roteiro que ele destrava
+
+**O entregável final do projeto** é diferente do que existe hoje. Hoje temos
+*"esta rota acertou X% neste documento"*. O que serve ao consumidor é: **dado um
+documento com estas características, use esta estratégia com esta configuração.**
+
+**O vocabulário vem antes dos documentos**, e a ordem importa: sem saber o que
+procurar, a coleta traz dez documentos que exercitam a mesma característica. O
+vocabulário torna a coleta eficiente — poucos documentos, muitas características.
+
+### O que o diagnóstico já detecta
+
+`src/parser/diagnostico.py` cobre **quatro** características, cada uma com ação
+recomendada, e a estrutura `Achado(codigo, severidade, detalhe, acao)` já é o
+encaixe da taxonomia:
+
+| Detectado | Severidade |
+|---|---|
+| página rotacionada | bloqueia |
+| ausência de camada de texto / camada parcial | bloqueia / alerta |
+| texto vertical | alerta |
+| mapa de caracteres incompleto | alerta |
+
+Hoje ele **descreve**. O roteiro exige que **recomende**.
+
+### Candidatas da literatura, ainda não cobertas
+
+Tabela sem bordas (alinhamento por espaço em branco); células mescladas e
+cabeçalho hierárquico; registro que ocupa várias linhas; múltiplas colunas de
+texto; documento misto (parte digital, parte digitalizada); ruído e inclinação de
+digitalização; tabela que cruza páginas; identificação do programa gerador.
+
+- [ ] Taxonomia completa, marcando **detectável hoje** × **exige código** ×
+      **exige inspeção manual** — é a lista de compras dos documentos
+- [ ] Evoluir o diagnóstico de descritivo para **prescritivo**
+- [ ] Benchmark de patologias, depois que os documentos existirem
+
+> **Limite que fica declarado:** o roteiro só pode afirmar sobre característica
+> **medida em documento real**. Hoje há **um** documento — tabela rotacionada,
+> texto nativo, 11 colunas, sem imagem. Toda a medição descreve esse caso. Regra
+> de decisão sem documento que a exercite é hipótese, não resultado.
+
+## 5b. Ampliar o alcance
 
 - [ ] Adapters de outros formatos: XLSX, DOCX, TXT, XML (hoje só PDF)
-- [ ] Benchmark de patologias: PDF escaneado, tabela horizontal, duas colunas.
-      **Precisa de documentos** — não temos nenhum com essas características
 
 ## 6. Depois dos pull requests
 
