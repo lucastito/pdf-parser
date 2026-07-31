@@ -184,6 +184,35 @@ class TestPerfisDoProjeto:
         for caminho in prompts:
             carregar_prompt(caminho)
 
+    def test_rotas_por_modelo_declaram_contexto(self):
+        """Sem declaração vale o padrão do servidor, e ele foi a causa medida.
+
+        O padrão do Ollama é 4096 e limita entrada **mais** saída. Uma página
+        renderizada consome ~2200 só de entrada, então o que sobra não comporta a
+        resposta — e o corte volta como resposta vazia, sintoma que já custou uma
+        sessão inteira de investigação atribuída ao modelo errado (ADR-0018).
+
+        O código sabe enviar `num_ctx` desde então, mas o perfil não o declarava:
+        a correção estava disponível e desligada, que é a pior das combinações,
+        porque a próxima medição herdaria o defeito em silêncio.
+
+        Este teste vale para o perfil **real**, não para fixture — é o arquivo que
+        as medições usam.
+        """
+        from pathlib import Path
+
+        raiz = Path(__file__).resolve().parent.parent
+        for caminho in (raiz / "perfis").glob("*.json"):
+            perfil = carregar_perfil(caminho)
+            for nome in ("llm", "vlm"):
+                rota = perfil.rotas.get(nome)
+                if rota is None:
+                    continue
+                assert rota.extras.get("contexto"), (
+                    f"{caminho.name}: a rota {nome!r} não declara 'contexto' e "
+                    "herdaria o padrão de 4096 do servidor"
+                )
+
 
 class TestPadraoDeRotaIndependeDeComoFoiCriada:
     """O padrão por rota tem de valer nos dois caminhos de construção.

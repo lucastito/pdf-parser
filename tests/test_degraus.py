@@ -556,3 +556,75 @@ class TestContexto:
         motivo = varredura.tentativas[0].motivo
         assert "2189" in motivo and "1907" in motivo, motivo
         assert "4096" in motivo, motivo
+
+
+class TestUsoNoResultado:
+    """Os tokens precisam chegar ao **JSON**, não só à mensagem de erro.
+
+    A distinção não é preciosismo. `test_a_soma_de_entrada_e_saida_e_registrada`
+    afirma que os números aparecem no texto do motivo — texto que serve a quem
+    depura na hora, e que nenhuma análise posterior consegue agregar.
+
+    O que alimenta a curva de memória por contexto (ADR-0018) é o dado
+    estruturado gravado em `experimentos/resultados/`. Se `uso` se perdesse na
+    serialização, o sintoma seria silencioso: os arquivos continuariam válidos,
+    só que sem a única coluna que revelou a causa da sessão passada.
+
+    Custo zero: os números já vêm em toda resposta do servidor.
+    """
+
+    def test_o_uso_sobrevive_a_serializacao(self):
+        cortada = {
+            "response": "",
+            "done_reason": "length",
+            "eval_count": 1907,
+            "prompt_eval_count": 2189,
+        }
+        transporte = TransporteRoteirizado(cortada, cortada, cortada)
+
+        dados = _saida(transporte, contexto=4096).varrer("prompt").como_dados()
+        json.dumps(dados)  # levanta se não for serializável
+
+        uso = dados["tentativas"][0]["uso"]
+        assert uso == {"entrada": 2189, "saida": 1907, "total": 4096}
+
+    def test_o_uso_e_registrado_tambem_em_sucesso(self):
+        """Em falha diagnostica; em sucesso alimenta a curva de memória.
+
+        Gravar só no fracasso deixaria a curva sem os pontos que interessam —
+        são as execuções que terminam que dizem quanto contexto uma página
+        realmente custa.
+        """
+        transporte = TransporteRoteirizado(
+            {
+                "response": json.dumps(ITENS),
+                "done_reason": "stop",
+                "eval_count": 1581,
+                "prompt_eval_count": 2184,
+            }
+        )
+
+        resultado = _saida(transporte, contexto=8192).obter("prompt")
+
+        assert resultado.tentativas[-1].sucesso
+        assert resultado.tentativas[-1].uso.como_dados() == {
+            "entrada": 2184,
+            "saida": 1581,
+            "total": 3765,
+        }
+
+    def test_resposta_sem_os_contadores_nao_quebra(self):
+        """Servidor que omite os campos não pode derrubar a execução.
+
+        Vale para versões diferentes entre as máquinas do experimento: ausência
+        do contador é dado faltante, não falha de extração.
+        """
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+
+        resultado = _saida(transporte).obter("prompt")
+
+        assert resultado.tentativas[-1].uso.como_dados() == {
+            "entrada": 0,
+            "saida": 0,
+            "total": 0,
+        }

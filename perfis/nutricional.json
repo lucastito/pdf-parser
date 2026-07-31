@@ -72,6 +72,7 @@
       "modelo": "qwen3:4b",
       "prompt": "prompts/extracao-tabela-texto.md",
       "timeout": 3600.0,
+      "contexto": 11650,
       "campos": [
         "identificador",
         "energia_kcal",
@@ -86,6 +87,7 @@
       "dpi": 150,
       "prompt": "prompts/extracao-tabela-visao.md",
       "timeout": 3600.0,
+      "contexto": 12271,
       "campos": [
         "identificador",
         "energia_kcal",

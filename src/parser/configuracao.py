@@ -87,6 +87,23 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "origem": "ADR-0005",
         "porque": "erro relativo aceito na comparação numérica; '42' e '42.0' são iguais",
     },
+    "vlm.contexto": {
+        "valor": 12271,
+        "origem": "ADR-0018, via parser.contexto.dimensionar",
+        "porque": (
+            "entrada medida de 2233 (página a 150 dpi) mais a maior saída observada "
+            "(5948), vezes a folga de 1,5. Não é escolha: é o que a fórmula devolve. "
+            "O padrão do servidor, 4096, não comporta nem a entrada mais a resposta"
+        ),
+    },
+    "llm.contexto": {
+        "valor": 11650,
+        "origem": "ADR-0018, via parser.contexto.dimensionar",
+        "porque": (
+            "entrada medida de 1819 (texto já extraído) mais 5948 de saída, vezes 1,5. "
+            "Menor que o da rota de visão porque texto custa menos que imagem na entrada"
+        ),
+    },
 }
 
 
