@@ -119,13 +119,30 @@ responde.
 
 **Pergunta:** qual a melhor configuração de cada modelo?
 
-Uma página basta. Se um modelo erra a leitura numa página, erra em 23. Variar
-hipótese aqui é barato e informativo.
+**Página 29, e a mesma em todas as máquinas.** Foi a usada nas medições desta
+sessão — texto e imagem verificados por impressão digital. Se cada máquina triasse
+numa página diferente, as configurações vencedoras não seriam comparáveis.
 
-Ao fim, cada modelo tem **uma** configuração vencedora — e os que não atingirem um
-mínimo são eliminados, não avançam.
+**Uma página basta, e isso foi verificado, não suposto.** As páginas de dados são
+estruturalmente idênticas:
 
-Custo: ~29 h se reduzirmos a 4 hipóteses (as que discriminaram nesta sessão).
+| Página | Rotação | Palavras | Imagens | Colunas |
+|---|---|---|---|---|
+| 29 | 90° | 546 | 0 | 11 |
+| 33 | 90° | 495 | 0 | 11 |
+| 41 | 90° | 524 | 0 | 11 |
+| 45 | 90° | 463 | 0 | 11 |
+| 47 | 90° | 546 | 0 | 11 |
+
+Mesma rotação, mesma sequência de unidades no cabeçalho, sem imagens. Só o conteúdo
+muda. **Acrescentar páginas do mesmo formato custaria 3× o tempo sem acrescentar
+informação** — o que a ferramenta faz numa, faz nas outras.
+
+**Quando ampliar:** se aparecer página com formato diferente — tabela vertical,
+outro número de colunas, imagem embutida, orientação distinta. Aí a página nova
+testa algo que a 29 não testa, e entra. É critério de conteúdo, não de quantidade.
+
+Custo: ~29 h com 4 hipóteses (as que discriminaram nesta sessão).
 
 ### Fase 2 — preenchimento: **23 páginas, 1 configuração**
 
@@ -136,6 +153,16 @@ hipótese varia aqui — variar tornaria as planilhas incomparáveis.
 
 Custo: ~56 h para 3 modelos sobreviventes. As 6 rotas determinísticas fazem as 23
 páginas em segundos.
+
+**O corte tem zona de empate.** Modelos que não se distinguem estatisticamente
+entre si avançam **todos** — a consolidação por campo aproveita a diversidade, e
+cortar por ranking dentro da margem de erro seria decisão sem base.
+
+O limiar exato **não é fixado agora**: depende de como os resultados se
+distribuírem. A amostra de uma página são ~155 valores (31 itens × 5 campos), o
+que sustenta distinguir um modelo claramente ruim de um bom, mas **não** distinguir
+96% de 98%. O corte será desenhado para o que a amostra sustenta, com o número
+registrado junto da justificativa.
 
 ### Por que a separação é metodologicamente correta
 
