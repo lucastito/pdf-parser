@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from parser.modelo import Campo, Registro
+from parser.modelo import Campo, Registro, Sentinela
 
 __all__ = ["Comparacao", "ResultadoCampo", "ResultadoExtrator", "Veredito", "avaliar"]
 
@@ -144,6 +144,37 @@ def _valor_de(campo: Campo | None) -> object:
     return campo.valor
 
 
+_CANONICAS = frozenset(s.value for s in Sentinela)
+"""Nomes canônicos das sentinelas, para reconhecer o que o extrator devolve."""
+
+
+def _sentinela_de(valor: object) -> str | None:
+    """O nome canônico da sentinela, se o texto for uma.
+
+    O gabarito escreve a sentinela como ela aparece **no documento** (`Tr`, `NA`,
+    `*`); o extrator devolve o nome canônico do modelo (`traco`,
+    `nao_analisado`). São o mesmo valor, e compará-los como texto os tratava como
+    erro — penalizando extração perfeita por diferença de grafia, justamente nos
+    campos que mais têm sentinela.
+
+    A tabela vem da normalização, e não é reescrita aqui: duas listas de
+    sentinelas divergiriam, e a divergência apareceria como erro de extração.
+    """
+    if valor is None:
+        return None
+    texto = str(valor).strip()
+    if not texto:
+        return None
+
+    from parser.normalizacao import _SENTINELAS
+
+    sentinela = _SENTINELAS.get(texto.casefold())
+    if sentinela is not None:
+        return sentinela.value
+    # Já pode vir no formato canônico, vindo do extrator.
+    return texto.casefold() if texto.casefold() in _CANONICAS else None
+
+
 def _equivalentes(esperado: object, obtido: object, tolerancia: float) -> bool:
     esperado_num = _como_numero(esperado)
     obtido_num = _como_numero(obtido)
@@ -152,6 +183,14 @@ def _equivalentes(esperado: object, obtido: object, tolerancia: float) -> bool:
         if esperado_num == 0:
             return abs(obtido_num) <= tolerancia
         return abs(esperado_num - obtido_num) / abs(esperado_num) <= tolerancia
+
+    # Sentinelas se comparam pelo que **afirmam**, não pela grafia. Mas uma
+    # sentinela nunca equivale a outra: `Tr` diz "quantidade desprezível" e `NA`
+    # diz "não sabemos" (ADR-0004). Nem equivale a número: `Tr` não é zero.
+    sentinela_esperada = _sentinela_de(esperado)
+    sentinela_obtida = _sentinela_de(obtido)
+    if sentinela_esperada is not None or sentinela_obtida is not None:
+        return sentinela_esperada is not None and sentinela_esperada == sentinela_obtida
 
     return str(esperado).strip().casefold() == str(obtido).strip().casefold()
 

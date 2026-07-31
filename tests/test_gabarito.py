@@ -280,3 +280,33 @@ class TestAlinhamentoPorDescricao:
         assert (
             resultado.acuracia == 1.0
         ), "casou pelo número com o alimento errado em vez de casar pela descrição"
+
+    def test_descricao_fragmentada_pela_ferramenta_ainda_casa(self, tmp_path):
+        """Algumas ferramentas quebram palavras no meio: `"Arroz, integra l"`.
+
+        Medido: o pdfplumber produz `"69 Abobora, p esco ço, crua"`. A descrição
+        não bate exata, o alinhamento caía no número, e o número casava com outro
+        alimento — 40% de acurácia numa rota que lê corretamente.
+
+        Comparar sem espaços resolve, e não afrouxa: duas descrições diferentes
+        continuam diferentes depois de remover espaços.
+        """
+        from parser.gabarito import medir_acuracia
+
+        gabarito = self._gabarito(tmp_path, '1,"Abóbora, pescoço, crua",25\n')
+        registros = [
+            self._registro("1 Arroz, integral, cozido", 124.0),
+            self._registro("69 Abobora, p esco ço, crua", 25.0),
+        ]
+
+        assert (
+            medir_acuracia("teste", registros, gabarito).acuracia == 1.0
+        ), "descrição fragmentada não casou, e o número casou com o alimento errado"
+
+    def test_ignorar_espacos_nao_junta_alimentos_diferentes(self, tmp_path):
+        from parser.gabarito import medir_acuracia
+
+        gabarito = self._gabarito(tmp_path, '1,"Arroz, integral, cru",360\n')
+        registros = [self._registro("2 Arroz, integral, cozido", 124.0)]
+
+        assert medir_acuracia("teste", registros, gabarito).acuracia == 0.0

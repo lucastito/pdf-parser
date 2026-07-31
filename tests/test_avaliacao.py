@@ -128,3 +128,57 @@ class TestComparacaoEntreExtratores:
     def test_tempo_e_registrado(self):
         r = avaliar("e", {}, {}, segundos=1.5)
         assert r.segundos == 1.5
+
+
+class TestSentinelaNoGabarito:
+    """O gabarito escreve a sentinela como o documento; o extrator a normaliza.
+
+    Medido: o gabarito traz `Tr` (o texto impresso), e o extrator devolve
+    `traco` (o nome da sentinela no modelo). São o mesmo valor — "presente em
+    quantidade desprezível" — mas a comparação textual os tratava como erro.
+
+    O efeito é uma acurácia injustamente baixa: uma extração perfeita perdia
+    ponto por causa da grafia. Pior, o erro se concentra nos campos que mais têm
+    sentinela (fibra, lipídeos), sugerindo defeito sistemático onde não há.
+    """
+
+    def _comparar(self, esperado: str, sentinela):
+        from parser.avaliacao import avaliar
+        from parser.modelo import Campo, Evidencia, Registro
+
+        ev = Evidencia(pagina=1, texto_bruto=esperado)
+        registro = Registro(
+            campos={"fibra_g": Campo[float].extraido(sentinela=sentinela, evidencia=ev)},
+            fonte="d.pdf",
+        )
+        return avaliar("t", {"i": registro}, {"i": {"fibra_g": esperado}})
+
+    def test_traco_do_documento_casa_com_a_sentinela(self):
+        from parser.modelo import Sentinela
+
+        for grafia in ("Tr", "tr", "TR", "traço", "traco"):
+            resultado = self._comparar(grafia, Sentinela.TRACO)
+            assert resultado.acuracia == 1.0, f"{grafia!r} não casou com a sentinela"
+
+    def test_nao_analisado_casa_em_qualquer_grafia(self):
+        from parser.modelo import Sentinela
+
+        for grafia in ("NA", "na", "N/A", "nao_analisado"):
+            resultado = self._comparar(grafia, Sentinela.NAO_ANALISADO)
+            assert resultado.acuracia == 1.0, f"{grafia!r} não casou"
+
+    def test_sentinela_diferente_continua_sendo_erro(self):
+        """Reconhecer grafia não pode virar aceitar sentinela trocada.
+
+        `Tr` afirma "presente em quantidade desprezível"; `NA` afirma "não
+        sabemos". Confundi-las corrompe qualquer soma a jusante (ADR-0004).
+        """
+        from parser.modelo import Sentinela
+
+        assert self._comparar("Tr", Sentinela.NAO_ANALISADO).acuracia == 0.0
+
+    def test_sentinela_nao_casa_com_numero(self):
+        """`Tr` não é zero, e nunca pode ser aceito como tal."""
+        from parser.modelo import Sentinela
+
+        assert self._comparar("0", Sentinela.TRACO).acuracia == 0.0

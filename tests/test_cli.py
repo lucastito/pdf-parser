@@ -404,7 +404,7 @@ class TestDocumentoDaLinhaDeComando:
                             }
                         },
                         "pdfplumber": {},
-                        "biblioteca": {},
+                        "pymupdf": {},
                     },
                 }
             ),

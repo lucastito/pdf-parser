@@ -8,7 +8,7 @@ saberia.
 `ExtratorLinear` é o piso: lê a página como sequência de palavras, na ordem em que
 o PDF as emite. É o que se obtém sem reconstrução posicional alguma.
 
-`ExtratorBiblioteca` é a alternativa madura: chama o detector de tabelas pronto.
+`ExtratorPymupdf` é a alternativa madura: chama o detector de tabelas pronto.
 Se ele resolvesse, escrever reconstrução própria seria complexidade sem retorno.
 
 O que estes testes protegem não é acurácia — é que os dois **funcionem e falhem de
@@ -121,7 +121,7 @@ class TestExtratorLinear:
         assert registros[0].campos["Energia (kcal)"].valor == pytest.approx(124.0)
 
 
-class TestExtratorBiblioteca:
+class TestExtratorPymupdf:
     """A alternativa convencional, contra a qual o posicional se justifica."""
 
     @pytest.fixture
@@ -149,9 +149,9 @@ class TestExtratorBiblioteca:
         return caminho
 
     def test_respeita_a_porta_extrator(self, pdf_com_tabela):
-        from parser.extratores.biblioteca import ExtratorBiblioteca
+        from parser.extratores.pymupdf_ import ExtratorPymupdf
 
-        assert isinstance(ExtratorBiblioteca(str(pdf_com_tabela)), Extrator)
+        assert isinstance(ExtratorPymupdf(str(pdf_com_tabela)), Extrator)
 
     def test_extrai_os_valores_da_tabela(self, pdf_com_tabela):
         """Verifica o **resultado**, não só que não estourou.
@@ -161,9 +161,9 @@ class TestExtratorBiblioteca:
         este extrator é a régua contra a qual o posicional se justifica, um piso
         que devolve vazio faria o posicional parecer melhor do que é.
         """
-        from parser.extratores.biblioteca import ExtratorBiblioteca
+        from parser.extratores.pymupdf_ import ExtratorPymupdf
 
-        registros = ExtratorBiblioteca(str(pdf_com_tabela)).extrair(
+        registros = ExtratorPymupdf(str(pdf_com_tabela)).extrair(
             _documento(identificador="tabela.pdf")
         )
 
@@ -178,9 +178,9 @@ class TestExtratorBiblioteca:
 
     def test_registro_carrega_a_fonte_e_a_evidencia(self, pdf_com_tabela):
         """Sem proveniência, o revisor não sabe onde conferir (ADR-0004)."""
-        from parser.extratores.biblioteca import ExtratorBiblioteca
+        from parser.extratores.pymupdf_ import ExtratorPymupdf
 
-        registros = ExtratorBiblioteca(str(pdf_com_tabela)).extrair(
+        registros = ExtratorPymupdf(str(pdf_com_tabela)).extrair(
             _documento(identificador="tabela.pdf")
         )
 
@@ -196,7 +196,7 @@ class TestExtratorBiblioteca:
         """Zero tabela é resultado legítimo — e é o que motivou o posicional."""
         import fitz
 
-        from parser.extratores.biblioteca import ExtratorBiblioteca
+        from parser.extratores.pymupdf_ import ExtratorPymupdf
 
         caminho = tmp_path / "prosa.pdf"
         documento = fitz.open()
@@ -204,20 +204,20 @@ class TestExtratorBiblioteca:
         documento.save(caminho)
         documento.close()
 
-        registros = ExtratorBiblioteca(str(caminho)).extrair(_documento())
+        registros = ExtratorPymupdf(str(caminho)).extrair(_documento())
         assert registros == []
 
     def test_paginas_fora_do_intervalo_sao_ignoradas(self, pdf_com_tabela):
         """Índice inválido não pode estourar no meio de um lote."""
-        from parser.extratores.biblioteca import ExtratorBiblioteca
+        from parser.extratores.pymupdf_ import ExtratorPymupdf
 
-        registros = ExtratorBiblioteca(str(pdf_com_tabela), paginas=range(50, 60)).extrair(
+        registros = ExtratorPymupdf(str(pdf_com_tabela), paginas=range(50, 60)).extrair(
             _documento()
         )
         assert registros == []
 
     def test_arquivo_inexistente_falha_alto(self, tmp_path):
-        from parser.extratores.biblioteca import ExtratorBiblioteca
+        from parser.extratores.pymupdf_ import ExtratorPymupdf
 
         with pytest.raises(Exception):
-            ExtratorBiblioteca(str(tmp_path / "nao-existe.pdf")).extrair(_documento())
+            ExtratorPymupdf(str(tmp_path / "nao-existe.pdf")).extrair(_documento())

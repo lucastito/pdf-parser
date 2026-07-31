@@ -160,6 +160,21 @@ def _descricao_do_item(identificador: str) -> str | None:
     return re.sub(r"\s+", " ", sem_acento).strip().lower() or None
 
 
+def _compacta(descricao: str | None) -> str | None:
+    """A descrição sem espaço algum, para tolerar fragmentação da ferramenta.
+
+    Medido: o pdfplumber devolve `"Abobora, p esco ço, crua"` — a palavra quebrada
+    no meio. A descrição não bate exata, o alinhamento caía no número, e o número
+    casava com outro alimento. Uma rota que lê certo media 40%.
+
+    Remover espaços não afrouxa o casamento: dois alimentos diferentes continuam
+    diferentes sem eles.
+    """
+    if not descricao:
+        return None
+    return re.sub(r"\s+", "", descricao) or None
+
+
 def _indexar(registros: list[Registro]) -> dict[str, Registro]:
     """Indexa por identificador, por número do item e por descrição.
 
@@ -181,6 +196,9 @@ def _indexar(registros: list[Registro]) -> dict[str, Registro]:
         descricao = _descricao_do_item(texto)
         if descricao:
             indice.setdefault(f"@{descricao}", registro)
+            compacta = _compacta(descricao)
+            if compacta:
+                indice.setdefault(f"~{compacta}", registro)
     return indice
 
 
@@ -219,6 +237,11 @@ def medir_acuracia(
         descricao = _descricao_do_item(chave)
         if descricao and f"@{descricao}" in obtidos:
             esperados[f"@{descricao}"] = dict(valores)
+            continue
+
+        compacta = _compacta(descricao)
+        if compacta and f"~{compacta}" in obtidos:
+            esperados[f"~{compacta}"] = dict(valores)
             continue
 
         numero = _numero_do_item(chave)

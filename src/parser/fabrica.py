@@ -34,9 +34,9 @@ def _linear(perfil: Perfil, rota: Rota) -> Extrator:
 
 
 def _biblioteca(perfil: Perfil, rota: Rota) -> Extrator:
-    from parser.extratores.biblioteca import ExtratorBiblioteca
+    from parser.extratores.pymupdf_ import ExtratorPymupdf
 
-    return ExtratorBiblioteca(_documento(perfil), paginas=perfil.intervalo_de_paginas())
+    return ExtratorPymupdf(_documento(perfil), paginas=perfil.intervalo_de_paginas())
 
 
 def _pdfplumber(perfil: Perfil, rota: Rota) -> Extrator:
@@ -128,7 +128,7 @@ def _vlm(perfil: Perfil, rota: Rota) -> Extrator:
 ROTAS: dict[str, Callable[[Perfil, Rota], Extrator]] = {
     "posicional": _posicional,
     "linear": _linear,
-    "biblioteca": _biblioteca,
+    "pymupdf": _biblioteca,
     "pdfplumber": _pdfplumber,
     "camelot": _camelot,
     "ocr": _ocr,

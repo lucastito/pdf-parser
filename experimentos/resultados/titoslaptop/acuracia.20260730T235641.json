@@ -1,59 +1,59 @@
 {
   "documento": "TACO.pdf",
-  "gabarito": "taco.csv",
-  "gerado_por": "posicional",
-  "total_de_valores": 200,
-  "itens_no_gabarito": 40,
+  "gabarito": "holdout.csv",
+  "gerado_por": null,
+  "total_de_valores": 50,
+  "itens_no_gabarito": 10,
   "tolerancia": 0.01,
   "maquina": "titoslaptop",
   "processador": "Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz",
-  "quando": "2026-07-31T00:10:48+00:00",
+  "quando": "2026-07-30T23:46:45+00:00",
   "rotas": {
     "posicional": {
-      "acuracia": 1.0,
+      "acuracia": 0.94,
       "itens": 283,
       "por_campo": {
         "energia_kcal": 1.0,
         "proteina_g": 1.0,
-        "lipideos_g": 1.0,
+        "lipideos_g": 0.8,
         "carboidrato_g": 1.0,
-        "fibra_g": 1.0
+        "fibra_g": 0.9
       },
-      "tautologica": true
+      "tautologica": false
     },
     "pdfplumber": {
-      "acuracia": 1.0,
+      "acuracia": 0.4,
       "itens": 278,
       "por_campo": {
-        "energia_kcal": 1.0,
-        "proteina_g": 1.0,
-        "lipideos_g": 1.0,
-        "carboidrato_g": 1.0,
-        "fibra_g": 1.0
+        "energia_kcal": 0.4,
+        "proteina_g": 0.4,
+        "lipideos_g": 0.4,
+        "carboidrato_g": 0.4,
+        "fibra_g": 0.4
       },
       "tautologica": false
     },
     "camelot": {
-      "acuracia": 0.99,
+      "acuracia": 0.94,
       "itens": 309,
       "por_campo": {
         "energia_kcal": 1.0,
         "proteina_g": 1.0,
-        "lipideos_g": 1.0,
-        "carboidrato_g": 0.975,
-        "fibra_g": 0.975
+        "lipideos_g": 0.8,
+        "carboidrato_g": 1.0,
+        "fibra_g": 0.9
       },
       "tautologica": false
     },
     "ocr": {
-      "acuracia": 0.995,
+      "acuracia": 0.74,
       "itens": 283,
       "por_campo": {
-        "energia_kcal": 1.0,
-        "proteina_g": 0.975,
-        "lipideos_g": 1.0,
-        "carboidrato_g": 1.0,
-        "fibra_g": 1.0
+        "energia_kcal": 0.8,
+        "proteina_g": 0.8,
+        "lipideos_g": 0.7,
+        "carboidrato_g": 0.7,
+        "fibra_g": 0.7
       },
       "tautologica": false
     },
@@ -69,7 +69,7 @@
       },
       "tautologica": false
     },
-    "pymupdf": {
+    "biblioteca": {
       "acuracia": 0.0,
       "itens": 19,
       "por_campo": {

@@ -7,53 +7,53 @@
   "tolerancia": 0.01,
   "maquina": "titoslaptop",
   "processador": "Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz",
-  "quando": "2026-07-30T23:59:58+00:00",
+  "quando": "2026-07-30T22:26:11+00:00",
   "rotas": {
     "posicional": {
-      "acuracia": 1.0,
-      "itens": 283,
+      "acuracia": 0.2,
+      "itens": 64,
       "por_campo": {
-        "energia_kcal": 1.0,
-        "proteina_g": 1.0,
-        "lipideos_g": 1.0,
-        "carboidrato_g": 1.0,
-        "fibra_g": 1.0
+        "energia_kcal": 0.2,
+        "proteina_g": 0.2,
+        "lipideos_g": 0.2,
+        "carboidrato_g": 0.2,
+        "fibra_g": 0.2
       },
       "tautologica": false
     },
     "pdfplumber": {
-      "acuracia": 1.0,
-      "itens": 278,
+      "acuracia": 0.1,
+      "itens": 63,
       "por_campo": {
-        "energia_kcal": 1.0,
-        "proteina_g": 1.0,
-        "lipideos_g": 1.0,
-        "carboidrato_g": 1.0,
-        "fibra_g": 1.0
+        "energia_kcal": 0.1,
+        "proteina_g": 0.1,
+        "lipideos_g": 0.1,
+        "carboidrato_g": 0.1,
+        "fibra_g": 0.1
       },
       "tautologica": false
     },
     "camelot": {
-      "acuracia": 1.0,
-      "itens": 309,
+      "acuracia": 0.2,
+      "itens": 94,
       "por_campo": {
-        "energia_kcal": 1.0,
-        "proteina_g": 1.0,
-        "lipideos_g": 1.0,
-        "carboidrato_g": 1.0,
-        "fibra_g": 1.0
+        "energia_kcal": 0.2,
+        "proteina_g": 0.2,
+        "lipideos_g": 0.2,
+        "carboidrato_g": 0.2,
+        "fibra_g": 0.2
       },
       "tautologica": false
     },
     "ocr": {
-      "acuracia": 0.78,
-      "itens": 283,
+      "acuracia": 0.2,
+      "itens": 64,
       "por_campo": {
-        "energia_kcal": 0.8,
-        "proteina_g": 0.8,
-        "lipideos_g": 0.8,
-        "carboidrato_g": 0.7,
-        "fibra_g": 0.8
+        "energia_kcal": 0.2,
+        "proteina_g": 0.2,
+        "lipideos_g": 0.2,
+        "carboidrato_g": 0.2,
+        "fibra_g": 0.2
       },
       "tautologica": false
     },
@@ -71,7 +71,7 @@
     },
     "biblioteca": {
       "acuracia": 0.0,
-      "itens": 19,
+      "itens": 4,
       "por_campo": {
         "energia_kcal": 0.0,
         "proteina_g": 0.0,

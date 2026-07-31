@@ -47,7 +47,7 @@ class ConfiguracaoInvalida(ValueError):
 ROTAS_CONHECIDAS = (
     "posicional",
     "linear",
-    "biblioteca",
+    "pymupdf",
     "pdfplumber",
     "camelot",
     "ocr",

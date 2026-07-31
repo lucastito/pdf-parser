@@ -15,10 +15,10 @@ from parser.modelo import Campo, Evidencia, Registro
 from parser.normalizacao import ValorNaoReconhecido, normalizar_texto, parse_numero
 from parser.portas import DocumentoCanonico
 
-__all__ = ["ExtratorBiblioteca"]
+__all__ = ["ExtratorPymupdf"]
 
 
-class ExtratorBiblioteca:
+class ExtratorPymupdf:
     """Usa o detector de tabelas do PyMuPDF.
 
     Requer o caminho do arquivo original: o detector opera sobre a página do PDF,
