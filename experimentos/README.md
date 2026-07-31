@@ -24,6 +24,26 @@ descartado. Ver também [ADR-0014](../docs/adr/0014-selecao-de-modelos-para-comp
 | `scripts/` | preparação de ambiente e execução de rodada |
 | `documentos/` | as entradas medidas, com impressão digital verificada |
 
+## Estado das medições — leia antes de comparar
+
+**As oito rotas não estão no mesmo pé.** Confundi-las produziria comparação
+inválida:
+
+| Rota | Onde está | Situação |
+|---|---|---|
+| 6 determinísticas | `resumo.json` + `acuracia*.json` | completas, contra gabarito e conjunto de reserva |
+| 2 por modelo | `rotas-por-modelo.json` (à parte) | **medidas fora do fluxo do experimento** |
+
+As rotas por modelo nunca passaram pelo comando de experimento — foram medidas
+por script avulso, e por isso não entram no resumo nem têm acurácia calculada da
+mesma forma. Integrá-las é item aberto do [PLANO.md](PLANO.md).
+
+**Além disso, parte daquelas medições está invalidada.** Os casos com
+`done_reason=length` mediram um limite de configuração, não o modelo: o contexto
+não era declarado e valia o padrão do servidor. O arquivo marca caso a caso o que
+continua válido. Ver [ADR-0018](../docs/adr/0018-dimensionamento-de-contexto.md)
+e `contexto-limite.json`.
+
 ## Por que existe
 
 As decisões de arquitetura do produto foram tomadas com número, não por preferência.
@@ -74,6 +94,32 @@ comparam-se estratégias; entre máquinas, compara-se velocidade.
 Isso rende de graça um teste de reprodutibilidade — as rotas determinísticas devem
 dar resultado idêntico nas duas máquinas; as rotas por modelo podem não dar, e
 divergência ali é achado sobre confiabilidade.
+
+### Parâmetros de modelo: declarar sempre, herdar nunca
+
+Custou uma sessão descobrir, e vale como regra geral do experimento.
+
+O servidor tem **dois** limites que soam intercambiáveis e não são: o teto de
+**saída** e o **contexto**, que limita entrada **mais** saída somadas. O projeto
+declarava só o primeiro. O segundo herdava o padrão do servidor — invisível na
+configuração — e era ele que cortava as respostas.
+
+Quatro medições, com pedidos de tamanhos diferentes, pararam na **mesma soma
+exata**. Essa assinatura é o que denuncia teto atingido.
+
+**O que toda rodada com modelo precisa registrar:**
+
+- tokens de **entrada** e de **saída**, e a soma. Vinham em toda resposta e eram
+  descartados; foi a soma que revelou a causa
+- o contexto **efetivamente usado**, não o pedido
+- a versão do servidor de inferência — versões diferentes entre máquinas
+  invalidam a comparação, e isso precisa ser detectado, não presumido ausente
+
+O contexto é **calculado** por `src/parser/contexto.py`, nunca fixado: depende de
+quanto a entrada consome (que varia com a resolução) e de quanta memória a
+máquina tem. Errar para baixo corta a resposta; errar muito para cima faz o
+modelo não caber e cair para o processador **em silêncio**, o que sairia no
+resultado como "esta máquina é lenta".
 
 ## Construir um gabarito para outro documento
 

@@ -198,15 +198,30 @@ medir quanto a imagem consumia.
 
 ## 1. Fechar a medição das rotas por modelo
 
-**Por que:** sem isso, a comparação tem um buraco — 6 de 8 rotas medidas. E os
-parâmetros descobertos aqui vão fixados no script das outras máquinas.
+**Por que:** sem isso, a comparação tem um buraco — **6 de 8 rotas** estão no
+`resumo.json`. As duas por modelo foram medidas por script avulso, fora do fluxo
+do experimento, e por isso não têm acurácia calculada da mesma forma.
 
 - [ ] Bateria da rota de texto — 8 casos pareados com os da visão
 - [ ] Consolidar os parâmetros num só lugar: contexto, teto de saída, `dpi` e
       degrau
-- [ ] Rodar `parser experimento` com as rotas de modelo e gravar em
-      `experimentos/resultados/`
+- [ ] **Integrar as rotas de modelo ao `resumo.json`** — hoje vivem em
+      `rotas-por-modelo.json`, à parte, e a comparação entre as oito não fecha
 - [ ] Varredura de degraus contra o servidor real, gravada no experimento
+
+### O que o registro de ambiente ainda não guarda
+
+`ambiente.json` registra máquina, processador, memória, placa e modelos. **Falta
+o que o ADR-0019 aponta como capaz de invalidar a comparação:**
+
+- [ ] **versão do servidor de inferência** — versões diferentes entre máquinas
+      tornam os resultados incomparáveis, e hoje isso passaria despercebido
+- [ ] **versão do driver de vídeo** — afeta desempenho e alocação de memória
+- [ ] **memória de vídeo lida do registro do sistema** — a leitura atual reporta
+      2048 MiB aqui, correto por acaso: a interface padrão trunca em 4 GB, e numa
+      placa de 12 GB reportaria 4 (ADR-0019)
+- [ ] **contexto efetivamente usado** e **tokens de entrada/saída** por chamada —
+      o tipo `Uso` já os carrega; falta gravá-los no resultado
 
 ## 2. Consolidação por campo
 

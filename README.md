@@ -161,6 +161,10 @@ pdf-parser/
 │   ├── diagnostico.py     o que sabota a leitura
 │   ├── calibracao.py      descobre layout
 │   ├── configuracao.py    perfis e prompts
+│   ├── contexto.py        quanto contexto pedir ao modelo, e o teto de memória
+│   ├── degraus.py         saída estruturada, do mais restrito ao mais livre
+│   ├── unidades.py        conversão com dimensão (Pint)
+│   ├── esquema.py         validação tabular (Pandera)
 │   ├── gabarito.py        acurácia contra valores conferidos
 │   └── cli.py
 ├── perfis/  prompts/      configuração
