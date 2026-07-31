@@ -5,16 +5,62 @@
 >
 > O que já foi feito não aparece aqui — está nos ADRs e no histórico do git.
 
+## Duas entregas, e a ordem entre elas
+
+| # | Entrega | Prazo |
+|---|---|---|
+| 1 | **Produto** — preencher planilha sozinho, pendência para revisão humana | prioridade declarada |
+| 2 | **Artigo** — submissão a periódico de análise de documentos | **15/11/2026**, rede em 31/01/2027 |
+
+A ordem é essa e não se inverte. A boa notícia é a sobreposição: **a taxonomia, a
+consolidação por campo e a métrica erro × omissão servem às duas** — são
+requisito do produto e contribuição do artigo ao mesmo tempo.
+
 ## Estado
 
 | | |
 |---|---|
-| Testes | **535 passando**, 6 saltados |
+| Testes | **539 passando**, 6 saltados |
 | Estilo | `flake8` e `black` limpos |
 | Guarda de confidencialidade | 9/9 |
-| ADRs | **19** |
+| ADRs | **21** |
 | Ciclos de importação | **nenhum** (39 módulos) |
-| Rotas com resultado gravado | 8 de 8 — mas a de **visão** precisa ser refeita (seção 0) |
+| Rotas com resultado gravado | 8 de 8 |
+| Documentos-caso | **1** — é o gargalo, ver eixo B |
+
+## Os três eixos
+
+O trabalho não é uma fila. São três eixos com custos e dependências diferentes, e
+tratá-los como fila foi o que travou o planejamento anterior.
+
+```
+        taxonomia (ADR-0021)
+               │
+        documentos por característica
+               │
+     ┌─────────┴─────────┐
+     │                   │
+DETERMINÍSTICAS      MODELOS
+segundos/página      dezenas de min/página
+todas × tudo         triagem por característica
+     │                   │
+     │            corte por zona de empate
+     │            (reporta eliminados)
+     │                   │
+     │            preenchimento, páginas disjuntas
+     └─────────┬─────────┘
+               ▼
+     matriz de correlação de erros
+               ▼
+     CONSOLIDAÇÃO POR CAMPO
+```
+
+**Por que a consolidação não espera a triagem.** Ela vota entre as rotas que
+existirem — o ADR-0017 já trata rota ausente como ausência, não voto contrário.
+O **mecanismo** pode ser construído com as determinísticas e entregar o pedido do
+produto agora. O que **não** pode ser fixado antes das medições é o **peso** de
+cada voto: rotas que leem a mesma camada de texto erram juntas, e calibrar sem a
+matriz de correlação seria retrabalho garantido.
 
 ## O que já está medido
 
@@ -77,10 +123,36 @@ Detalhe completo em `resultados/titoslaptop/rotas-por-modelo.json`.
 
 ---
 
-## 0. Retificação do limite de contexto — faça isto primeiro
+## 0. Retificação do limite de contexto — ✅ CONCLUÍDA
 
-**Por que antes de tudo:** uma conclusão publicada está errada, e os scripts das
-outras máquinas reproduziriam o mesmo defeito com modelos maiores.
+> **Fechada em 2026-07-31.** Mantida aqui como resultado, não como tarefa: é a
+> evidência que sustenta ADR-0018 e a regra de nunca herdar padrão de servidor.
+
+### O desfecho, medido sem limite de cliente
+
+A pergunta que ficara aberta — *quanto a chamada leva quando nada a interrompe* —
+tem resposta:
+
+| | Valor |
+|---|---|
+| Tempo | **77,4 min** (4641 s) |
+| `done_reason` | **`stop`** — terminou sozinha, sem corte |
+| Tokens | entrada 2376 + saída 5684 = **8060** de 12271 disponíveis |
+| Resposta | **vazia** |
+
+**Duas leituras, e a segunda importa mais.**
+
+A correção do contexto **funcionou**: sobrou espaço (8060 de 12271) e não houve
+corte. Mas a resposta veio vazia mesmo assim, com 5684 tokens gerados — ou seja,
+**o contexto não era a única causa**.
+
+A explicação verificada: o servidor devolve o campo de raciocínio preenchido
+**mesmo com o raciocínio declarado como desligado**, e o script de medição
+descartava esse campo. Os tokens foram para lá. É lacuna de instrumentação, não
+incapacidade do modelo — e é por isso que a instrumentação (eixo A) vem antes de
+remedir.
+
+Dado bruto em `resultados/titoslaptop/vlm-pagina-inteira-sem-limite.json`.
 
 ### O que foi provado
 
@@ -157,8 +229,11 @@ justamente o que o experimento multimáquina existe para responder (ADR-0013).
 - [x] Retificar ADR-0015, `SPEC.md` e a memória do projeto
 - [x] ADR novo: dimensionamento de contexto, com a regra — **nunca confiar em
       padrão de servidor para parâmetro que decide resultado** (ADR-0018)
-- [ ] Remedir o caso que falhou (extração com valores) sob `num_ctx` correto —
-      **em andamento**, página inteira, sem limite de tempo do cliente
+- [x] Remedir o caso que falhou sob `num_ctx` correto — feito: 77,4 min, sem
+      corte. Ver o desfecho no topo desta seção
+- [ ] **Refazer com o canal de raciocínio gravado** — a única parte que resta, e
+      depende da instrumentação (A1). Mesmos 77 min de máquina; o que muda é o
+      dado ficar completo
 
 ### Fórmula de dimensionamento de memória
 
@@ -206,6 +281,41 @@ medir quanto a imagem consumia.
 - [ ] Medir o custo por token do modelo de **texto** da mesma família e tamanho:
       isola o custo do codificador visual, e é a comparação mais informativa
       disponível
+
+## Onde cada seção entra nos três eixos
+
+As seções abaixo mantêm a numeração original — o que muda é **quando** cada uma
+roda, e o eixo a que pertence.
+
+| Eixo | Seções | Depende de | Bloqueia |
+|---|---|---|---|
+| **A — código e instrumentação** | 1 (parcial), 2, 5 | nada; roda aqui | tudo o mais |
+| **B — coleta de documentos** | 5 | taxonomia (ADR-0021) | a triagem por característica |
+| **C — execução distribuída** | 1, 2b, 3, 4 | A e B prontos, e as outras máquinas | o artigo |
+
+**A é o único eixo que não depende de terceiros.** É por onde se começa, e é o
+que entrega ao produto. B depende de curadoria manual. C depende de pessoas.
+
+### Cronograma até 15/11
+
+| Quando | O quê | Risco |
+|---|---|---|
+| ago | Eixo A: instrumentação, consolidação, taxonomia no código | baixo — só depende daqui |
+| ago–set | Eixo B: coleta por característica, com cuidado de dado pessoal | **médio** — curadoria manual, e é trabalho humano |
+| set | Preparar e distribuir o pacote das outras máquinas | **alto** — precisa das pessoas disponíveis |
+| set–out | Eixo C: execução, triagem, corte, preenchimento | **alto** — máquina de terceiro, e refazer custa dias |
+| out–nov | Análise, consolidação final, escrita | apertado se algo acima escorregar |
+
+**Os dois riscos que podem estourar o prazo não são técnicos:** a coleta (depende
+do Lucas) e a disponibilidade de quem vai rodar (depende de terceiros). Ambos
+precisam começar cedo — em especial avisar as pessoas, porque baixar os modelos é
+transferência grande e leva dias.
+
+**Rede de segurança declarada:** se o resultado não amadurecer até novembro, a
+mesma conferência tem uma segunda janela em janeiro. Nada do trabalho se perde;
+o que muda é a trilha.
+
+---
 
 ## 1. Fechar a medição das rotas por modelo
 
@@ -270,7 +380,25 @@ Isto **é** o ciclo que o consumidor corporativo pediu — "preenche o que dá, 
 não sabe vira pendência" — e ao mesmo tempo produz a planilha única que o consumidor
 pessoal precisa como entrada.
 
+### O que se constrói agora, e o que espera medição
+
+A distinção evita o retrabalho que a pressa produziria:
+
+| Parte | Quando | Por quê |
+|---|---|---|
+| **Mecanismo** — votar, decidir, abrir pendência | **agora** (eixo A) | não muda quando chegam votantes novos; ADR-0017 já trata rota ausente |
+| **Pesos** — quanto vale cada voto | **depois** das medições | rotas que leem a mesma camada de texto **erram juntas**; calibrar sem a matriz de correlação seria decidir por suposição |
+
+Por isso os pesos entram **parametrizados**, não embutidos: o mecanismo entrega o
+comportamento que o produto pede hoje, e a calibração é trocada depois sem tocar
+na lógica.
+
+**Fundação que já existe:** `src/parser/concordancia.py` **mede** divergência
+entre estratégias (`comparar_estrategias`). Falta a camada que **decide**. A
+`Pendencia` de `lote.py` é o encaixe da saída.
+
 - [ ] Implementar a consolidação com proveniência (quantas rotas concordaram)
+- [ ] **Pesos parametrizados**, com o padrão uniforme declarado como provisório
 - [ ] **A votação precisa lidar com conjuntos diferentes de rotas.** Máquinas com
       mais capacidade rodam modelos que a de referência não roda, e são elas que se
       parecem com o servidor de destino. Uma rota ausente numa máquina não pode
@@ -278,7 +406,10 @@ pessoal precisa como entrada.
       contrário
 - [ ] Métrica **erro × omissão**: omitir vira pendência (bom); errar entra na
       planilha errado (péssimo). Hoje contam igual na acurácia
-- [ ] ADR da decisão
+- [ ] **Matriz de correlação de erros** entre rotas — pré-requisito da calibração,
+      e resultado publicável por si: mostra quais estratégias são de fato
+      independentes
+- [x] ADR da decisão — [ADR-0017](../docs/adr/0017-consolidacao-por-campo.md)
 
 ## 2b. Escopo: triagem e preenchimento são fases distintas
 
@@ -463,7 +594,11 @@ identificador do processo sem depender de fabricante. Verificado.
 - [ ] **Escada de modelos** — ver `MODELOS.md` e ADR-0014. Um modelo por vez, do
       menor ao maior, até falhar
 
-## 5. Vocabulário de características, e o roteiro que ele destrava
+## 5. Taxonomia de características, e a coleta que ela destrava
+
+> Taxonomia registrada em
+> [ADR-0021](../docs/adr/0021-taxonomia-de-caracteristicas.md), com a tabela
+> completa marcada por custo de detecção.
 
 **O entregável final do projeto** é diferente do que existe hoje. Hoje temos
 *"esta rota acertou X% neste documento"*. O que serve ao consumidor é: **dado um
@@ -473,30 +608,39 @@ documento com estas características, use esta estratégia com esta configuraç�
 procurar, a coleta traz dez documentos que exercitam a mesma característica. O
 vocabulário torna a coleta eficiente — poucos documentos, muitas características.
 
+### Característica é um segundo eixo da página
+
+A correção que o ADR-0021 registra: `triagem.Classe` responde *"o que tem nesta
+página?"*; a característica responde *"como ela está codificada?"*. Uma página é
+`DADOS` **e** `DIGITALIZADA` ao mesmo tempo.
+
+E a unidade é a **página**, não o arquivo — senão o documento misto, que é o caso
+difícil, se perderia num rótulo único por PDF.
+
 ### O que o diagnóstico já detecta
 
-`src/parser/diagnostico.py` cobre **quatro** características, cada uma com ação
-recomendada, e a estrutura `Achado(codigo, severidade, detalhe, acao)` já é o
-encaixe da taxonomia:
+`src/parser/diagnostico.py` cobre **cinco** características estruturais, cada uma
+com severidade e ação recomendada:
 
 | Detectado | Severidade |
 |---|---|
 | página rotacionada | bloqueia |
-| ausência de camada de texto / camada parcial | bloqueia / alerta |
+| sem camada de texto | bloqueia |
+| camada de texto parcial | alerta |
 | texto vertical | alerta |
 | mapa de caracteres incompleto | alerta |
 
+Os outros seis achados do módulo descrevem **qualidade do resultado**, não
+estrutura da entrada — são diagnóstico de extração, não taxonomia.
+
 Hoje ele **descreve**. O roteiro exige que **recomende**.
 
-### Candidatas da literatura, ainda não cobertas
-
-Tabela sem bordas (alinhamento por espaço em branco); células mescladas e
-cabeçalho hierárquico; registro que ocupa várias linhas; múltiplas colunas de
-texto; documento misto (parte digital, parte digitalizada); ruído e inclinação de
-digitalização; tabela que cruza páginas; identificação do programa gerador.
-
-- [ ] Taxonomia completa, marcando **detectável hoje** × **exige código** ×
-      **exige inspeção manual** — é a lista de compras dos documentos
+- [x] Taxonomia completa, marcando **detectável hoje** × **exige código** ×
+      **exige inspeção manual** — ADR-0021
+- [ ] Implementar a característica como segundo eixo em `triagem.py`, reusando o
+      diagnóstico como fonte
+- [ ] **Coletar documentos por característica** (eixo B) — com cuidado de dado
+      pessoal: nada que identifique alguém entra no conjunto
 - [ ] Evoluir o diagnóstico de descritivo para **prescritivo**
 - [ ] Benchmark de patologias, depois que os documentos existirem
 
@@ -509,11 +653,29 @@ digitalização; tabela que cruza páginas; identificação do programa gerador.
 
 - [ ] Adapters de outros formatos: XLSX, DOCX, TXT, XML (hoje só PDF)
 
-## 6. Depois dos pull requests
+## 6. Relatórios e artigo
+
+**Do produto:**
 
 - [ ] Relatório técnico (matriz completa, acurácia por campo, limitações)
 - [ ] Relatório executivo (uma página: o que ganhou, por quanto, o que custou)
 - [ ] Mapa de aderência à especificação de referência — vai em `docs/_private/`
+
+**Do artigo** — protocolo em
+[ADR-0020](../docs/adr/0020-pre-registro-do-protocolo.md):
+
+- [ ] Rascunho vivo, atualizado à medida que as medições saem — escrever no fim
+      obrigaria a reconstruir raciocínio já esquecido
+- [ ] Tabela completa da triagem, **com os eliminados** — omiti-los impede
+      verificar se o corte foi honesto
+- [ ] Seção de ameaças à validade, com as mitigações e o resíduo de cada uma
+- [ ] Pacote de reprodutibilidade: prompts, perfis, versões, sementes, código de
+      avaliação
+
+> **O que não entra, e é decisão, não esquecimento:** nada de domínio de
+> aplicação sob confidencialidade — nem nomes, nem vocabulário setorial, que
+> identifica por dedução. O material publicável é o método, as medições, a
+> taxonomia e o domínio de referência de fonte aberta.
 
 ---
 
