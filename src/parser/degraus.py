@@ -81,6 +81,7 @@ __all__ = [
     "SaidaEmDegraus",
     "Tentativa",
     "TodosOsDegrausFalharam",
+    "Uso",
 ]
 
 
@@ -131,6 +132,38 @@ class TodosOsDegrausFalharam(RuntimeError):
 
 
 @dataclass(frozen=True)
+class Uso:
+    """Quantos tokens a chamada consumiu, de cada lado.
+
+    Existe porque a **soma** é o que diagnostica: o limite de contexto vale para
+    entrada e saída juntas, e soma igual ao contexto configurado é assinatura de
+    corte, não de o modelo ter terminado.
+
+    Estes dois números vinham em toda resposta do servidor e eram descartados.
+    Durante uma sessão inteira, o projeto culpou o parâmetro errado por não
+    olhá-los (ADR-0018).
+    """
+
+    entrada: int = 0
+    saida: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.entrada + self.saida
+
+    def bate_no_teto(self, contexto: int | None) -> bool:
+        """A soma atingiu exatamente o contexto configurado?
+
+        Prompts de tamanhos diferentes parando no mesmo total é assinatura de
+        teto atingido — foi assim que a causa apareceu.
+        """
+        return bool(contexto) and self.total >= (contexto or 0)
+
+    def como_dados(self) -> dict[str, int]:
+        return {"entrada": self.entrada, "saida": self.saida, "total": self.total}
+
+
+@dataclass(frozen=True)
 class Tentativa:
     """O que aconteceu num degrau."""
 
@@ -146,14 +179,24 @@ class Tentativa:
     perderia a distinção justamente na comparação em que ela importa.
     """
 
+    uso: Uso | None = None
+    """Tokens consumidos. Registrado sempre, inclusive em sucesso.
+
+    Em falha, diagnostica; em sucesso, alimenta a curva de memória por contexto
+    que dimensiona a máquina de destino (ADR-0018).
+    """
+
     def como_dados(self) -> dict[str, Any]:
-        return {
+        dados: dict[str, Any] = {
             "degrau": self.degrau.value,
             "sucesso": self.sucesso,
             "segundos": round(self.segundos, 2),
             "tipo_de_falha": self.tipo_de_falha,
             "motivo": self.motivo,
         }
+        if self.uso is not None:
+            dados["uso"] = self.uso.como_dados()
+        return dados
 
 
 @dataclass
@@ -224,6 +267,7 @@ class SaidaEmDegraus:
         degrau_maximo: Degrau | None = None,
         raciocinar: bool = False,
         tokens_maximos: int | None = None,
+        contexto: int | None = None,
     ) -> None:
         """
         Args:
@@ -236,11 +280,21 @@ class SaidaEmDegraus:
             raciocinar: liga o canal de raciocínio do modelo. **Desligado por
                 padrão, por medição** — ver o cabeçalho do módulo. Ligá-lo é
                 escolha legítima para medir o efeito, não o comportamento padrão.
-            tokens_maximos: teto de tokens da resposta. Omitido, vale o padrão do
-                servidor — que **foi a causa medida** das respostas vazias: uma
-                tabela com dezenas de itens não cabe em ~2048 tokens, e a geração
-                era cortada no meio. Nenhum valor é inventado aqui: um teto
-                arbitrário viraria número mágico sem procedência (ADR-0008).
+            tokens_maximos: teto de tokens da **resposta**. Necessário, mas
+                **não suficiente**: sozinho não impede o corte, porque o limite
+                que corta é o contexto. Ver `contexto`.
+            contexto: teto de tokens de **entrada mais saída, somadas**. É o
+                limite que de fato corta, e o padrão do servidor (4096) foi a
+                causa medida das respostas vazias — uma página renderizada
+                consome ~2200 só de entrada, e sobra pouco para a resposta.
+
+                Elevar `tokens_maximos` sem declarar isto **não resolve**: foi
+                exatamente o que se tentou, e o corte continuou na mesma soma
+                (ADR-0018).
+
+                Nenhum valor é inventado aqui. Um teto arbitrário viraria número
+                mágico sem procedência (ADR-0008) — e o valor certo depende de
+                quanto a entrada consome, que precisa ser medido.
         """
         self.cliente = cliente
         self.campos = campos
@@ -248,6 +302,9 @@ class SaidaEmDegraus:
         self.degrau_maximo = degrau_maximo
         self.raciocinar = raciocinar
         self.tokens_maximos = tokens_maximos
+        self.contexto = contexto
+        self._ultimo_uso: Uso | None = None
+        """Tokens da chamada mais recente. Alimenta diagnóstico e registro."""
 
     def _permitidos(self) -> tuple[Degrau, ...]:
         if self.degrau_maximo is None:
@@ -284,9 +341,13 @@ class SaidaEmDegraus:
                     Tentativa(
                         degrau=degrau,
                         sucesso=False,
-                        motivo=str(erro)[:160],
+                        # Sem corte: o diagnóstico de contexto traz os números
+                        # que apontam o parâmetro culpado, e truncá-los devolve
+                        # o problema a quem depura.
+                        motivo=str(erro),
                         segundos=time.perf_counter() - inicio,
                         tipo_de_falha=_classificar_falha(erro),
+                        uso=self._ultimo_uso,
                     )
                 )
                 continue
@@ -296,6 +357,7 @@ class SaidaEmDegraus:
                     degrau=degrau,
                     sucesso=True,
                     segundos=time.perf_counter() - inicio,
+                    uso=self._ultimo_uso,
                 )
             )
 
@@ -320,15 +382,21 @@ class SaidaEmDegraus:
                     Tentativa(
                         degrau=degrau,
                         sucesso=False,
-                        motivo=str(erro)[:120],
+                        motivo=str(erro),
                         segundos=time.perf_counter() - inicio,
                         tipo_de_falha=_classificar_falha(erro),
+                        uso=self._ultimo_uso,
                     )
                 )
                 continue
 
             tentativas.append(
-                Tentativa(degrau=degrau, sucesso=True, segundos=time.perf_counter() - inicio)
+                Tentativa(
+                    degrau=degrau,
+                    sucesso=True,
+                    segundos=time.perf_counter() - inicio,
+                    uso=self._ultimo_uso,
+                )
             )
             return ResultadoDegrau(dados=dados, degrau=degrau, tentativas=tentativas)
 
@@ -341,13 +409,16 @@ class SaidaEmDegraus:
             + "\n".join(linhas)
         )
 
-        if all("limite de tokens" in t.motivo for t in tentativas):
+        if all("limite" in t.motivo for t in tentativas):
             relato += (
-                "\n\nTodos os degraus foram cortados pelo limite de tokens. É a "
-                "causa medida das respostas vazias neste projeto: a resposta não "
-                "cabe no padrão do servidor e a geração para no meio. Declare "
-                "tokens_maximos (num_predict) maior, ou peça menos itens por "
-                "chamada."
+                "\n\nTodos os degraus foram cortados. É a causa medida das "
+                "respostas vazias neste projeto, e o parâmetro culpado não é o "
+                "óbvio: o **contexto** limita entrada MAIS saída, e o padrão do "
+                "servidor é 4096. Uma página como imagem consome ~2200 só de "
+                "entrada.\n"
+                "Some entrada e saída acima: se a soma bate no contexto, declare "
+                "num_ctx maior. Elevar apenas tokens_maximos não resolve — foi o "
+                "que se tentou, e o corte continuou (ADR-0018)."
             )
             return relato
 
@@ -367,17 +438,40 @@ class SaidaEmDegraus:
 
         if not bruto or not bruto.strip():
             if motivo == "length":
-                raise RespostaCortada(
-                    "geração interrompida pelo limite de tokens antes de terminar. "
-                    "Uma tabela com muitos itens não cabe no padrão do servidor; "
-                    "declare tokens_maximos (num_predict) maior."
-                )
+                raise RespostaCortada(self._diagnostico_de_corte())
             raise RespostaVazia("resposta vazia — o modelo encerrou sem emitir conteúdo")
 
         dados = self._estruturar(degrau, bruto)
         if not isinstance(dados, dict) or self.chave not in dados:
             raise ValueError(f"resposta sem a chave {self.chave!r}")
         return dados
+
+    def _diagnostico_de_corte(self) -> str:
+        """A mensagem aponta o parâmetro que de fato corta.
+
+        A versão anterior mandava elevar `tokens_maximos`, e foi o conselho
+        seguido por uma sessão inteira: o teto foi elevado, o corte continuou na
+        mesma soma, e a contradição passou despercebida (ADR-0018).
+        """
+        uso = self._ultimo_uso
+        partes = ["geração interrompida pelo limite antes de terminar."]
+
+        if uso and uso.total:
+            partes.append(f"Tokens: entrada {uso.entrada} + saída {uso.saida} = {uso.total}.")
+
+        if uso and uso.bate_no_teto(self.contexto):
+            partes.append(
+                f"A soma bateu no contexto configurado ({self.contexto}) — é ele "
+                "que corta, e não o teto de saída. Declare num_ctx maior."
+            )
+        else:
+            partes.append(
+                "Compare a soma com o contexto do servidor: ele limita entrada "
+                "MAIS saída, e o padrão é 4096. Uma página como imagem consome "
+                "~2200 só de entrada. Declare contexto (num_ctx) com folga — "
+                "elevar apenas tokens_maximos não resolve."
+            )
+        return " ".join(partes)
 
     def _chamar(
         self, degrau: Degrau, prompt: str, imagens: list[str] | None
@@ -404,13 +498,26 @@ class SaidaEmDegraus:
             carga["format"] = "json"
         if imagens:
             carga["images"] = imagens
+
+        opcoes: dict[str, int] = {}
         if self.tokens_maximos:
-            carga["options"] = {"num_predict": self.tokens_maximos}
+            opcoes["num_predict"] = self.tokens_maximos
+        if self.contexto:
+            # Sem isto vale o padrão do servidor, que limita entrada + saída
+            # juntas e foi a causa medida das respostas vazias (ADR-0018).
+            opcoes["num_ctx"] = self.contexto
+        if opcoes:
+            carga["options"] = opcoes
 
         resposta = self.cliente.transporte.enviar(
             f"{self.cliente.url}/api/generate", carga, self.cliente.timeout
         )
-        # O motivo do encerramento distingue "não respondeu" de "foi cortado".
+        # O motivo do encerramento distingue "não respondeu" de "foi cortado";
+        # a soma dos tokens distingue **qual limite** cortou.
+        self._ultimo_uso = Uso(
+            entrada=resposta.get("prompt_eval_count") or 0,
+            saida=resposta.get("eval_count") or 0,
+        )
         return resposta.get("response", ""), resposta.get("done_reason")
 
     def _prompt_do_degrau(self, degrau: Degrau, prompt: str) -> str:

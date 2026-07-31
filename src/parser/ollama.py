@@ -261,7 +261,16 @@ class ExtratorModelo(ExtratorBaseadoEmModelo):
         degrau_maximo: Any = None,
         raciocinar: bool = False,
         tokens_maximos: int | None = None,
+        contexto: int | None = None,
     ) -> None:
+        """
+        Args:
+            contexto: teto de entrada **mais** saída. Aqui a entrada é o texto já
+                extraído, bem menor que uma imagem — medido, ~1800 tokens contra
+                ~2200 —, e por isso esta rota raramente esbarra no padrão do
+                servidor. Continua declarável: página densa ou modelo com
+                contexto menor mudam a conta (ADR-0018).
+        """
         from parser.degraus import SaidaEmDegraus
 
         super().__init__(cliente, campos, instrucao=instrucao)
@@ -271,6 +280,7 @@ class ExtratorModelo(ExtratorBaseadoEmModelo):
             degrau_maximo=degrau_maximo,
             raciocinar=raciocinar,
             tokens_maximos=tokens_maximos,
+            contexto=contexto,
         )
         self.degraus_usados: list[Any] = []
         """O degrau que produziu cada página, na ordem."""

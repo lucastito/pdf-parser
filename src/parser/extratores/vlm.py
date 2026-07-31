@@ -48,6 +48,7 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
         degrau_maximo: Degrau | None = None,
         raciocinar: bool = False,
         tokens_maximos: int | None = None,
+        contexto: int | None = None,
     ) -> None:
         """
         Args:
@@ -57,6 +58,13 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
             dpi: resolução da imagem. **Registre-o junto do resultado**: é
                 variável do experimento, e duas execuções com DPI diferente não
                 são comparáveis.
+
+                Vale também para o `contexto`: mais resolução significa mais
+                tokens de entrada, e a entrada disputa espaço com a resposta.
+            contexto: teto de entrada **mais** saída. Nesta rota é o parâmetro
+                mais sensível: uma página renderizada consome ~2200 tokens só de
+                entrada, e o padrão do servidor (4096) deixa pouco para a
+                resposta. Foi a causa medida das respostas vazias (ADR-0018).
             degrau_maximo: o degrau de saída mais livre permitido (SPEC §4.4).
                 Fixá-lo torna uma bateria de execuções comparável entre si; deixá-lo
                 aberto maximiza a chance de obter saída de um modelo pequeno.
@@ -75,6 +83,7 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
             degrau_maximo=degrau_maximo,
             raciocinar=raciocinar,
             tokens_maximos=tokens_maximos,
+            contexto=contexto,
         )
         self.degraus_usados: list[Degrau] = []
         """O degrau que produziu cada página, na ordem.

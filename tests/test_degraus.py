@@ -367,7 +367,10 @@ class TestLimiteDeSaida:
     **tamanho da resposta pedida**. Descrever uma página cabe; enumerar dezenas
     de itens não, e a resposta é cortada no meio — voltando vazia.
 
-    O modelo suporta 262144 tokens de contexto. O teto de ~2048 é do servidor.
+    **Retificado (ADR-0018):** o limite que corta é o **contexto**, que soma
+    entrada e saída, não o teto de saída. Ver `TestContexto`. O teto continua
+    declarável, e os testes desta classe seguem válidos — o que mudou foi
+    entender qual dos dois limites atua.
     """
 
     def test_declara_o_limite_de_saida(self):
@@ -418,3 +421,101 @@ class TestLimiteDeSaida:
 
         for chamada in transporte.chamadas:
             assert chamada["options"]["num_predict"] == 4096
+
+
+class TestContexto:
+    """O limite que corta é o **contexto**, não o teto de saída.
+
+    Foram medidos os dois. Elevar `num_predict` a 16384 **não** removeu o corte:
+    as respostas continuaram parando perto de 1900 tokens. Somando entrada e
+    saída, quatro casos com prompts de tamanhos diferentes pararam na mesma soma
+    exata:
+
+    | caso                 | entrada + saída | soma     | `done_reason` |
+    |----------------------|-----------------|----------|---------------|
+    | 5 itens (coube)      | 2184 + 1581     |     3765 | `stop`        |
+    | página, com valores  | 2227 + 1869     | **4096** | `length`      |
+    | idem, sem raciocínio | 2233 + 1863     | **4096** | `length`      |
+    | teto a 16384         | 2189 + 1907     | **4096** | `length`      |
+
+    Prompts de tamanhos diferentes parando na mesma soma é assinatura de teto
+    atingido, não de o modelo parar por conta própria. O padrão do servidor é
+    4096 e limita entrada **mais** saída; uma página renderizada consome ~2200
+    só de entrada.
+
+    Ver ADR-0018.
+    """
+
+    def test_declara_o_contexto(self):
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+        _saida(transporte, contexto=16384).obter("prompt")
+
+        assert transporte.chamadas[0]["options"]["num_ctx"] == 16384
+
+    def test_sem_contexto_declarado_nao_envia_a_opcao(self):
+        """Sem declaração vale o padrão do servidor — que é o problema, mas
+        inventar valor aqui seria número mágico (ADR-0008)."""
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+        _saida(transporte).obter("prompt")
+
+        assert "num_ctx" not in transporte.chamadas[0].get("options", {})
+
+    def test_contexto_e_teto_convivem(self):
+        """São parâmetros distintos: um limita a soma, o outro só a saída."""
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+        _saida(transporte, contexto=8192, tokens_maximos=4096).obter("prompt")
+
+        opcoes = transporte.chamadas[0]["options"]
+        assert opcoes["num_ctx"] == 8192
+        assert opcoes["num_predict"] == 4096
+
+    def test_o_contexto_vale_em_todos_os_degraus(self):
+        transporte = TransporteRoteirizado(
+            VAZIO, {"response": "x"}, {"response": json.dumps(ITENS)}
+        )
+        _saida(transporte, contexto=8192).obter("prompt")
+
+        for chamada in transporte.chamadas:
+            assert chamada["options"]["num_ctx"] == 8192
+
+    def test_corte_aponta_o_contexto_e_nao_so_o_teto(self):
+        """A mensagem antiga mandava elevar `tokens_maximos`, e isso não resolve.
+
+        Foi o conselho seguido por uma sessão inteira: o teto foi elevado, o
+        corte continuou, e ninguém conferiu que o número não batia. Quem depurar
+        precisa ser mandado ao parâmetro certo.
+        """
+        cortada = {
+            "response": "",
+            "done_reason": "length",
+            "eval_count": 1907,
+            "prompt_eval_count": 2189,
+        }
+        transporte = TransporteRoteirizado(cortada, cortada, cortada)
+
+        with pytest.raises(TodosOsDegrausFalharam) as erro:
+            _saida(transporte, tokens_maximos=16384).obter("prompt")
+
+        mensagem = str(erro.value).lower()
+        assert "contexto" in mensagem
+        assert "num_ctx" in mensagem
+
+    def test_a_soma_de_entrada_e_saida_e_registrada(self):
+        """Foi a **soma** que revelou a causa, e ela vinha em toda resposta.
+
+        Sem registrá-la, o diagnóstico para no parâmetro errado — foi o que
+        aconteceu.
+        """
+        cortada = {
+            "response": "",
+            "done_reason": "length",
+            "eval_count": 1907,
+            "prompt_eval_count": 2189,
+        }
+        transporte = TransporteRoteirizado(cortada, cortada, cortada)
+
+        varredura = _saida(transporte, contexto=4096).varrer("prompt")
+
+        motivo = varredura.tentativas[0].motivo
+        assert "2189" in motivo and "1907" in motivo, motivo
+        assert "4096" in motivo, motivo
