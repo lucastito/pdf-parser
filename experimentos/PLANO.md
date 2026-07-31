@@ -73,6 +73,10 @@ E os parâmetros descobertos aqui vão fixados no script das outras máquinas.
 
 ## 2. Consolidação por campo
 
+> Decisão registrada em [ADR-0017](../docs/adr/0017-consolidacao-por-campo.md),
+> incluindo o limite: rotas que compartilham fonte de erro podem errar juntas,
+> e a votação confirmaria o erro com confiança alta.
+
 **Por que aqui:** é o item de maior valor do projeto inteiro, e ainda não existe.
 Ele resolve **duas coisas de uma vez**.
 
@@ -102,6 +106,9 @@ pessoal precisa como entrada.
 - [ ] ADR da decisão
 
 ## 2b. Escopo: triagem e preenchimento são fases distintas
+
+> Decisão registrada em [ADR-0016](../docs/adr/0016-triagem-e-preenchimento.md),
+> com a conta completa e a verificação estrutural das páginas.
 
 **O problema, com números.** Se cada modelo rodar todas as hipóteses em todas as
 páginas, a conta explode:

@@ -26,6 +26,8 @@ vale mais que argumento.
 | [0013](0013-desenho-do-experimento-multimaquina.md) | Três eixos de comparação entre máquinas | Confrontar máquinas diferentes mede hardware, não estratégia |
 | [0014](0014-selecao-de-modelos-para-comparacao.md) | Critérios de seleção de modelos, com trade-offs | Nove candidatos da mesma família enviesariam a conclusão |
 | [0015](0015-limite-de-saida-do-modelo.md) | Teto de saída declarável, sem padrão embutido | `done_reason` `length` em 1887–1927 tokens: a resposta era **cortada**, não ausente |
+| [0016](0016-triagem-e-preenchimento.md) | Triagem e preenchimento como fases distintas | O desenho ingênuo dava **1.656 execuções, ~56 dias** de máquina |
+| [0017](0017-consolidacao-por-campo.md) | Consolidar por célula, não escolher planilha *(proposto)* | Três rotas empatam em **100%**; escolher uma descarta a concordância |
 
 ## Em aberto
 
