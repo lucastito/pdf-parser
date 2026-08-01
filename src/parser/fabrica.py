@@ -110,6 +110,8 @@ def _llm(perfil: Perfil, rota: Rota) -> Extrator:
         raciocinar=bool(rota.extras.get("raciocinar", False)),
         tokens_maximos=rota.extras.get("tokens_maximos"),
         contexto=rota.extras.get("contexto"),
+        semente=rota.extras.get("semente"),
+        temperatura=float(rota.extras.get("temperatura", 0.0)),
     )
 
 
@@ -126,6 +128,8 @@ def _vlm(perfil: Perfil, rota: Rota) -> Extrator:
         raciocinar=bool(rota.extras.get("raciocinar", False)),
         tokens_maximos=rota.extras.get("tokens_maximos"),
         contexto=rota.extras.get("contexto"),
+        semente=rota.extras.get("semente"),
+        temperatura=float(rota.extras.get("temperatura", 0.0)),
     )
 
 

@@ -49,6 +49,8 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
         raciocinar: bool = False,
         tokens_maximos: int | None = None,
         contexto: int | None = None,
+        semente: int | None = None,
+        temperatura: float = 0.0,
     ) -> None:
         """
         Args:
@@ -72,6 +74,10 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
                 caso mais simples — **não** por estar provado que resolve alguma
                 coisa: a medição mostrou que desligar quase não altera a geração.
                 Existe para poder ser medido. Ver `parser.degraus`.
+            semente: fixa a amostragem, tornando a geração repetível. Sem ela,
+                comparar máquinas mede também o ruído da amostragem (ADR-0020).
+            temperatura: zero por padrão. Ler dígitos de uma tabela não tem
+                criatividade a exercitar.
         """
         _validar_dpi(dpi)
         super().__init__(cliente, campos, instrucao=instrucao or INSTRUCAO_VISUAL)
@@ -84,6 +90,8 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
             raciocinar=raciocinar,
             tokens_maximos=tokens_maximos,
             contexto=contexto,
+            semente=semente,
+            temperatura=temperatura,
         )
         self.degraus_usados: list[Degrau] = []
         """O degrau que produziu cada página, na ordem.

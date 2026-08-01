@@ -558,6 +558,60 @@ class TestContexto:
         assert "4096" in motivo, motivo
 
 
+class TestReprodutibilidade:
+    """Geração precisa ser repetível, senão nenhuma comparação se sustenta.
+
+    O projeto não declarava `seed` nem `temperature`, e o padrão do servidor é
+    amostragem aleatória. Consequência: duas execuções da **mesma** configuração
+    na **mesma** máquina podiam divergir — e, entre máquinas, a diferença de
+    acurácia seria indistinguível de ruído amostral.
+
+    Não é detalhe: o experimento inteiro existe para atribuir diferença a modelo,
+    configuração ou hardware. Sem geração repetível, nenhuma das três atribuições
+    é possível.
+
+    > **Limite que fica declarado:** mesmo com `seed` fixo e temperatura zero, a
+    > ordem de operações em ponto flutuante muda entre processador e placa e
+    > entre arquiteturas. A variação cai muito, **não** a zero (ADR-0020).
+    """
+
+    def test_declara_semente_e_temperatura(self):
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+        _saida(transporte, semente=7).obter("prompt")
+
+        opcoes = transporte.chamadas[0]["options"]
+        assert opcoes["seed"] == 7
+        assert opcoes["temperature"] == 0
+
+    def test_a_semente_vale_em_todos_os_degraus(self):
+        """Degraus com sementes diferentes mediriam sorte, não restrição."""
+        transporte = TransporteRoteirizado(
+            VAZIO, {"response": "x"}, {"response": json.dumps(ITENS)}
+        )
+        _saida(transporte, semente=7).obter("prompt")
+
+        for chamada in transporte.chamadas:
+            assert chamada["options"]["seed"] == 7
+
+    def test_sem_semente_declarada_a_temperatura_ainda_e_zero(self):
+        """Temperatura zero é o padrão do projeto, não consequência da semente.
+
+        Amostragem aleatória em extração de tabela não tem serventia: não há
+        criatividade a exercitar, e ela só acrescenta variância ao resultado.
+        """
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+        _saida(transporte).obter("prompt")
+
+        assert transporte.chamadas[0]["options"]["temperature"] == 0
+
+    def test_temperatura_declarada_sobrepoe_o_padrao(self):
+        """Medir o efeito da temperatura é hipótese legítima — só não é o padrão."""
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+        _saida(transporte, temperatura=0.7).obter("prompt")
+
+        assert transporte.chamadas[0]["options"]["temperature"] == 0.7
+
+
 class TestUsoNoResultado:
     """Os tokens precisam chegar ao **JSON**, não só à mensagem de erro.
 

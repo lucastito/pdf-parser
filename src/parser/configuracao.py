@@ -87,6 +87,24 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "origem": "ADR-0005",
         "porque": "erro relativo aceito na comparação numérica; '42' e '42.0' são iguais",
     },
+    "semente": {
+        "valor": 20260801,
+        "origem": "ADR-0020",
+        "porque": (
+            "qualquer inteiro serve — o que importa é ser **fixo** e registrado. "
+            "Sem semente a geração é irrepetível, e a diferença entre máquinas "
+            "fica indistinguível de ruído de amostragem. A data da fixação vira "
+            "o valor para que ele não pareça escolhido por outro motivo"
+        ),
+    },
+    "temperatura": {
+        "valor": 0.0,
+        "origem": "ADR-0020",
+        "porque": (
+            "extração de tabela não tem criatividade a exercitar; amostragem "
+            "aleatória só acrescenta variância ao resultado"
+        ),
+    },
     "vlm.contexto": {
         "valor": 12271,
         "origem": "ADR-0018, via parser.contexto.dimensionar",

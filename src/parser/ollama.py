@@ -262,6 +262,8 @@ class ExtratorModelo(ExtratorBaseadoEmModelo):
         raciocinar: bool = False,
         tokens_maximos: int | None = None,
         contexto: int | None = None,
+        semente: int | None = None,
+        temperatura: float = 0.0,
     ) -> None:
         """
         Args:
@@ -270,6 +272,10 @@ class ExtratorModelo(ExtratorBaseadoEmModelo):
                 ~2200 —, e por isso esta rota raramente esbarra no padrão do
                 servidor. Continua declarável: página densa ou modelo com
                 contexto menor mudam a conta (ADR-0018).
+            semente: fixa a amostragem. Sem ela a geração é irrepetível, e a
+                diferença entre máquinas vira indistinguível de ruído (ADR-0020).
+            temperatura: zero por padrão — extração não tem criatividade a
+                exercitar.
         """
         from parser.degraus import SaidaEmDegraus
 
@@ -281,6 +287,8 @@ class ExtratorModelo(ExtratorBaseadoEmModelo):
             raciocinar=raciocinar,
             tokens_maximos=tokens_maximos,
             contexto=contexto,
+            semente=semente,
+            temperatura=temperatura,
         )
         self.degraus_usados: list[Any] = []
         """O degrau que produziu cada página, na ordem."""

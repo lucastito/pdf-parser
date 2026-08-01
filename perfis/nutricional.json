@@ -93,8 +93,9 @@
     "llm": {
       "modelo": "qwen3:4b",
       "prompt": "prompts/extracao-tabela-texto.md",
-      "timeout": 3600.0,
+      "timeout": null,
       "contexto": 11650,
+      "semente": 20260801,
       "campos": [
         "identificador",
         "energia_kcal",
@@ -108,8 +109,9 @@
       "modelo": "qwen3-vl:4b",
       "dpi": 150,
       "prompt": "prompts/extracao-tabela-visao.md",
-      "timeout": 3600.0,
+      "timeout": null,
       "contexto": 12271,
+      "semente": 20260801,
       "campos": [
         "identificador",
         "energia_kcal",

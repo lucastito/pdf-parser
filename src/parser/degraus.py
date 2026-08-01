@@ -321,6 +321,8 @@ class SaidaEmDegraus:
         raciocinar: bool = False,
         tokens_maximos: int | None = None,
         contexto: int | None = None,
+        semente: int | None = None,
+        temperatura: float = 0.0,
     ) -> None:
         """
         Args:
@@ -348,6 +350,13 @@ class SaidaEmDegraus:
                 Nenhum valor é inventado aqui. Um teto arbitrário viraria número
                 mágico sem procedência (ADR-0008) — e o valor certo depende de
                 quanto a entrada consome, que precisa ser medido.
+            semente: fixa a amostragem, tornando a geração repetível. Sem ela,
+                duas execuções da mesma configuração podem divergir — e entre
+                máquinas a diferença viraria indistinguível de ruído (ADR-0020).
+            temperatura: **zero por padrão**. Extração de tabela não tem
+                criatividade a exercitar; amostragem aleatória só acrescenta
+                variância. Declarável para quem quiser medir o efeito dela, que é
+                hipótese legítima — só não é o comportamento padrão.
         """
         self.cliente = cliente
         self.campos = campos
@@ -356,6 +365,8 @@ class SaidaEmDegraus:
         self.raciocinar = raciocinar
         self.tokens_maximos = tokens_maximos
         self.contexto = contexto
+        self.semente = semente
+        self.temperatura = temperatura
         self._ultimo_uso: Uso | None = None
         """Tokens da chamada mais recente. Alimenta diagnóstico e registro."""
 
@@ -555,15 +566,19 @@ class SaidaEmDegraus:
         if imagens:
             carga["images"] = imagens
 
-        opcoes: dict[str, int] = {}
+        # Sempre declarada: o padrão do servidor é amostragem aleatória, e
+        # geração irrepetível impede atribuir diferença a modelo, configuração
+        # ou máquina — que é o propósito do experimento (ADR-0020).
+        opcoes: dict[str, Any] = {"temperature": self.temperatura}
+        if self.semente is not None:
+            opcoes["seed"] = self.semente
         if self.tokens_maximos:
             opcoes["num_predict"] = self.tokens_maximos
         if self.contexto:
             # Sem isto vale o padrão do servidor, que limita entrada + saída
             # juntas e foi a causa medida das respostas vazias (ADR-0018).
             opcoes["num_ctx"] = self.contexto
-        if opcoes:
-            carga["options"] = opcoes
+        carga["options"] = opcoes
 
         resposta = self.cliente.transporte.enviar(
             f"{self.cliente.url}/api/generate", carga, self.cliente.timeout

@@ -222,6 +222,27 @@ class TestPerfisDoProjeto:
         faltando = esperados - set(perfil.mapeamento)
         assert not faltando, f"campos sem mapeamento declarado: {sorted(faltando)}"
 
+    def test_rotas_por_modelo_declaram_semente(self):
+        """Sem semente declarada, a geração é irrepetível e nada é comparável.
+
+        Vale a mesma lógica do contexto (ADR-0018): correção que existe no código
+        e fica desligada no arquivo que as medições usam é a pior combinação,
+        porque a próxima rodada herda o defeito em silêncio.
+        """
+        from pathlib import Path
+
+        raiz = Path(__file__).resolve().parent.parent
+        for caminho in (raiz / "perfis").glob("*.json"):
+            perfil = carregar_perfil(caminho)
+            for nome in ("llm", "vlm"):
+                rota = perfil.rotas.get(nome)
+                if rota is None:
+                    continue
+                assert rota.extras.get("semente") is not None, (
+                    f"{caminho.name}: a rota {nome!r} não declara 'semente' — "
+                    "a geração fica irrepetível"
+                )
+
     def test_o_mapeamento_nao_acolhe_leitura_corrompida(self):
         """`Energia (kd)` é erro de OCR, não variante legítima de `Energia (kJ)`.
 
