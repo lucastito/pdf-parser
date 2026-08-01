@@ -204,13 +204,18 @@ mesmo modelo em envelopes distintos é o que responde "mais capacidade ajuda?".
 |---|---|---|
 | **2 GB** (processador) | `qwen3-vl:4b` | `qwen3:4b` |
 | **6 GB** | + `minicpm-v:8b`, `qwen2.5vl:7b` | + `qwen3:8b` |
+| **8 GB** | os mesmos do degrau de 6 GB | os mesmos do degrau de 6 GB |
 | **12 GB** | + `gemma3:12b` | + `gemma3:12b`, `qwen3:14b` |
 | **16 GB** | + `qwen3-vl:30b` (teto) | + `qwen3:30b` (teto) |
 
-**O envelope de 6 GB é o mais informativo**, e quase ficou de fora do
+**A faixa de 6-8 GB é a mais informativa**, e quase ficou de fora do
 levantamento: ocupa o vão entre "não roda quase nada" e "roda quase tudo", que é
 onde a curva custo × qualidade deve dobrar. Uma escada 2 → 12 → 16 mediria os
 extremos e perderia o joelho.
+
+Os dois envelopes vizinhos rodam **o mesmo conjunto de modelos**, de propósito:
+assim a diferença medida é atribuível à máquina, e não ao que cada uma rodou. E
+se uma das duas não estiver disponível a tempo, o degrau continua na curva.
 
 **O piso de 2 GB executa só o denominador comum** — o modelo que as quatro
 compartilham. Ali uma página pela rota de visão leva **77 minutos** (medido, sem

@@ -62,9 +62,60 @@ Os demais achados do módulo (`cobertura-baixa`, `valor-constante`,
 entrada. São diagnóstico de extração, não taxonomia — e a distinção precisa ficar
 explícita para que a classificação não misture causa com efeito.
 
-## A taxonomia completa
+## Três eixos, e por que não bastava um
 
-Marcada por custo de detecção, que é o que decide o que entra primeiro.
+A primeira versão desta taxonomia tinha **um** eixo: degradação e patologia
+(rotação, ruído, camada de texto ausente). É o eixo que a experiência deste
+projeto produziu, e ele sozinho tem um problema de aceitação: os conjuntos de
+referência da área classificam por outro critério, e uma taxonomia própria que
+ignora o vocabulário estabelecido parece desconhecimento, não contribuição.
+
+Os conjuntos de referência anotam **elementos de layout**: cinco categorias em
+PubLayNet (texto, título, lista, tabela, figura), onze em DocLayNet (acrescenta
+nota de rodapé, fórmula, cabeçalho e rodapé de página, título de seção, imagem),
+treze em DocBank. DocLayNet acrescenta ainda um eixo de **domínio** — relatório
+financeiro, manual, artigo científico, lei, patente, edital.
+
+Nenhum dos três anota degradação. É aí que este trabalho acrescenta.
+
+| Eixo | Pergunta | Origem |
+|---|---|---|
+| **A — layout** | que elementos a página contém? | adotado dos conjuntos de referência |
+| **B — degradação** | o que dificulta a leitura? | **contribuição deste trabalho** |
+| **C — domínio** | de que tipo é o documento? | adotado, e garante que a coleta não enviese |
+
+Adotar A e C em vez de inventar nomes novos é o que permite dizer *"acrescento um
+eixo que aqueles conjuntos não cobrem"* — o acréscimo vira contribuição em vez de
+omissão.
+
+**O eixo C existe por uma razão prática, não decorativa:** dez PDFs que são todos
+relatórios financeiros exercitam poucas características. O domínio é o controle
+contra coleta enviesada.
+
+### Eixo A — elementos de layout
+
+Adotados de DocLayNet, que é o mais completo dos três e o único anotado por
+humanos:
+
+texto corrido · título · título de seção · lista · **tabela** · figura ·
+imagem · fórmula · nota de rodapé · cabeçalho de página · rodapé de página
+
+Neste projeto a **tabela** é o elemento de interesse; os demais entram como
+contexto que pode confundir a extração — uma nota de rodapé numérica logo abaixo
+de uma tabela é candidata clássica a virar linha fantasma.
+
+### Eixo C — domínio do documento
+
+Adotados de DocLayNet: relatório financeiro · manual · artigo científico · lei e
+regulamento · patente · edital.
+
+Acrescentado, porque é o caso de uso deste projeto e não aparece naquele
+conjunto: **relatório técnico com tabela de dados** — laudo, boletim, tabela de
+composição, ficha técnica.
+
+## Eixo B — degradação e estrutura
+
+Marcado por custo de detecção, que é o que decide o que entra primeiro.
 
 ### Codificação da página
 
@@ -143,3 +194,34 @@ que já é detectável e declarar o resto como coberto por amostragem.
 **Aberto:** a granularidade de "tabela sem bordas" versus "grade parcial" só se
 decide com documentos na mão. Fixá-la agora seria inventar distinção que talvez
 nenhum documento exercite.
+
+## A combinação é o que se mede, não o eixo isolado
+
+Uma página não é "digitalizada" **ou** "tabela sem grade" — ela é as duas coisas,
+num domínio. A unidade de análise do experimento é a **combinação**:
+
+> tabela sem grade (A) + digitalizada com inclinação (B) + relatório técnico (C)
+
+É por isso que a triagem roda **uma página por combinação relevante**, e não uma
+por eixo. E é a combinação que a regra final vai citar: *"para tabela sem grade em
+página digitalizada, use esta estratégia"*.
+
+**Não se persegue o produto cartesiano dos três eixos** — seriam centenas de
+combinações, a maioria sem documento que a exercite. Entram as combinações que a
+coleta encontrar, e o que não for coletado fica declarado como não medido.
+
+## Fontes
+
+- [DocLayNet: A Large Human-Annotated Dataset for Document-Layout
+  Analysis](https://dl.acm.org/doi/pdf/10.1145/3534678.3539043) — 11 elementos de
+  layout, 6 domínios, anotação humana
+- [PubLayNet: Largest Dataset Ever for Document Layout
+  Analysis](https://www.semanticscholar.org/paper/PubLayNet:-Largest-Dataset-Ever-for-Document-Layout-Zhong-Tang/b5799d10df17de3232540e990da69553800d6376)
+  — 5 categorias, anotação automática
+- [A Comparative Study of PDF Parsing Tools Across Diverse Document
+  Categories](https://arxiv.org/pdf/2410.09871) — comparação de ferramentas por
+  categoria de documento
+
+> **Limite das fontes:** os conjuntos citados anotam layout, não degradação, e
+> nenhum foi usado para calibrar nada aqui. Servem para ancorar o vocabulário —
+> a medição deste projeto é independente deles.

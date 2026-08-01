@@ -25,13 +25,28 @@ desperdiça, pequeno demais entrega um sistema que não roda.
 |---|---|---|
 | **2 GB** (processador) | **piso da curva** | denominador comum, e as rotas determinísticas |
 | **6 GB** | degrau baixo | modelos de 4B e 7-8B |
+| **8 GB** | degrau baixo, **redundante de propósito** | idem, com folga maior |
 | **12 GB** | degrau médio | até 12-14B |
 | **16 GB** | teto | 14B com folga; 24-30B quantizado, apertado |
 
-**O envelope de 6 GB é o mais informativo da escada, e quase ficou de fora.** Ele
+**A faixa de 6-8 GB é a mais informativa da escada, e quase ficou de fora.** Ela
 ocupa o vão entre "não roda nada" e "roda quase tudo" — que é onde a curva
 custo × qualidade deve dobrar. Uma escada 2 → 12 → 16 mediria os extremos e
 perderia o joelho.
+
+**Por que dois envelopes vizinhos, e não um.** Duas razões, e a segunda vale mais
+que a primeira:
+
+1. **Redundância de disponibilidade.** São máquinas de terceiros; se uma não
+   rodar a tempo, o degrau não desaparece da curva.
+2. **Resolução onde a curva dobra.** 6 e 8 GB são a região de transição. Dois
+   pontos ali distinguem uma subida suave de um degrau abrupto — distinção que um
+   ponto só não sustenta.
+
+> **Limitação declarada:** máquinas vizinhas em memória podem ter placas de
+> **gerações diferentes**, e aí a diferença entre elas não é só de memória.
+> Registrar geração e versão de driver junto do resultado; sem isso, a
+> comparação entre 6 e 8 GB confundiria duas variáveis.
 
 ### O piso não é descartável
 
@@ -139,8 +154,13 @@ responde Q2 (ADR-0020), e ela não custa vaga nova.
 |---|---|---|
 | 2 GB (processador) | `qwen3-vl:4b` (denominador) | `qwen3:4b` (denominador) |
 | 6 GB | + `minicpm-v:8b`, `qwen2.5vl:7b` | + `qwen3:8b` |
+| 8 GB | os mesmos do degrau de 6 GB | os mesmos do degrau de 6 GB |
 | 12 GB | + `gemma3:12b` | + `gemma3:12b`, `qwen3:14b` |
 | 16 GB | + `qwen3-vl:30b` (teto, falha esperada) | + `qwen3:30b` (teto, falha esperada) |
+
+O degrau de 8 GB roda **o mesmo conjunto** do de 6 GB, e isso é deliberado: com
+modelos idênticos, a diferença medida é atribuível à máquina. Rodar modelos
+diferentes ali responderia outra pergunta e perderia esta.
 
 **O denominador comum é o que amarra a escada.** Sem um modelo que rode nas
 quatro, as máquinas produziriam resultados sem ponto de contato, e a diferença
