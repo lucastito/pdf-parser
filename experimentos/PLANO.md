@@ -403,31 +403,46 @@ entre estratégias (`comparar_estrategias`). Falta a camada que **decide**. A
 
 ### O que a primeira execução sobre dados reais revelou
 
-Rodada sobre as saídas gravadas das quatro rotas determinísticas (6304 células):
+A primeira rodada devolveu **56,2% de células com voto único**. A suspeita
+natural — "as rotas leem pouco" — estava errada. Era **alinhamento faltando**, em
+dois níveis, e nenhum deles é defeito da votação.
 
-| Desfecho | Células | |
+**Identificador.** Só **81 de ~283 itens** apareciam nas quatro rotas. A causa não
+é acento: o extrator de tabela insere **espaço no meio da palavra** ao atravessar
+a quebra de coluna num cabeçalho rotacionado.
+
+| Rota | Identificador lido |
+|---|---|
+| posicional | `1 Arroz, integral, cozido` |
+| pdfplumber | `1 Arroz, integra l, cozido` |
+
+Dois itens, um voto cada. **200 alimentos fora da votação por um espaço.**
+
+**Campo.** O perfil mapeava **5** campos e o documento tem **11**. Cada variante
+virava coluna própria — por acento perdido no OCR (`Proteina`) ou ordem trocada
+pela rotação (`Alimentar Fibra`).
+
+#### Efeito acumulado, medido
+
+| Etapa | Concordância | Voto único |
 |---|---|---|
-| concordância | 2563 | 40,7% |
-| maioria | 8 | 0,1% |
-| **voto único** | **3442** | **54,6%** |
-| pendência | 291 | 4,6% |
+| inicial | 39,3% | 56,2% |
+| + mapeamento parcial (5 campos) | 40,7% | 54,6% |
+| + alinhamento de identificador | 60,4% | 33,3% |
+| **+ mapeamento completo (11 campos)** | **79,4%** | **13,5%** |
 
-**Os 54,6% de voto único não são falha da votação — são alinhamento faltando**,
-em dois níveis:
+- [x] **Ampliar o `mapeamento` do perfil** para todos os campos do documento
+- [x] **Alinhar identificadores entre rotas** — normalização de acento, espaço e
+      caixa antes de indexar
 
-1. **Identificador.** Só **81 de ~283 itens** aparecem nas quatro rotas. Os nomes
-   dos itens não batem entre extratores (acentuação, quebra de linha no nome).
-   Item presente numa rota só tem, por definição, um voto.
-2. **Campo.** O perfil declara `mapeamento` para **5** campos, e o documento tem
-   ~12. `Proteina (g)` e `Proteína (g)` continuam sendo colunas diferentes.
+> **Exclusão deliberada:** `Energia (kd)` **não** entra no mapeamento. É leitura
+> corrompida do OCR, não variante legítima, e acolhê-la faria o erro votar como
+> se fosse boa leitura — a votação confirmaria o valor errado com confiança alta,
+> que é o modo de falha que a consolidação existe para evitar. Há teste guardando.
 
-Aplicar o mapeamento existente subiu a concordância de 39,3% para 40,7% — pouco,
-porque ele cobre menos da metade dos campos.
-
-- [ ] **Ampliar o `mapeamento` do perfil** para todos os campos do documento
-- [ ] **Alinhar identificadores entre rotas** — normalização de acento, espaço e
-      quebra de linha antes de indexar. É o que destrava os outros 200 itens, e
-      vale mais que qualquer ajuste de peso
+- [ ] Rodar a consolidação sobre as **23 páginas**, não só as 9 atuais
+- [ ] Investigar os **6,8% de pendência** restantes: divergência real, ou ainda
+      alinhamento?
 - [ ] **A votação precisa lidar com conjuntos diferentes de rotas.** Máquinas com
       mais capacidade rodam modelos que a de referência não roda, e são elas que se
       parecem com o servidor de destino. Uma rota ausente numa máquina não pode
