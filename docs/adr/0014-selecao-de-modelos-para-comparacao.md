@@ -119,7 +119,7 @@ melhor?"*. É a pergunta que um revisor faz primeiro.
 
 | # | Modelo | Origem | Tam. | Variável que isola |
 |---|---|---|---|---|
-| 0 | `minicpm-v4.6:1b` | OpenBMB | **1,6 GB** | piso real — cabe na placa de 2 GB |
+| 0 | `minicpm-v4.6:1b` | OpenBMB | **1,6 GB** | o menor da escada — piso do envelope mínimo |
 | 1 | `qwen3-vl:2b` + `:4b` | Alibaba | 1,9 / 3,3 GB | **denominador comum** (par) e efeito do tamanho |
 | 2 | `glm-ocr` | Zhipu | 1,6–2,2 GB | **especialização em documento**, com tamanho mínimo |
 | 3 | `deepseek-ocr:3b` | DeepSeek | 6,7 GB | **compressão de contexto visual** — abordagem distinta |
@@ -180,10 +180,35 @@ responde Q2 (ADR-0020), e ela não custa vaga nova.
 | 12 GB | + `gemma4:12b` | + `gemma4:12b`, `qwen3:14b` |
 | 16 GB | + `qwen3-vl:30b` (teto, falha esperada) | + `qwen3:30b` (teto, falha esperada) |
 
-**O envelope de 2 GB deixou de ser simbólico.** Antes rodava um modelo de 3,3 GB
-com 86% no processador — medido: 0,64 GB dos 4,67 GB iam para a placa. Agora três
-modelos cabem majoritariamente nela, e aquele ponto da curva passa a medir **placa
-pequena**, não execução híbrida.
+> ### ⚠ Retificação medida (2026-08-01) — a placa de 2 GB não é usada, e o motivo não é tamanho
+>
+> A expectativa registrada aqui era que modelos menores passariam a usar a placa
+> de verdade. **A medição refutou.** Com os modelos já instalados:
+>
+> | Modelo | Tamanho | Em placa |
+> |---|---|---|
+> | `minicpm-v4.6:1b` | 0,69 GB | **7%** |
+> | `qwen3-vl:2b` | 2,01 GB | **4%** |
+> | `glm-ocr` | 2,21 GB | **4%** |
+> | `qwen3-vl:4b` | 4,67 GB | 14% |
+>
+> O modelo de **0,69 GB** cabe folgado nos 2 GB e mesmo assim fica no
+> processador. O servidor reporta `96%/4% CPU/GPU`, e a placa registra **0 MiB
+> em uso**.
+>
+> **A causa é a capacidade de computação da placa (6.1, arquitetura de 2017)**,
+> não o tamanho do modelo. Abaixo do mínimo que o servidor exige para descarregar
+> de verdade, o tamanho é irrelevante.
+>
+> **Consequência para o experimento — e ela é boa.** Este envelope não é "placa
+> pequena": é **execução em processador**, e deve ser declarado assim. Continua
+> sendo o piso da curva e continua informativo — "que qualidade se consegue sem
+> aceleração útil" é pergunta legítima —, mas a curva passa a ter uma
+> descontinuidade honesta entre ele e os demais, em vez de fingir gradação.
+>
+> Vale como aviso às outras máquinas: **verificar a capacidade de computação,
+> não só a memória**. Uma placa de 12 GB com arquitetura antiga teria o mesmo
+> problema, e o script de preparação precisa detectar isso.
 
 O degrau de 8 GB roda **o mesmo conjunto** do de 6 GB, e isso é deliberado: com
 modelos idênticos, a diferença medida é atribuível à máquina. Rodar modelos

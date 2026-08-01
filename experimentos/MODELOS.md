@@ -24,13 +24,13 @@ que não isola variável nova não entra, por melhor que seja sua reputação.
 
 > **Revisão de 2026-08-01.** O levantamento anterior era de julho e a área anda
 > rápido: apareceram **modelos especializados em documento** que não existiam na
-> lista, e a faixa abaixo de 2 GB — a única que roda folgada na máquina de
-> referência — estava vazia. Critério do projeto confirmado nesta revisão:
-> **apenas peso aberto**, licença indiferente; nenhum serviço pago por chamada.
+> lista, e a escada não tinha piso — começava em 3,3 GB. Critério do projeto
+> confirmado nesta revisão: **apenas peso aberto**, licença indiferente; nenhum
+> serviço pago por chamada.
 
 | # | Modelo | Origem | Tam. | Pergunta que só ele responde |
 |---|---|---|---|---|
-| 0 | `minicpm-v4.6:1b` | OpenBMB | **1,6 GB** | **cabe na placa de 2 GB** — o piso real da escada |
+| 0 | `minicpm-v4.6:1b` | OpenBMB | **1,6 GB** | **o menor da escada** — piso do envelope mínimo |
 | 1 | `qwen3-vl:2b` | Alibaba | 1,9 GB | **denominador comum**, e o menor da família de referência |
 | 2 | `glm-ocr` | Zhipu | 1,6–2,2 GB | **especializado em documento**, e minúsculo |
 | 3 | `deepseek-ocr:3b` | DeepSeek | 6,7 GB | **compressão óptica de contexto** — abordagem distinta das demais |
@@ -41,11 +41,13 @@ que não isola variável nova não entra, por melhor que seja sua reputação.
 
 ### O que mudou, e por quê
 
-**Entrou o degrau 0.** A escada anterior começava em 3,3 GB, e nenhum modelo cabia
-na placa de 2 GB da máquina de referência — que por isso rodava 86% no
-processador. Um modelo de 1,6 GB muda a natureza daquele ponto da curva: passa a
-existir um caso em que a placa pequena **é** usada de verdade, e não apenas
-tolerada.
+**Entrou o degrau 0.** A escada anterior começava em 3,3 GB e não tinha piso: o
+menor modelo já era grande demais para uma comparação que quer descobrir onde a
+qualidade quebra.
+
+> A expectativa era que ele passasse a usar a placa de 2 GB. **A medição refutou**
+> — a causa é a arquitetura da placa, não o tamanho do modelo. Ver a retificação
+> na alocação por envelope, adiante.
 
 **Entraram dois especializados em documento.** A escada anterior tinha só modelos
 generalistas, e essa era a lacuna mais criticável: comparar generalistas entre si
@@ -65,10 +67,10 @@ diferente que a escada tem.
 
 ### Por que cada um está aqui
 
-**Degrau 0 — o piso que faltava.** A escada anterior começava em 3,3 GB, e nada
-cabia na placa de 2 GB: aquela máquina rodava 86% no processador (medido — 0,64 GB
-dos 4,67 GB iam para a placa). Um modelo de 1,6 GB muda o que aquele ponto da
-curva significa, de "execução híbrida" para "placa pequena de verdade".
+**Degrau 0 — o piso que faltava.** A escada anterior começava em 3,3 GB e não
+tinha piso. Ele é o menor modelo de visão viável, e serve para responder até onde
+a qualidade se sustenta quando o orçamento é mínimo — em qualquer máquina, não só
+na de referência.
 
 **Degrau 1 — o denominador comum, agora em par.** `qwen3-vl:2b` e `qwen3-vl:4b`
 rodam nas cinco máquinas. Além de amarrar a comparação entre elas, o par mede **o
@@ -126,7 +128,7 @@ resultado previsivelmente ruim. "Referência histórica" não é pergunta cient�
 
 | # | Modelo | Origem | Tam. | Pergunta que só ele responde |
 |---|---|---|---|---|
-| 1 | `qwen3:1.7b` | Alibaba | 1,4 GB | **piso**: cabe na placa de 2 GB |
+| 1 | `qwen3:1.7b` | Alibaba | 1,4 GB | **piso** da rota de texto |
 | 2 | `qwen3:4b` | Alibaba | 2,5 GB | **denominador comum** com a máquina de referência |
 | 3 | `qwen3:8b` | Alibaba | 5,2 GB | **efeito do tamanho**, com todo o resto constante |
 | 4 | `gemma4:12b` | Google | ~8 GB | **família independente**, e a mesma das duas rotas |
@@ -135,8 +137,8 @@ resultado previsivelmente ruim. "Referência histórica" não é pergunta cient�
 
 ### Por que cada um está aqui
 
-**Degrau 1 — o piso.** Já instalado na máquina de referência, e o único da rota de
-texto que cabe folgado na placa de 2 GB.
+**Degrau 1 — o piso.** Já instalado na máquina de referência, e o menor da rota
+de texto.
 
 **Degrau 2** — o denominador comum, comparável entre as cinco máquinas.
 
@@ -288,9 +290,16 @@ mesmo modelo em envelopes distintos é o que responde "mais capacidade ajuda?".
 | **12 GB** | + `gemma4:12b` | + `gemma4:12b`, `qwen3:14b` |
 | **16 GB** | + `qwen3-vl:30b` (teto) | + `qwen3:30b` (teto) |
 
-**O degrau de 2 GB deixou de ser simbólico.** Antes ele rodava um modelo de 3,3 GB
-com 86% no processador; agora três dos quatro cabem majoritariamente na placa. É a
-diferença entre medir "execução híbrida" e medir "placa pequena".
+> **Medido em 2026-08-01, e refuta a expectativa:** modelos menores **não** passam
+> a usar a placa. O de 0,69 GB, que cabe folgado nos 2 GB, roda com 7% em placa; o
+> servidor reporta `96%/4% CPU/GPU` e a placa fica com **0 MiB em uso**.
+>
+> A causa é a **capacidade de computação da placa (6.1, de 2017)**, abaixo do que
+> o servidor exige para descarregar — não o tamanho do modelo.
+>
+> Este envelope é, portanto, **execução em processador**, e assim deve ser
+> declarado. Continua sendo o piso da curva, com uma descontinuidade honesta em
+> relação aos demais em vez de gradação fingida. Ver ADR-0014.
 
 **O denominador comum é um par**, não um modelo: `qwen3-vl:2b` **e**
 `qwen3-vl:4b`. Além de amarrar a comparação entre as cinco máquinas, o par mede o
