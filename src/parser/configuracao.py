@@ -52,7 +52,9 @@ ROTAS_CONHECIDAS = (
     "camelot",
     "ocr",
     "vlm",
+    "vlm-menor",
     "llm",
+    "llm-menor",
 )
 """Rotas que o projeto sabe executar.
 

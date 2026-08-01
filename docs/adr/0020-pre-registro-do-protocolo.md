@@ -73,6 +73,22 @@ justifica: hipótese que não tem razão declarada para mudar o resultado não e
 | H6 | página inteira vs. fatiada | tamanho da tarefa | fatiar foi a única forma que produziu saída válida na visão |
 | H7 | prompt com vs. sem guardrails | instrução | guardrails custam tokens de entrada; medir se pagam |
 | H8 | resolução da imagem (só visão) | entrada visual | dpi mais alto lê melhor e custa mais entrada (ADR-0003, ADR-0007) |
+| H9 | variante **instruct** vs. **thinking** | o modelo publicado, não um parâmetro | *(acrescentada 2026-08-01)* ver abaixo |
+
+**H9 é a hipótese mais promissora do conjunto, e quase passou despercebida.**
+Descoberta ao revisar a escada: algumas famílias publicam o mesmo tamanho em duas
+variantes — uma treinada para seguir instrução, outra para raciocinar antes de
+responder.
+
+O gargalo medido neste projeto é **orçamento de tokens gasto no canal de
+raciocínio** (ADR-0015, ADR-0018): numa medição, 4043 caracteres de raciocínio
+produziram 185 de resposta. E as duas formas de desligar o raciocínio por
+parâmetro **foram medidas e não funcionaram** — uma delas piorou.
+
+Trocar a variante ataca a causa onde o parâmetro não alcança: não é pedir ao
+modelo que não raciocine, é usar um que não foi treinado para isso.
+
+É hipótese de configuração, não constante: varia dentro da rota, como as demais.
 
 **H8 é assimétrica de propósito**, e isso fica declarado: a rota de texto não tem
 imagem. Ela não invalida a comparação **entre** rotas porque a comparação entre

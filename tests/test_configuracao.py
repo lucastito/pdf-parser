@@ -222,6 +222,31 @@ class TestPerfisDoProjeto:
         faltando = esperados - set(perfil.mapeamento)
         assert not faltando, f"campos sem mapeamento declarado: {sorted(faltando)}"
 
+    def test_o_denominador_comum_e_um_par_de_tamanhos(self):
+        """Duas rotas de visão da mesma família, só o tamanho mudando.
+
+        O denominador comum amarra a comparação entre as cinco máquinas. Em par,
+        ele entrega de graça o experimento mais limpo da escada: mesma origem,
+        mesma geração, mesma quantização — qualquer diferença é atribuível ao
+        tamanho e a mais nada (ADR-0014).
+
+        O menor também importa por outra razão: com 1,9 GB ele cabe na placa de
+        2 GB da máquina de referência, que com o modelo de 3,3 GB rodava 86% no
+        processador. É a diferença entre medir placa pequena e medir execução
+        híbrida.
+        """
+        from pathlib import Path
+
+        raiz = Path(__file__).resolve().parent.parent
+        perfil = carregar_perfil(raiz / "perfis" / "nutricional.json")
+
+        modelos = {
+            rota.modelo
+            for nome, rota in perfil.rotas.items()
+            if nome.startswith("vlm") and rota.modelo
+        }
+        assert len(modelos) >= 2, f"denominador comum não é par: {modelos}"
+
     def test_rotas_por_modelo_declaram_semente(self):
         """Sem semente declarada, a geração é irrepetível e nada é comparável.
 
@@ -234,9 +259,11 @@ class TestPerfisDoProjeto:
         raiz = Path(__file__).resolve().parent.parent
         for caminho in (raiz / "perfis").glob("*.json"):
             perfil = carregar_perfil(caminho)
-            for nome in ("llm", "vlm"):
-                rota = perfil.rotas.get(nome)
-                if rota is None:
+            # Toda rota por modelo, inclusive as do denominador em par
+            # (`vlm`, `vlm-menor`): declarar numa e esquecer na outra é o
+            # defeito que estes testes existem para pegar.
+            for nome, rota in perfil.rotas.items():
+                if not (nome.startswith("llm") or nome.startswith("vlm")):
                     continue
                 assert rota.extras.get("semente") is not None, (
                     f"{caminho.name}: a rota {nome!r} não declara 'semente' — "
@@ -278,9 +305,11 @@ class TestPerfisDoProjeto:
         raiz = Path(__file__).resolve().parent.parent
         for caminho in (raiz / "perfis").glob("*.json"):
             perfil = carregar_perfil(caminho)
-            for nome in ("llm", "vlm"):
-                rota = perfil.rotas.get(nome)
-                if rota is None:
+            # Toda rota por modelo, inclusive as do denominador em par
+            # (`vlm`, `vlm-menor`): declarar numa e esquecer na outra é o
+            # defeito que estes testes existem para pegar.
+            for nome, rota in perfil.rotas.items():
+                if not (nome.startswith("llm") or nome.startswith("vlm")):
                     continue
                 assert rota.extras.get("contexto"), (
                     f"{caminho.name}: a rota {nome!r} não declara 'contexto' e "

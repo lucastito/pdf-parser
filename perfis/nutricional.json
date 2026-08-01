@@ -106,6 +106,23 @@
         "fibra_g"
       ]
     },
+    "vlm-menor": {
+      "modelo": "qwen3-vl:2b",
+      "dpi": 150,
+      "prompt": "prompts/extracao-tabela-visao.md",
+      "timeout": null,
+      "contexto": 12090,
+      "semente": 20260801,
+      "campos": [
+        "identificador",
+        "energia_kcal",
+        "energia_kj",
+        "proteina_g",
+        "lipideos_g",
+        "carboidrato_g",
+        "fibra_g"
+      ]
+    },
     "vlm": {
       "modelo": "qwen3-vl:4b",
       "dpi": 150,

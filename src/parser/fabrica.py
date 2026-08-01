@@ -141,8 +141,17 @@ ROTAS: dict[str, Callable[[Perfil, Rota], Extrator]] = {
     "camelot": _camelot,
     "ocr": _ocr,
     "llm": _llm,
+    "llm-menor": _llm,
     "vlm": _vlm,
+    "vlm-menor": _vlm,
 }
+"""Nome da rota → como montá-la.
+
+As variantes `-menor` usam o **mesmo** extrator: o que muda é só o modelo
+declarado no perfil. Existem porque o denominador comum é um **par** de tamanhos
+da mesma família (ADR-0014), e o experimento itera rotas — sem nome próprio, o
+segundo tamanho não teria como ser executado nem registrado à parte.
+"""
 """Nome da rota no perfil → função que a monta.
 
 Estratégia nova entra aqui. Nada mais no projeto precisa saber dela.

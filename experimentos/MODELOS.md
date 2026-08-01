@@ -22,44 +22,95 @@ quem executa não precise descobrir os parâmetros sozinho: eles vão resolvidos
 Cada degrau precisa responder a uma pergunta que os outros não respondem. Modelo
 que não isola variável nova não entra, por melhor que seja sua reputação.
 
-| # | Modelo | Origem | Tam. | OCRBench | DocVQA | Pergunta que só ele responde |
-|---|---|---|---|---|---|---|
-| 1 | `qwen3-vl:4b` | Alibaba | 3,3 GB | — | — | **denominador comum**: é o que roda na máquina de referência |
-| 2 | `minicpm-v:8b` | OpenBMB | 5,5 GB | **852** | — | codificador visual diferente **sobre a mesma base de linguagem** |
-| 3 | `qwen2.5vl:7b` | Alibaba | ~6 GB | ~888 | **96,4** | o melhor medido da classe: define o **teto de qualidade** alcançável |
-| 4 | `gemma3:12b` | Google | 8,1 GB | — | 82,3 | **família independente**, e multimodal: mesma família nas duas rotas |
-| 5 | `qwen3-vl:30b` | Alibaba | 20 GB | — | — | **teto de capacidade**: existe para falhar e marcar o limite da máquina |
+> **Revisão de 2026-08-01.** O levantamento anterior era de julho e a área anda
+> rápido: apareceram **modelos especializados em documento** que não existiam na
+> lista, e a faixa abaixo de 2 GB — a única que roda folgada na máquina de
+> referência — estava vazia. Critério do projeto confirmado nesta revisão:
+> **apenas peso aberto**, licença indiferente; nenhum serviço pago por chamada.
+
+| # | Modelo | Origem | Tam. | Pergunta que só ele responde |
+|---|---|---|---|---|
+| 0 | `minicpm-v4.6:1b` | OpenBMB | **1,6 GB** | **cabe na placa de 2 GB** — o piso real da escada |
+| 1 | `qwen3-vl:2b` | Alibaba | 1,9 GB | **denominador comum**, e o menor da família de referência |
+| 2 | `glm-ocr` | Zhipu | 1,6–2,2 GB | **especializado em documento**, e minúsculo |
+| 3 | `deepseek-ocr:3b` | DeepSeek | 6,7 GB | **compressão óptica de contexto** — abordagem distinta das demais |
+| 4 | `minicpm-v4.5:8b` | OpenBMB | ~5,5 GB | codificador visual diferente **sobre outra base de linguagem** |
+| 5 | `qwen3-vl:8b` | Alibaba | 6,1 GB | **efeito do tamanho** na família de referência, resto constante |
+| 6 | `gemma4:12b` | Google | ~8 GB | **família independente**, e multimodal nas duas rotas |
+| 7 | `qwen3-vl:30b` | Alibaba | 20 GB | **teto de capacidade**: existe para falhar e marcar o limite |
+
+### O que mudou, e por quê
+
+**Entrou o degrau 0.** A escada anterior começava em 3,3 GB, e nenhum modelo cabia
+na placa de 2 GB da máquina de referência — que por isso rodava 86% no
+processador. Um modelo de 1,6 GB muda a natureza daquele ponto da curva: passa a
+existir um caso em que a placa pequena **é** usada de verdade, e não apenas
+tolerada.
+
+**Entraram dois especializados em documento.** A escada anterior tinha só modelos
+generalistas, e essa era a lacuna mais criticável: comparar generalistas entre si
+não responde se um especializado resolveria melhor. `glm-ocr` e `deepseek-ocr`
+existem para essa pergunta.
+
+**`deepseek-ocr` deixa de ser descarte e vira degrau.** Ele havia sido excluído
+por benchmark de terceiro — que relatava arquivos vazios com sucesso reportado. O
+projeto **sabe diagnosticar exatamente essa patologia** (é a do ADR-0018), e
+descartar por fonte externa o que se sabe medir é fraqueza metodológica, não
+economia. Se ele falhar aqui, será por medição própria.
+
+**A abordagem dele é distinta das demais**, e isso vale mais que a reputação:
+comprime o contexto visual em ordens de grandeza menos tokens. Como o gargalo
+medido neste projeto é justamente orçamento de tokens, é a hipótese mais
+diferente que a escada tem.
 
 ### Por que cada um está aqui
 
-**Degrau 1 — o único comparável com a máquina de referência.** Sem ele, nenhuma
-comparação entre as máquinas seria legítima (ADR-0013).
+**Degrau 0 — o piso que faltava.** A escada anterior começava em 3,3 GB, e nada
+cabia na placa de 2 GB: aquela máquina rodava 86% no processador (medido — 0,64 GB
+dos 4,67 GB iam para a placa). Um modelo de 1,6 GB muda o que aquele ponto da
+curva significa, de "execução híbrida" para "placa pequena de verdade".
 
-**Degrau 2 — o mais interessante tecnicamente, e não por reputação.** Duas razões
-medidas:
+**Degrau 1 — o denominador comum, agora em par.** `qwen3-vl:2b` e `qwen3-vl:4b`
+rodam nas cinco máquinas. Além de amarrar a comparação entre elas, o par mede **o
+efeito do tamanho dentro da mesma família** — mesma origem, geração e quantização,
+só o tamanho muda. É o experimento mais limpo da escada, e sai de graça.
 
-1. Ele é construído sobre a **mesma base de linguagem** da família do degrau 1
-   (Qwen2-7B), com codificador visual diferente (SigLip-400M). Isso isola a
-   variável *codificador visual* mantendo a base constante — comparação mais
-   limpa que trocar tudo de uma vez.
-2. Produz **~640 tokens** para uma imagem grande, contra os ~2164 que a página
-   custa hoje. Como a causa medida das respostas vazias foi **corte por limite de
-   tokens**, gerar menos tokens ataca a raiz do problema, não o sintoma.
+**Degrau 2 — especializado em documento, e minúsculo.** Primeiro colocado no
+OmniDocBench V1.5, com foco declarado em tabela complexa e fórmula. Responde a
+pergunta que nenhum generalista responde: *um modelo feito para documento resolve
+melhor que um modelo grande genérico?* E cabe em 1,6 GB, o que torna a pergunta
+ainda mais interessante.
 
-**Degrau 3 — o teto de qualidade.** 96,4 em DocVQA é quase o desempenho humano
-(98,1). Serve de referência superior: se nem ele resolver este documento, a
-conclusão sobre a rota por modelo é forte, não circunstancial.
+**Degrau 3 — abordagem estruturalmente diferente.** Comprime o contexto visual em
+7 a 20× menos tokens. Como o gargalo medido neste projeto é **orçamento de
+tokens** (ADR-0015, ADR-0018), é a hipótese mais distinta que a escada tem — não
+"mais um modelo", e sim outra ideia de como resolver.
 
-**Degrau 4 — a única família verdadeiramente independente.** Os degraus 1 a 3
-compartilham base de linguagem; este não. E por ser multimodal, permite comparar
-**a mesma família lendo texto e lendo imagem**, isolando a diferença entre as duas
-rotas sem trocar de fabricante junto.
+**Degrau 4 — codificador visual sobre outra base.** Isola a variável *codificador
+visual* mantendo o resto comparável, que é leitura mais limpa que trocar tudo de
+uma vez.
 
-Seu DocVQA (82,3) é claramente inferior ao do degrau 3 — e é por isso que ele
-entra como **controle de independência**, não como candidato a vencedor.
+**Degrau 5 — o efeito do tamanho, continuado.** Fecha a curva da família de
+referência: 2B → 4B → 8B, com todo o resto constante.
 
-**Degrau 5 — existe para falhar.** Escada que só sobe enquanto funciona não revela
+**Degrau 6 — a única família verdadeiramente independente.** Os demais degraus
+compartilham origem ou base; este não. E por ser multimodal, permite comparar **a
+mesma família lendo texto e lendo imagem**, isolando a diferença entre as duas
+rotas sem trocar de fabricante junto. Entra como **controle de independência**,
+não como candidato a vencedor.
+
+**Degrau 7 — existe para falhar.** Escada que só sobe enquanto funciona não revela
 o teto, e o teto é o que orienta a decisão de infraestrutura.
+
+### Cinco origens, e por que isso importa
+
+Alibaba · OpenBMB · Zhipu · DeepSeek · Google. A escada anterior tinha três, e a
+primeira versão de todas tinha **uma** — nove modelos da mesma família, erro
+registrado adiante.
+
+Concentração de origem é risco concreto: se a família dominante fosse ruim neste
+documento, a conclusão registrada seria *"modelos abertos não servem para tabela"*
+quando o correto seria *"aquela família não serve"*.
 
 ### Descartado depois de verificar: `llava:7b`
 
@@ -75,28 +126,31 @@ resultado previsivelmente ruim. "Referência histórica" não é pergunta cient�
 
 | # | Modelo | Origem | Tam. | Pergunta que só ele responde |
 |---|---|---|---|---|
-| 1 | `qwen3:4b` | Alibaba | 2,5 GB | **denominador comum** com a máquina de referência |
-| 2 | `qwen3:8b` | Alibaba | 5,2 GB | **efeito do tamanho**, com todo o resto constante |
-| 3 | `gemma3:12b` | Google | 8,1 GB | **família independente**, e a mesma das duas rotas |
-| 4 | `qwen3:14b` | Alibaba | 9,3 GB | limite prático dos 12 GB |
-| 5 | `qwen3:30b` | Alibaba | 19 GB | **teto**: existe para falhar |
+| 1 | `qwen3:1.7b` | Alibaba | 1,4 GB | **piso**: cabe na placa de 2 GB |
+| 2 | `qwen3:4b` | Alibaba | 2,5 GB | **denominador comum** com a máquina de referência |
+| 3 | `qwen3:8b` | Alibaba | 5,2 GB | **efeito do tamanho**, com todo o resto constante |
+| 4 | `gemma4:12b` | Google | ~8 GB | **família independente**, e a mesma das duas rotas |
+| 5 | `qwen3:14b` | Alibaba | 9,3 GB | limite prático do envelope de 12 GB |
+| 6 | `qwen3:30b` | Alibaba | 19 GB | **teto**: existe para falhar |
 
 ### Por que cada um está aqui
 
-**Degrau 1** — único comparável com a máquina de referência.
+**Degrau 1 — o piso.** Já instalado na máquina de referência, e o único da rota de
+texto que cabe folgado na placa de 2 GB.
 
-**Degrau 2 — o experimento mais limpo da escada.** Mesma família, mesma geração,
-mesmo treinamento; só o tamanho muda. Qualquer diferença de resultado é atribuível
-ao tamanho, e não a mais nada. É o degrau que responde diretamente *"modelo maior
-lê melhor?"* — a pergunta que sustenta o dimensionamento.
+**Degrau 2** — o denominador comum, comparável entre as cinco máquinas.
 
-**Degrau 3 — controle de independência.** Os degraus 1, 2, 4 e 5 são a mesma
-família. Sem uma origem externa, um resultado ruim seria indistinguível de "esta
-família é ruim". Ele também é multimodal, o que permite comparar **a mesma família
-lendo texto e lendo imagem** — isolando a diferença entre as rotas sem trocar de
-fabricante junto.
+**Degraus 1 → 2 → 3: o experimento mais limpo da escada.** Mesma família, mesma
+geração, mesmo treinamento; só o tamanho muda, em três pontos. Qualquer diferença
+é atribuível ao tamanho e a mais nada — é o que responde *"modelo maior lê
+melhor?"*, a pergunta que sustenta o dimensionamento.
 
-**Degraus 4 e 5** — a escada de capacidade, até falhar.
+**Degrau 4 — controle de independência.** Os demais são a mesma família. Sem uma
+origem externa, resultado ruim seria indistinguível de "esta família é ruim". E
+por ser multimodal, permite comparar **a mesma família lendo texto e lendo
+imagem** — isolando a diferença entre as rotas sem trocar de fabricante junto.
+
+**Degraus 5 e 6** — a escada de capacidade, até falhar.
 
 ### Uma alternativa considerada e não incluída: `llama3.1:8b`
 
@@ -131,6 +185,13 @@ distintas.** Uma família pode ter viés de treinamento, licença restritiva, ou
 simplesmente ir mal num tipo de documento. Três origens tornam o resultado
 atribuível à abordagem, não ao fabricante.
 
+**A revisão de 2026-08-01 levou a cinco** — Alibaba, OpenBMB, Zhipu, DeepSeek e
+Google — e acrescentou um segundo eixo de diversidade que a regra não previa:
+**abordagem**, não só origem. Generalista, especializado em documento e compressão
+de contexto são três respostas diferentes ao mesmo problema, e comparar só
+generalistas entre si deixaria a pergunta *"um especializado resolveria melhor?"*
+sem resposta.
+
 Vale para o dimensionamento também: recomendar servidor com base em uma família só
 amarra a decisão a um fornecedor.
 
@@ -139,16 +200,35 @@ amarra a decisão a um fornecedor.
 **`granite3.2-vision` (2B)** — posicionado para documento, mas um benchmark
 independente o desqualificou: saídas malformadas ou com tabelas erradas.
 
-**`deepseek-ocr` (3B)** — desqualificado no mesmo benchmark por gerar arquivos
-efetivamente vazios, apesar de reportar sucesso e tempo baixo. **É exatamente a
-patologia que enfrentamos aqui** (resposta vazia com `done_reason` de sucesso), e
-foi o que custou uma sessão de investigação. Não repetir.
+**`llava:7b`** — OCRBench 536 contra 852 e ~888 dos incluídos. Ver acima.
 
-**Modelos de 32B+** — não cabem em 12 GB nem quantizados.
+**Modelos de 32B+** — não cabem no maior envelope disponível com contexto
+utilizável.
 
-Ambos os descartes vêm de fonte externa, não de medição própria. Se houver tempo,
-vale medir o `deepseek-ocr` justamente por ser barato e por já sabermos diagnosticar
-a falha dele — mas ele não entra na escada principal.
+> **Descarte por fonte externa é provisório, não definitivo.** Nenhum destes foi
+> medido aqui. Servem para escolher o que testar primeiro, não para concluir — e
+> se sobrar tempo, medir o `granite3.2-vision` tem valor justamente por ser
+> barato e por sabermos diagnosticar a falha que lhe atribuem.
+
+### Reintegrado: `deepseek-ocr` (3B)
+
+**Estava nesta lista e saiu dela em 2026-08-01.** O motivo do descarte era gerar
+arquivos vazios reportando sucesso — que é **exatamente a patologia do ADR-0018**,
+a que custou uma sessão inteira de investigação neste projeto.
+
+E aí está a inversão: descartar por fonte externa aquilo que este projeto **sabe
+diagnosticar** é fraqueza metodológica, não economia. A instrumentação do canal de
+raciocínio, acrescentada nesta sessão, detecta precisamente esse modo de falha —
+e já provou o valor ao recuperar uma extração perfeita que vinha sendo descartada
+como resposta vazia.
+
+Ele entra como degrau 3 da escada de visão, com uma justificativa que nenhum outro
+tem: **comprime o contexto visual em 7 a 20× menos tokens**. Como o gargalo medido
+aqui é orçamento de tokens, é a abordagem mais distinta do conjunto.
+
+Se falhar, será por medição própria — e o resultado terá valor, porque confirmaria
+ou refutaria um benchmark de terceiro com instrumentação que aquele benchmark não
+tinha.
 
 ## Parâmetros já resolvidos
 
@@ -202,11 +282,21 @@ mesmo modelo em envelopes distintos é o que responde "mais capacidade ajuda?".
 
 | Envelope | Escada de visão | Escada de texto |
 |---|---|---|
-| **2 GB** (processador) | `qwen3-vl:4b` | `qwen3:4b` |
-| **6 GB** | + `minicpm-v:8b`, `qwen2.5vl:7b` | + `qwen3:8b` |
+| **2 GB** | `minicpm-v4.6:1b`, `glm-ocr`, `qwen3-vl:2b`, `qwen3-vl:4b` | `qwen3:1.7b`, `qwen3:4b` |
+| **6 GB** | + `deepseek-ocr:3b`, `minicpm-v4.5:8b` | + `qwen3:8b` |
 | **8 GB** | os mesmos do degrau de 6 GB | os mesmos do degrau de 6 GB |
-| **12 GB** | + `gemma3:12b` | + `gemma3:12b`, `qwen3:14b` |
+| **12 GB** | + `gemma4:12b` | + `gemma4:12b`, `qwen3:14b` |
 | **16 GB** | + `qwen3-vl:30b` (teto) | + `qwen3:30b` (teto) |
+
+**O degrau de 2 GB deixou de ser simbólico.** Antes ele rodava um modelo de 3,3 GB
+com 86% no processador; agora três dos quatro cabem majoritariamente na placa. É a
+diferença entre medir "execução híbrida" e medir "placa pequena".
+
+**O denominador comum é um par**, não um modelo: `qwen3-vl:2b` **e**
+`qwen3-vl:4b`. Além de amarrar a comparação entre as cinco máquinas, o par mede o
+efeito do tamanho dentro da mesma família — mesma origem, geração e quantização,
+só o tamanho muda. Custa o dobro de tempo no denominador e entrega um experimento
+limpo de graça.
 
 **A faixa de 6-8 GB é a mais informativa**, e quase ficou de fora do
 levantamento: ocupa o vão entre "não roda quase nada" e "roda quase tudo", que é
