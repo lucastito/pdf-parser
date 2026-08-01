@@ -453,6 +453,50 @@ alimentos.
 > A regra do projeto pegou os dois: *zero absoluto numa rota que acerta em outro
 > gabarito é suspeita do instrumento, não da extração.*
 
+### Seis modelos de visão na página de referência — medido 2026-08-01
+
+Sequencial, máquina ociosa, descarga entre modelos, semente fixa, sem limite de
+tempo. Dado bruto em `resultados/titoslaptop/modelos-pagina29.json`.
+
+| Modelo | Tam. | Tempo | Acurácia | O que aconteceu |
+|---|---|---|---|---|
+| `minicpm-v4.6:1b` | 1,6 GB | 3,5 min | 0% | leu certo, **inventou as chaves** (`umidade`, `energia`) |
+| `glm-ocr` | 2,2 GB | 6,0 min | 0% | leu **perfeitamente**, devolveu **objeto solto** com nomes do documento |
+| `qwen3-vl:2b` | 1,9 GB | — | — | devolveu lista de textos; o conferidor quebrou (defeito do script, corrigido) |
+| **`qwen3-vl:4b`** | 3,3 GB | **29,9 min** | **97,9%** | **142 acertos, 3 erros, 0 omissões** |
+| `deepseek-ocr:3b` | 6,7 GB | 1,7 min | 0% | devolveu `{"item":"1","categoria":"Alimentos"}` |
+| `minicpm-v4.5:8b` | 6,1 GB | 27,9 min | 20% | chaves certas, **colunas deslocadas** |
+
+#### O achado: o gargalo é aderência ao formato, não leitura
+
+**Nenhum dos cinco falhou por não conseguir ler a tabela.** `glm-ocr` transcreveu
+a linha inteira corretamente — umidade, energia em kcal e kJ, proteína, lipídios,
+colesterol, carboidrato, fibra — e mesmo assim pontuou zero, porque devolveu um
+objeto solto em vez da lista pedida.
+
+A conclusão que isso sustenta, e que a acurácia sozinha esconderia:
+
+> Em modelo pequeno, **seguir o formato pedido é mais difícil que ler o
+> documento**. O que separa 0% de 97,9% aqui não é qualidade de leitura — é
+> obediência ao esquema.
+
+É consistente com o que o projeto já mediu nos degraus de saída (ADR-0015) e
+reforça a decisão de manter a saída validada, nunca confiada.
+
+#### Consequência para o desenho
+
+- **A hipótese dos degraus (H1-H3) passa a ser central**, não secundária: modelo
+  que falha no esquema completo pode funcionar em JSON livre ou texto recortado.
+  Cinco dos seis modelos morreram exatamente nesse ponto.
+- **Um modelo especializado em documento não é automaticamente melhor.**
+  `glm-ocr` lê melhor que o vencedor e entrega pior. A comparação precisa dos dois
+  eixos.
+- **Este resultado é de uma configuração só.** Nenhuma hipótese variou — é o que a
+  triagem nas outras máquinas existe para fazer.
+
+> **Cuidado ao ler:** 0% aqui significa "não produziu saída aproveitável nesta
+> configuração", **não** "não sabe ler". A distinção é o próprio achado.
+
 ### Rota de visão — era o timeout, e ela acerta 100%
 
 Ela falhou com `TimeoutError` em 6350 s contra os 3600 s do perfil. **Não era a

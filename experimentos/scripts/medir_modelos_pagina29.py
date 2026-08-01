@@ -122,7 +122,11 @@ def _gabarito() -> dict[str, dict[str, float]]:
     return tabela
 
 
-def _conferir(itens: list[dict], gabarito: dict) -> dict:
+def _conferir(itens: list, gabarito: dict) -> dict:
+    # Modelo pequeno às vezes devolve lista de strings em vez de lista de
+    # objetos. Descartar o que não é dicionário evita que a conferência quebre e
+    # perca o resultado dos itens bem formados.
+    itens = [it for it in itens if isinstance(it, dict)]
     registros = [{"campos": {k: {"valor": v} for k, v in it.items()}} for it in itens]
     indice = _indexar(registros, "identificador")
     acertos = erros = omissoes = 0
