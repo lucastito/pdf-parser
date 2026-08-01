@@ -9,8 +9,19 @@ A imagem mostra uma página com uma tabela. Leia a tabela e extraia os itens.
 Atenção ao alinhamento das colunas: o cabeçalho pode estar rotacionado e a tabela
 pode não ter linhas de grade separando as células.
 
+**Cada campo pedido corresponde a uma coluna com nome próprio.** Localize a coluna
+pelo **nome no cabeçalho** e copie o valor daquela coluna. A tabela pode ter
+colunas que não foram pedidas — ignore-as sem deslocar as demais.
+
+O `identificador` é o número do item **seguido da descrição completa**, como
+aparecem na imagem. Exemplo de forma: `12 Farinha, de mandioca, torrada`.
+
 ## Guardrails
 
+- **Alinhe por nome de coluna, nunca por posição.** Se uma coluna da imagem não
+  estiver entre os campos pedidos, pule-a — não empurre o valor dela para o campo
+  seguinte.
+- O `identificador` leva número **e** descrição. Só o número não identifica o item.
 - Use exatamente os valores impressos na imagem. Não calcule, não converta, não
   arredonde.
 - Se um valor não estiver legível, **omita o campo**. Não adivinhe pelo contexto,
@@ -92,6 +103,12 @@ em várias máquinas existe para responder
 
 ## Histórico
 
+- **v3** (2026-08-01) — alinhamento por nome de coluna e identificador completo.
+  As duas regras vêm de defeito **medido na rota de texto** e aplicado aqui por
+  precaução: lá o modelo empurrou os valores uma posição ao encontrar uma coluna
+  que não fora pedida, e devolveu identificador só com o número. A rota de visão
+  lê a mesma tabela e está exposta ao mesmo erro — corrigir antes de medir evita
+  gastar 77 minutos para redescobrir o defeito conhecido.
 - **v2** (2026-07-31) — corrigido o diagnóstico de resposta vazia. A versão
   anterior culpava o teto de saída e mandava elevá-lo; a medição mostrou que o
   limite atuante é o **contexto**, e que elevar o teto sozinho não resolve.

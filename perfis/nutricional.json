@@ -99,6 +99,7 @@
       "campos": [
         "identificador",
         "energia_kcal",
+        "energia_kj",
         "proteina_g",
         "lipideos_g",
         "carboidrato_g",
@@ -115,6 +116,7 @@
       "campos": [
         "identificador",
         "energia_kcal",
+        "energia_kj",
         "proteina_g",
         "lipideos_g",
         "carboidrato_g",

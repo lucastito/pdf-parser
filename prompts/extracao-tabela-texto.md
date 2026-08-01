@@ -6,8 +6,19 @@ Para modelos de linguagem que recebem o **texto** já extraído da página.
 
 Extraia os itens da tabela. Para cada item, informe os campos pedidos.
 
+**Cada campo pedido corresponde a uma coluna com nome próprio.** Localize a coluna
+pelo **nome no cabeçalho** e copie o valor daquela coluna. A tabela pode ter
+colunas que não foram pedidas — ignore-as sem deslocar as demais.
+
+O `identificador` é o número do item **seguido da descrição completa**, como
+aparecem no documento. Exemplo de forma: `12 Farinha, de mandioca, torrada`.
+
 ## Guardrails
 
+- **Alinhe por nome de coluna, nunca por posição.** Se uma coluna do documento não
+  estiver entre os campos pedidos, pule-a — não empurre o valor dela para o campo
+  seguinte.
+- O `identificador` leva número **e** descrição. Só o número não identifica o item.
 - Use exatamente os valores impressos no documento. Não calcule, não converta, não
   arredonde.
 - Se um valor não aparecer no texto, **omita o campo**. Não estime, não repita o
@@ -18,6 +29,21 @@ Extraia os itens da tabela. Para cada item, informe os campos pedidos.
 - Responda apenas com JSON válido, sem texto antes ou depois.
 
 ## Justificativa de cada regra
+
+**"Alinhe por nome, nunca por posição"** — regra nascida de defeito medido, não de
+precaução. Na bateria de 2026-08-01 o modelo devolveu, para o primeiro item,
+`energia_kcal = 124` (correto) e `proteina_g = 517`. O 517 é a **energia em
+quilojoules** do mesmo item: o documento tem uma coluna de energia em kJ que não
+estava entre os campos pedidos, e o modelo, em vez de pulá-la, empurrou todos os
+valores uma posição — deixando o último campo vazio.
+
+O defeito é silencioso: os números são todos reais e vêm da linha certa. Só a
+conferência contra gabarito revela que estão na coluna errada.
+
+**"Identificador com número e descrição"** — o modelo devolvia apenas o número
+(`1`), e as demais estratégias devolvem `1 Arroz, integral, cozido`. Nenhum item
+casava na consolidação nem contra o gabarito, e a rota aparecia com zero acertos
+apesar de ter lido a tabela.
 
 **"Não calcule nem converta"** — o modelo tem tendência a "corrigir" valores que
 parecem inconsistentes, por exemplo recalculando energia a partir dos macronutrientes.
@@ -47,5 +73,9 @@ prosa.
 
 ## Histórico
 
+- **v2** (2026-08-01) — alinhamento por nome de coluna e identificador completo.
+  As duas regras vêm de defeito medido na bateria completa, não de precaução:
+  colunas deslocadas por uma posição e identificador só com o número. Ver as
+  justificativas acima.
 - **v1** (2026-07-29) — versão inicial. Extraída de constantes que estavam em código
   (`ollama.py`), sem justificativa registrada.
