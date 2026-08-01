@@ -1,74 +1,74 @@
 {
   "documento": "TACO.pdf",
   "maquina": "titoslaptop",
-  "data_utc": "2026-08-01T01:29:40+00:00",
+  "data_utc": "2026-08-01T17:25:51+00:00",
   "execucoes": [
     {
       "estrategia": "posicional",
       "parametros": {
         "dpi": 0
       },
-      "paginas": 9,
-      "registros": 283,
-      "campos": 3396,
-      "campos_preenchidos": 3317,
-      "segundos": 0.5249109999986104,
+      "paginas": 1,
+      "registros": 31,
+      "campos": 372,
+      "campos_preenchidos": 308,
+      "segundos": 0.04060160000517499,
       "erro": null,
-      "cobertura": 0.9767,
-      "segundos_por_pagina": 0.06
+      "cobertura": 0.828,
+      "segundos_por_pagina": 0.04
     },
     {
       "estrategia": "pdfplumber",
       "parametros": {
         "dpi": 0
       },
-      "paginas": 9,
-      "registros": 278,
-      "campos": 2502,
-      "campos_preenchidos": 2502,
-      "segundos": 6.231664700000692,
+      "paginas": 1,
+      "registros": 31,
+      "campos": 279,
+      "campos_preenchidos": 279,
+      "segundos": 0.43836499999451917,
       "erro": null,
       "cobertura": 1.0,
-      "segundos_por_pagina": 0.69
+      "segundos_por_pagina": 0.44
     },
     {
       "estrategia": "camelot",
       "parametros": {
         "dpi": 0
       },
-      "paginas": 9,
-      "registros": 309,
-      "campos": 2781,
-      "campos_preenchidos": 2781,
-      "segundos": 3.167876699999397,
+      "paginas": 1,
+      "registros": 31,
+      "campos": 279,
+      "campos_preenchidos": 279,
+      "segundos": 0.6974810999963665,
       "erro": null,
       "cobertura": 1.0,
-      "segundos_por_pagina": 0.35
+      "segundos_por_pagina": 0.7
     },
     {
       "estrategia": "ocr",
       "parametros": {
         "dpi": 350
       },
-      "paginas": 9,
-      "registros": 283,
-      "campos": 3555,
-      "campos_preenchidos": 3318,
-      "segundos": 35.56959530000131,
+      "paginas": 1,
+      "registros": 31,
+      "campos": 403,
+      "campos_preenchidos": 308,
+      "segundos": 3.429862899996806,
       "erro": null,
-      "cobertura": 0.9333,
-      "segundos_por_pagina": 3.95
+      "cobertura": 0.7643,
+      "segundos_por_pagina": 3.43
     },
     {
       "estrategia": "linear",
       "parametros": {
         "dpi": 0
       },
-      "paginas": 9,
+      "paginas": 1,
       "registros": 0,
       "campos": 0,
       "campos_preenchidos": 0,
-      "segundos": 0.05264469999929133,
+      "segundos": 0.007928500010166317,
       "erro": null,
       "cobertura": 0.0,
       "segundos_por_pagina": 0.01
@@ -78,42 +78,28 @@
       "parametros": {
         "dpi": 0
       },
-      "paginas": 9,
-      "registros": 19,
-      "campos": 19,
+      "paginas": 1,
+      "registros": 0,
+      "campos": 0,
       "campos_preenchidos": 0,
-      "segundos": 1.6504980999998224,
+      "segundos": 0.09479620000638533,
       "erro": null,
       "cobertura": 0.0,
-      "segundos_por_pagina": 0.18
+      "segundos_por_pagina": 0.09
     },
     {
       "estrategia": "llm",
       "parametros": {
         "dpi": 0
       },
-      "paginas": 9,
-      "registros": 278,
-      "campos": 1668,
-      "campos_preenchidos": 1668,
-      "segundos": 8071.514101999999,
-      "erro": null,
-      "cobertura": 1.0,
-      "segundos_por_pagina": 896.83
-    },
-    {
-      "estrategia": "vlm",
-      "parametros": {
-        "dpi": 150
-      },
-      "paginas": 0,
+      "paginas": 1,
       "registros": 0,
       "campos": 0,
       "campos_preenchidos": 0,
-      "segundos": 6350.437622699999,
-      "erro": "TimeoutError: timed out",
+      "segundos": 89.08524469999247,
+      "erro": null,
       "cobertura": 0.0,
-      "segundos_por_pagina": 0.0
+      "segundos_por_pagina": 89.09
     }
   ],
   "extras": {}

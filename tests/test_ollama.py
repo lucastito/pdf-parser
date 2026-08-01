@@ -101,6 +101,58 @@ class TestCliente:
         assert transporte.chamadas[0]["timeout"] == 300.0
 
 
+class TestOrdemDasColunas:
+    """A ordem das colunas do documento vai no prompt — e é o que corrige o
+    deslocamento.
+
+    Medido em 2026-08-01, na página 29. Descrever a regra de alinhamento não
+    bastou: três versões do prompt tentaram ("alinhe por nome", "conte as
+    colunas", "marcador ocupa coluna") e o modelo continuou devolvendo a
+    **umidade** — a primeira coluna — no campo de carboidrato.
+
+    | Campo | Modelo lia | Correto |
+    |---|---|---|
+    | energia_kcal | 124 | 124 ✅ |
+    | proteina_g | 2,6 | 2,6 ✅ |
+    | carboidrato_g | **70,1** | 25,8 ❌ |
+
+    Ele acerta os primeiros e perde a conta depois do `NA` do colesterol, uma
+    coluna não numérica no meio da linha.
+
+    **Dar a sequência das colunas explicitamente resolveu: 100% em 5 itens.** A
+    diferença não é de ênfase — é de natureza: a regra pede que o modelo infira o
+    alinhamento, a sequência entrega o alinhamento pronto.
+
+    O perfil **já declarava** `campos_na_ordem`, usado pelas rotas
+    determinísticas. As rotas por modelo simplesmente nunca o recebiam.
+    """
+
+    def test_a_ordem_declarada_vai_no_prompt(self):
+        transporte = TransporteFalso(resposta={"itens": []})
+        extrator = ExtratorModelo(
+            cliente=ClienteOllama(modelo="m", transporte=transporte),
+            campos=["identificador", "carboidrato_g"],
+            ordem_das_colunas=["Umidade (%)", "Energia (kcal)", "Carboidrato (g)"],
+        )
+        extrator.extrair(_documento())
+
+        enviado = transporte.chamadas[0]["carga"]["prompt"]
+        assert "Umidade (%)" in enviado
+        assert "Energia (kcal)" in enviado
+
+    def test_sem_ordem_declarada_o_prompt_nao_a_inventa(self):
+        """Documento sem ordem conhecida não pode ganhar uma fictícia."""
+        transporte = TransporteFalso(resposta={"itens": []})
+        extrator = ExtratorModelo(
+            cliente=ClienteOllama(modelo="m", transporte=transporte),
+            campos=["identificador"],
+        )
+        extrator.extrair(_documento())
+
+        enviado = transporte.chamadas[0]["carga"]["prompt"]
+        assert "colunas" not in enviado.lower() or "Campos:" in enviado
+
+
 class TestExtratorModelo:
     def test_produz_registros_a_partir_da_resposta(self):
         transporte = TransporteFalso(

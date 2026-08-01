@@ -106,6 +106,9 @@ def _llm(perfil: Perfil, rota: Rota) -> Extrator:
         _cliente(rota),
         _campos(rota),
         instrucao=_instrucao(rota),
+        # A ordem dos cabeçalhos corrige o deslocamento de coluna, e o perfil
+        # já a declarava para as rotas determinísticas — faltava chegar aqui.
+        ordem_das_colunas=rota.campos_na_ordem or perfil.campos_na_ordem or None,
         degrau_maximo=_degrau_maximo(rota),
         raciocinar=bool(rota.extras.get("raciocinar", False)),
         tokens_maximos=rota.extras.get("tokens_maximos"),
@@ -123,6 +126,7 @@ def _vlm(perfil: Perfil, rota: Rota) -> Extrator:
         _campos(rota),
         _documento(perfil),
         instrucao=_instrucao(rota),
+        ordem_das_colunas=rota.campos_na_ordem or perfil.campos_na_ordem or None,
         dpi=rota.dpi,
         degrau_maximo=_degrau_maximo(rota),
         raciocinar=bool(rota.extras.get("raciocinar", False)),

@@ -6,12 +6,12 @@ Para modelos de linguagem que recebem o **texto** já extraído da página.
 
 Extraia os itens da tabela. Para cada item, informe os campos pedidos.
 
-**Cada campo pedido corresponde a uma coluna com nome próprio.** Localize a coluna
-pelo **nome no cabeçalho** e copie o valor daquela coluna.
+**Quando a ordem das colunas for informada, siga-a como referência.** Cada linha de
+dados traz um valor para **cada** coluna declarada, na sequência — e o campo pedido
+vem da posição indicada, não do nome que parece próximo.
 
-A tabela tem **mais colunas do que os campos pedidos**, e as não pedidas aparecem
-no meio, não só nas pontas. Antes de extrair, conte as colunas do cabeçalho e
-associe cada valor da linha à sua posição. Só então escolha os campos pedidos.
+A tabela costuma ter **mais colunas do que os campos pedidos**, e as não pedidas
+aparecem no meio, não só nas pontas.
 
 Marcadores como `NA` e `Tr` **ocupam uma coluna** como qualquer valor. Pular um
 deles desalinha todos os campos seguintes.
@@ -19,11 +19,20 @@ deles desalinha todos os campos seguintes.
 O `identificador` é o número do item **seguido da descrição completa**, como
 aparecem no documento. Exemplo de forma: `12 Farinha, de mandioca, torrada`.
 
+**A resposta usa os nomes dos campos pedidos, não os do cabeçalho do documento.**
+O cabeçalho serve para localizar a coluna certa; a chave de saída é sempre a que
+foi pedida. E a resposta é **uma lista de todos os itens da página**, não um item
+solto.
+
 ## Guardrails
 
+- **Responda com a lista completa**, no formato pedido. Um objeto solto, ou um
+  item por resposta, não atende.
+- **Use as chaves pedidas.** Copiar o nome do cabeçalho do documento como chave
+  produz saída que o destino não reconhece.
 - **Alinhe por nome de coluna, nunca por posição.** Se uma coluna do documento não
   estiver entre os campos pedidos, pule-a — não empurre o valor dela para o campo
-  seguinte.
+  seguinte, e **não a inclua na resposta**.
 - O `identificador` leva número **e** descrição. Só o número não identifica o item.
 - Use exatamente os valores impressos no documento. Não calcule, não converta, não
   arredonde.
@@ -94,8 +103,23 @@ explicitamente reduz tokens gastos em conteúdo que será jogado fora.
 texto importa: sem ela a amostragem degrada e modelos pequenos passam a devolver
 prosa.
 
+**"Use as chaves pedidas, e responda com a lista"** — regra nascida de uma
+**regressão que a v3 causou**. Ao enfatizar "localize a coluna pelo nome no
+cabeçalho", o prompt fez o modelo passar a devolver as colunas *do documento* como
+chaves — `Umidade (%)`, `Energia (kJ)`, `Cinzas (g)` — e num objeto solto, sem a
+lista. O extrator rejeitou tudo: **zero registros em 89 s**.
+
+A lição é sobre prompt, não sobre o modelo: reforçar uma regra pode enfraquecer
+outra que estava implícita. A instrução de alinhamento estava correta; faltava
+dizer que o cabeçalho serve para **localizar**, e a chave de saída continua sendo
+a pedida.
+
 ## Histórico
 
+- **v4** (2026-08-01) — chaves de saída e formato de lista explicitados, após a
+  regressão descrita acima.
+- **v3** (2026-08-01) — contar colunas do cabeçalho e tratar marcador como
+  ocupante de coluna, após o modelo devolver a umidade no campo de carboidrato.
 - **v2** (2026-08-01) — alinhamento por nome de coluna e identificador completo.
   As duas regras vêm de defeito medido na bateria completa, não de precaução:
   colunas deslocadas por uma posição e identificador só com o número. Ver as

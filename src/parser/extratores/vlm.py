@@ -44,6 +44,7 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
         caminho_pdf: str,
         *,
         instrucao: str | None = None,
+        ordem_das_colunas: list[str] | None = None,
         dpi: int = DPI_PADRAO,
         degrau_maximo: Degrau | None = None,
         raciocinar: bool = False,
@@ -80,7 +81,12 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
                 criatividade a exercitar.
         """
         _validar_dpi(dpi)
-        super().__init__(cliente, campos, instrucao=instrucao or INSTRUCAO_VISUAL)
+        super().__init__(
+            cliente,
+            campos,
+            instrucao=instrucao or INSTRUCAO_VISUAL,
+            ordem_das_colunas=ordem_das_colunas,
+        )
         self.caminho_pdf = caminho_pdf
         self.dpi = dpi
         self.saida = SaidaEmDegraus(

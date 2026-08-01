@@ -160,10 +160,27 @@ class ExtratorBaseadoEmModelo:
         campos: list[str],
         *,
         instrucao: str | None = None,
+        ordem_das_colunas: list[str] | None = None,
     ) -> None:
+        """
+        Args:
+            ordem_das_colunas: os cabeçalhos do documento **na sequência em que
+                aparecem**, incluindo os que não foram pedidos. É o que corrige o
+                deslocamento de coluna.
+
+                Medido: descrever a regra de alinhamento não bastou — três
+                versões do prompt tentaram, e o modelo continuou devolvendo a
+                primeira coluna no lugar da sétima, perdendo a conta ao passar
+                por um marcador não numérico. **Entregar a sequência resolveu**
+                (100% em 5 itens).
+
+                A diferença é de natureza, não de ênfase: a regra pede que o
+                modelo *infira* o alinhamento; a sequência o *entrega*.
+        """
         self.cliente = cliente
         self.campos = campos
         self.instrucao = instrucao or INSTRUCAO_PADRAO
+        self.ordem_das_colunas = ordem_das_colunas or []
 
     def extrair(self, documento: DocumentoCanonico) -> list[Registro]:
         registros: list[Registro] = []
@@ -179,7 +196,20 @@ class ExtratorBaseadoEmModelo:
         raise NotImplementedError
 
     def _prompt(self) -> str:
-        return f"{self.instrucao}\n\nCampos: {', '.join(self.campos)}"
+        partes = [self.instrucao]
+        if self.ordem_das_colunas:
+            # Numerada, e não em lista corrida: o número é o que ancora o campo à
+            # posição, e sem ele o modelo volta a alinhar pelo nome mais próximo.
+            colunas = "\n".join(
+                f"{i}. {nome}" for i, nome in enumerate(self.ordem_das_colunas, 1)
+            )
+            partes.append(
+                "As colunas da tabela, nesta ordem:\n"
+                f"{colunas}\n\n"
+                "Cada linha traz um valor para **cada** coluna acima, na sequência."
+            )
+        partes.append(f"Campos: {', '.join(self.campos)}")
+        return "\n\n".join(partes)
 
     def _schema(self) -> dict:
         return {
@@ -258,6 +288,7 @@ class ExtratorModelo(ExtratorBaseadoEmModelo):
         campos: list[str],
         *,
         instrucao: str | None = None,
+        ordem_das_colunas: list[str] | None = None,
         degrau_maximo: Any = None,
         raciocinar: bool = False,
         tokens_maximos: int | None = None,
@@ -279,7 +310,9 @@ class ExtratorModelo(ExtratorBaseadoEmModelo):
         """
         from parser.degraus import SaidaEmDegraus
 
-        super().__init__(cliente, campos, instrucao=instrucao)
+        super().__init__(
+            cliente, campos, instrucao=instrucao, ordem_das_colunas=ordem_das_colunas
+        )
         self.saida = SaidaEmDegraus(
             cliente,
             campos,
