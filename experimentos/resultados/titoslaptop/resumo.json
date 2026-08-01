@@ -1,7 +1,7 @@
 {
   "documento": "TACO.pdf",
   "maquina": "titoslaptop",
-  "data_utc": "2026-07-31T00:09:28+00:00",
+  "data_utc": "2026-08-01T01:29:40+00:00",
   "execucoes": [
     {
       "estrategia": "posicional",
@@ -12,10 +12,10 @@
       "registros": 283,
       "campos": 3396,
       "campos_preenchidos": 3317,
-      "segundos": 0.24864559998968616,
+      "segundos": 0.5249109999986104,
       "erro": null,
       "cobertura": 0.9767,
-      "segundos_por_pagina": 0.03
+      "segundos_por_pagina": 0.06
     },
     {
       "estrategia": "pdfplumber",
@@ -26,10 +26,10 @@
       "registros": 278,
       "campos": 2502,
       "campos_preenchidos": 2502,
-      "segundos": 2.7089820000110194,
+      "segundos": 6.231664700000692,
       "erro": null,
       "cobertura": 1.0,
-      "segundos_por_pagina": 0.3
+      "segundos_por_pagina": 0.69
     },
     {
       "estrategia": "camelot",
@@ -40,10 +40,10 @@
       "registros": 309,
       "campos": 2781,
       "campos_preenchidos": 2781,
-      "segundos": 1.3537619999842718,
+      "segundos": 3.167876699999397,
       "erro": null,
       "cobertura": 1.0,
-      "segundos_por_pagina": 0.15
+      "segundos_por_pagina": 0.35
     },
     {
       "estrategia": "ocr",
@@ -54,10 +54,10 @@
       "registros": 283,
       "campos": 3555,
       "campos_preenchidos": 3318,
-      "segundos": 26.810744700022042,
+      "segundos": 35.56959530000131,
       "erro": null,
       "cobertura": 0.9333,
-      "segundos_por_pagina": 2.98
+      "segundos_por_pagina": 3.95
     },
     {
       "estrategia": "linear",
@@ -68,10 +68,10 @@
       "registros": 0,
       "campos": 0,
       "campos_preenchidos": 0,
-      "segundos": 0.042038400017190725,
+      "segundos": 0.05264469999929133,
       "erro": null,
       "cobertura": 0.0,
-      "segundos_por_pagina": 0.0
+      "segundos_por_pagina": 0.01
     },
     {
       "estrategia": "pymupdf",
@@ -82,10 +82,38 @@
       "registros": 19,
       "campos": 19,
       "campos_preenchidos": 0,
-      "segundos": 1.7420292999595404,
+      "segundos": 1.6504980999998224,
       "erro": null,
       "cobertura": 0.0,
-      "segundos_por_pagina": 0.19
+      "segundos_por_pagina": 0.18
+    },
+    {
+      "estrategia": "llm",
+      "parametros": {
+        "dpi": 0
+      },
+      "paginas": 9,
+      "registros": 278,
+      "campos": 1668,
+      "campos_preenchidos": 1668,
+      "segundos": 8071.514101999999,
+      "erro": null,
+      "cobertura": 1.0,
+      "segundos_por_pagina": 896.83
+    },
+    {
+      "estrategia": "vlm",
+      "parametros": {
+        "dpi": 150
+      },
+      "paginas": 0,
+      "registros": 0,
+      "campos": 0,
+      "campos_preenchidos": 0,
+      "segundos": 6350.437622699999,
+      "erro": "TimeoutError: timed out",
+      "cobertura": 0.0,
+      "segundos_por_pagina": 0.0
     }
   ],
   "extras": {}

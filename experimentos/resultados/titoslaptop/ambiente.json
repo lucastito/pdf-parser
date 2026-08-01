@@ -4,11 +4,12 @@
   "processador": "Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz",
   "nucleos": 8,
   "ram_total_gb": 15.8,
-  "ram_livre_gb": 6.0,
+  "ram_livre_gb": 6.7,
   "gpu": "NVIDIA GeForce MX230",
   "vram": "2048 MiB",
   "python": "3.14.5",
-  "data_utc": "2026-07-31T00:09:28+00:00",
+  "data_utc": "2026-08-01T01:29:40+00:00",
+  "versao_do_servidor": "0.32.5",
   "modelos": [
     {
       "nome": "qwen3-vl:4b",

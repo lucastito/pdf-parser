@@ -84,6 +84,22 @@ configuração *dentro* da rota de visão.
 Uma configuração, a melhor conhecida por calibração anterior. **Nenhuma
 varredura.**
 
+### O que é constante fixada, e não hipótese
+
+| Constante | Valor | Por quê |
+|---|---|---|
+| **prompt** | base comum, adaptação só de formato | variá-lo junto com as hipóteses tornaria nenhum efeito atribuível (ADR-0022) |
+| **`seed`** | fixo | sem ele, geração é irreprodutível e diferença entre máquinas vira ruído |
+| **`temperature`** | 0 | idem; e é o que a literatura exige de benchmark |
+| **página** | a mesma em todas as máquinas | páginas diferentes tornam as configurações vencedoras incomparáveis |
+
+> **Reprodutibilidade tem limite, e ele fica declarado.** Mesmo com `seed` fixo e
+> temperatura zero, a ordem de operações em ponto flutuante muda entre CPU e
+> GPU e entre arquiteturas. A variação cai muito, **não** a zero. Por isso a
+> mesma configuração é repetida algumas vezes por máquina, e o que se reporta é
+> média e dispersão — uma execução por célula não sustenta afirmação sobre
+> diferença pequena.
+
 ## Variáveis
 
 **Independentes:** característica estrutural da página (ADR-0021) · rota ·
@@ -127,6 +143,17 @@ Tempo por página, tokens por segundo, pico de memória, e a razão
 **A página que elege o vencedor não pode ser a que mede o vencedor.** Triagem e
 avaliação final usam páginas **disjuntas**. Sem isso, o desempenho reportado
 inclui a sorte que fez aquele candidato vencer — o viés do vencedor.
+
+### O corte é por característica, não global
+
+**Emenda de 2026-08-01.** Eleger finalistas medindo uma característica e depois
+fazê-los competir em várias é viés de seleção: um modelo fraco em tabela com
+grade pode ser o melhor em página digitalizada, e seria eliminado antes de ser
+testado no que faz bem.
+
+A triagem roda **uma página de cada característica** da taxonomia (ADR-0021), e a
+eliminação é do par **(modelo, característica)** — não do modelo. Ver a
+retificação no ADR-0016.
 
 ### Zona de empate, não ranking
 

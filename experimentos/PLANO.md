@@ -62,6 +62,56 @@ produto agora. O que **não** pode ser fixado antes das medições é o **peso**
 cada voto: rotas que leem a mesma camada de texto erram juntas, e calibrar sem a
 matriz de correlação seria retrabalho garantido.
 
+## A pergunta que as duas entregas compartilham
+
+O chefe pergunta: *qual o **menor** modelo, na configuração **mínima**, que
+resolve o **máximo** com alta certeza.* O artigo pergunta: *mais capacidade
+melhora o resultado, ou satura?*
+
+**São a mesma medição** — o joelho da curva custo × qualidade. O que muda é o
+formato de saída: um quer uma recomendação ("use X em máquina Y"), o outro quer a
+curva com a metodologia que a sustenta.
+
+Isso define a ordem das três perguntas, e ela não é arbitrária:
+
+| # | Pergunta | Por que nesta ordem |
+|---|---|---|
+| 1 | **configuração** | modelo mal configurado parece ruim; sem isso tudo mede o erro de configuração — foi o que aconteceu com o contexto herdado |
+| 2 | **modelo** | com todos bem configurados, a comparação passa a ser justa |
+| 3 | **infraestrutura** | sabendo o modelo, "que máquina ele exige" é a pergunta de compra |
+
+## O fluxo, corrigido
+
+```
+0. VALIDAR O PROMPT — máquina de referência, escopo pequeno
+   não é medição comparativa; é acerto de configuração
+   prompt é CONGELADO ao fim desta etapa (ADR-0022)
+        ↓
+1. TRIAGEM — 8 hipóteses × modelos × 1 página POR CARACTERÍSTICA
+   5 máquinas, cada uma o que comporta
+   corte por zona de empate, POR CARACTERÍSTICA, eliminados reportados
+        ↓
+2. PREENCHIMENTO — sobreviventes × documentos completos × 1 configuração
+   páginas disjuntas das de triagem
+        ↓
+3. CONSOLIDAÇÃO + avaliação (acurácia por campo, erro × omissão)
+```
+
+**Os documentos não bloqueiam a distribuição.** A triagem usa uma página por
+característica; enquanto a coleta não termina, ela roda com as características já
+disponíveis. Quem bloqueia é o **prompt validado**.
+
+### O que os scripts das máquinas fazem — e o que não fazem
+
+**Fazem:** rodar o mesmo prompt, a mesma página, a mesma escada do menor ao maior
+até não caber; registrar versão de servidor, modelo, driver, memória, e **quanto
+foi para a placa contra quanto foi para o processador**.
+
+**Não fazem:** otimizar prompt localmente, escolher modelo, descartar resultado
+ruim. Se cada máquina afinar o seu, os resultados deixam de ser comparáveis e o
+experimento morre. **Coletar é local; decidir é central**, com os dados das cinco
+juntos.
+
 ## O que já está medido
 
 Contra o conjunto de reserva (10 itens, 9 páginas, seções variadas, transcrito às
@@ -322,6 +372,42 @@ o que muda é a trilha.
 **Por que:** sem isso, a comparação tem um buraco — **6 de 8 rotas** estão no
 `resumo.json`. As duas por modelo foram medidas por script avulso, fora do fluxo
 do experimento, e por isso não têm acurácia calculada da mesma forma.
+
+### Defeito medido na rota de texto — corrigir antes de distribuir
+
+A bateria completa rodou em 2026-08-01 (8071 s, 278 registros, máquina ociosa) e
+revelou dois defeitos, ambos de **configuração**, não do modelo:
+
+| Defeito | Sintoma | Causa |
+|---|---|---|
+| **Colunas deslocadas** | `proteina_g` recebe 517 onde o gabarito diz 2,6 | 517 kJ = 124 kcal: o esquema não declara `energia_kj`, e o modelo alinhou **por posição** em vez de por nome |
+| **Identificador incompleto** | devolve `1.0`, as outras rotas devolvem `1 Arroz, integral, cozido` | nenhum item casa com o gabarito |
+
+O campo que **não** depende do alinhamento mostra a leitura real: `energia_kcal`
+acerta **78,4%** (40 de 51). O modelo lê os dígitos; erra o mapeamento.
+
+- [ ] Declarar `energia_kj` no esquema pedido — a coluna existe no documento e
+      ficava órfã
+- [ ] Pedir o identificador completo (número **e** descrição)
+- [ ] Reforçar no prompt que o mapeamento é **por nome de coluna**, nunca por
+      posição
+- [ ] **Fixar `seed` e `temperature: 0`** — hoje nenhum dos dois é declarado, e
+      sem eles a diferença entre máquinas é indistinguível de ruído (ADR-0020)
+- [ ] Validar em **escopo pequeno** (5 itens, ~18 min), não em página inteira:
+      foi o erro de 2026-08-01, medir 2h14 para descobrir defeito que 1 página
+      revelaria
+
+### Rota de visão — o timeout, não a capacidade
+
+Na mesma bateria ela falhou com `TimeoutError` em 6350 s, contra os 3600 s
+declarados no perfil. **Não é a rota falhando — é o limite chegando antes dela**:
+a medição sem limite de cliente mostrou que ela termina em 77 min.
+
+- [ ] Timeout **sem limite** na máquina de referência, para obter o número real
+- [ ] **Teto generoso** no pacote das outras máquinas: sem limite, travar significa
+      travar para sempre, e quem está do outro lado não sabe o que fazer
+- [ ] Validar o prompt **fatiado** (5 itens), que é o único modo com resultado
+      válido comprovado nesta máquina
 
 - [ ] Bateria da rota de texto — 8 casos pareados com os da visão
 - [ ] Consolidar os parâmetros num só lugar: contexto, teto de saída, `dpi` e

@@ -41,6 +41,28 @@ conveniência, não por método.
 
 **Pergunta:** qual a melhor configuração de cada modelo?
 
+> ### ⚠ RETIFICAÇÃO (2026-08-01) — uma página basta **por característica**, não no total
+>
+> A afirmação abaixo é verdadeira **dentro de um documento**: as páginas de dados
+> daquele arquivo são estruturalmente idênticas, e isso foi verificado. Ela deixa
+> de valer assim que entram documentos de outras características.
+>
+> **O furo, apontado pelo Lucas:** eleger finalistas medindo **uma** característica
+> e depois fazê-los competir em **seis** é viés de seleção. Um modelo fraco em
+> tabela com grade pode ser o melhor em página digitalizada e inclinada — e teria
+> sido eliminado antes de ser testado no que faz bem.
+>
+> É exatamente a objeção que um revisor levantaria, e ela procede.
+>
+> **A correção:** a triagem roda **uma página de cada característica** da taxonomia
+> (ADR-0021), não uma página só. O custo não multiplica por seis, porque as
+> hipóteses que se mostrarem dominantes na primeira característica ficam fixas nas
+> seguintes — revarrer o que já discriminou não acrescenta informação.
+>
+> O corte por zona de empate passa a valer **por característica**: um modelo
+> eliminado em tabela continua competindo em digitalizado. A eliminação é do par
+> (modelo, característica), não do modelo.
+
 **Uma página basta, e isso foi verificado — não suposto.** As páginas de dados são
 estruturalmente idênticas:
 

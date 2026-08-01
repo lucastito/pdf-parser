@@ -32,6 +32,7 @@ vale mais que argumento.
 | [0019](0019-ambiente-de-execucao-em-maquina-de-terceiro.md) | O que não se controla em máquina alheia: detectar e declarar, não impedir | Leitura padrão de memória de vídeo **trunca em 4 GB**; exclusividade de placa é impossível |
 | [0020](0020-pre-registro-do-protocolo.md) | Hipóteses, métricas e critério de corte fixados **antes** da bateria *(proposto)* | Registrar depois é indistinguível de escolher o que favorece a conclusão; as "8 hipóteses" eram citadas desde o ADR-0016 **sem nunca terem sido enumeradas** |
 | [0021](0021-taxonomia-de-caracteristicas.md) | Característica estrutural é **2º eixo da página**, ao lado da classe de conteúdo *(proposto)* | Uma página é `DADOS` **e** `DIGITALIZADA` ao mesmo tempo; rótulo por documento apagaria o **documento misto**, que é o caso difícil |
+| [0022](0022-politica-de-prompt.md) | Prompt-base comum, adaptação só de formato; otimização automática fica para depois *(proposto)* | Prompt por modelo torna o resultado **não reproduzível** — a comparação vira "quem otimizou melhor" |
 
 ## Em aberto
 
