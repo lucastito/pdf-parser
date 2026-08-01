@@ -39,6 +39,28 @@ __all__ = [
     "consolidar",
 ]
 
+_ITENS_PARA_CONCLUIR_COLUNA_VAZIA = 10
+"""Quantos itens é preciso ter para chamar uma coluna quase vazia de artefato.
+
+Abaixo disto, coluna sem valor é campo não lido — pendência legítima. A ausência
+sistemática só vira evidência de cabeçalho corrompido quando há itens suficientes
+para que "sistemática" queira dizer algo.
+"""
+
+_PREENCHIMENTO_MINIMO_DA_COLUNA = 0.05
+"""Fração dos itens que uma coluna precisa preencher para contar como dado.
+
+Não é vazio absoluto, e a diferença veio de um caso real: a coluna `Energia —`,
+inventada pelo OCR a partir de um cabeçalho corrompido, aparece em 159 itens e
+tem **um** valor não nulo — o resíduo `'='`. Exigir vazio absoluto deixaria essa
+coluna passar por causa de um caractere, e as 158 pendências continuariam
+afogando as verdadeiras.
+
+O limiar é baixo de propósito: campo legitimamente esparso (presente em poucos
+alimentos) precisa sobreviver. O que ele corta é a coluna preenchida em fração
+ínfima, que é assinatura de artefato e não de dado raro.
+"""
+
 
 class Desfecho(StrEnum):
     """O que a votação decidiu para uma célula."""
@@ -148,6 +170,14 @@ class ResultadoConsolidacao:
     Guardado à parte para que o relatório mostre **o que** cada rota leu, e não
     só quem discordou: sem o valor, quem confere precisa abrir as planilhas de
     origem para saber o que estava em jogo.
+    """
+
+    campos_vazios: list[str] = field(default_factory=list)
+    """Colunas preenchidas em fração ínfima dos itens — artefato, não dado.
+
+    Descartadas da planilha, e listadas aqui em vez de sumirem em silêncio:
+    coluna assim costuma ser cabeçalho corrompido na extração, e escondê-la
+    esconderia o defeito que a produziu.
     """
 
     def celula(self, item: str, campo: str) -> Celula:
@@ -375,10 +405,35 @@ def consolidar(
 
     itens = sorted(set().union(*(set(indices[n]) for n in ativas)))
 
+    # Coluna que nenhuma rota preencheu em item algum é artefato de extração —
+    # cabeçalho corrompido que virou coluna. Medido: 158 das 251 pendências
+    # vinham de uma dessas, afogando as 3 pendências verdadeiras. Pendência é
+    # pedido de trabalho humano, e não se pede revisão de coluna inexistente.
+    #
+    # Exige **vários itens** para concluir. Num documento de um item só, campo
+    # vazio é campo não lido daquele item — que é pendência legítima — e não há
+    # evidência de coluna fantasma. Sem esta condição, a regra descartaria a
+    # única pendência de uma extração pequena.
+    if len(itens) >= _ITENS_PARA_CONCLUIR_COLUNA_VAZIA:
+        declarados: set[str] = set()
+        itens_com_valor: dict[str, set[str]] = {}
+        for nome in ativas:
+            for item, campos_lidos in indices[nome].items():
+                declarados |= set(campos_lidos)
+                for campo, valor in campos_lidos.items():
+                    if valor is not None:
+                        itens_com_valor.setdefault(campo, set()).add(item)
+
+        minimo = len(itens) * _PREENCHIMENTO_MINIMO_DA_COLUNA
+        resultado.campos_vazios = sorted(
+            campo for campo in declarados if len(itens_com_valor.get(campo, set())) < minimo
+        )
+
     for item in itens:
         campos: set[str] = set()
         for nome in ativas:
             campos |= set(indices[nome].get(item, {}))
+        campos -= set(resultado.campos_vazios)
 
         # A chave normalizada casa as rotas; o rótulo é o que a planilha mostra.
         rotulo = rotulos[item]

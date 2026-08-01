@@ -435,6 +435,127 @@ class TestAlinhamentoDeIdentificador:
         assert resultado.celulas[0].item == "1 Arroz, integral"
 
 
+class TestColunaFantasma:
+    """Campo que **nenhuma** rota leu não vira pendência — vira nada.
+
+    Encontrado na análise das pendências reais: **158 das 251** eram de um campo
+    só, `Energia ⏸`, que o OCR inventou ao ler um cabeçalho corrompido. A coluna
+    existe no cabeçalho e **todos os valores são nulos**.
+
+    Pendência é pedido de trabalho humano. Mandar alguém revisar 158 células
+    vazias de uma coluna que não existe no documento é ruído que **esconde as
+    pendências verdadeiras** — no caso, 3.
+
+    A distinção que importa: campo lido por alguém e sem consenso é pendência
+    legítima; campo que ninguém leu em item nenhum é artefato de extração.
+    """
+
+    def test_campo_sem_nenhum_valor_nao_entra_na_planilha(self):
+        resultado = consolidar(
+            {
+                "boa": [
+                    _saida(identificador=f"Item {i}", energia_kcal=100 + i)[0]
+                    for i in range(20)
+                ],
+                "ocr": [
+                    _saida(identificador=f"Item {i}", **{"Energia —": None})[0]
+                    for i in range(20)
+                ],
+            }
+        )
+
+        campos = {c.campo for c in resultado.celulas}
+        assert "Energia —" not in campos
+        assert "energia_kcal" in campos
+
+    def test_com_um_item_so_a_coluna_vazia_continua_sendo_pendencia(self):
+        """Um item não é evidência de coluna fantasma — é campo não lido.
+
+        Sem esta ressalva, a regra descartaria a única pendência de uma extração
+        pequena, que é exatamente onde a revisão humana mais importa.
+        """
+        resultado = consolidar(
+            {
+                "a": _saida(identificador="Arroz", energia_kcal=None),
+                "b": _saida(identificador="Arroz", energia_kcal=None),
+            }
+        )
+
+        assert resultado.celula("Arroz", "energia_kcal").desfecho is Desfecho.PENDENCIA
+        assert resultado.campos_vazios == []
+
+    def test_campo_com_valor_em_algum_item_continua_valendo(self):
+        """Nulo em um item não condena a coluna: dado esparso é dado."""
+        resultado = consolidar(
+            {
+                "a": [
+                    _saida(identificador="Arroz", fibra_g=None)[0],
+                    _saida(identificador="Feijao", fibra_g=8.5)[0],
+                ],
+                "b": [
+                    _saida(identificador="Arroz", fibra_g=None)[0],
+                    _saida(identificador="Feijao", fibra_g=8.5)[0],
+                ],
+            }
+        )
+
+        campos = {c.campo for c in resultado.celulas}
+        assert "fibra_g" in campos, "a coluna tem dado no Feijao"
+
+    def test_um_valor_solto_nao_salva_a_coluna_fantasma(self):
+        """O caso real: `Energia —` aparece em 159 itens e **um** tem valor `=`.
+
+        Exigir vazio absoluto deixaria a coluna passar por causa desse único
+        resíduo — 0,3% de preenchimento — e as 158 pendências continuariam
+        afogando as 3 verdadeiras. O critério é proporção, não ausência total.
+        """
+        registros_boa = [
+            _saida(identificador=f"Item {i}", energia_kcal=100 + i)[0] for i in range(200)
+        ]
+        registros_ocr = [
+            _saida(identificador=f"Item {i}", **{"Energia —": None})[0] for i in range(200)
+        ]
+        registros_ocr[0] = _saida(identificador="Item 0", **{"Energia —": "="})[0]
+
+        resultado = consolidar({"boa": registros_boa, "ocr": registros_ocr})
+
+        assert "Energia —" in resultado.campos_vazios
+        assert "Energia —" not in {c.campo for c in resultado.celulas}
+
+    def test_campo_esparso_legitimo_sobrevive(self):
+        """Um campo presente em 10% dos itens é dado raro, não artefato.
+
+        O limiar precisa separar os dois casos, e é por isso que ele é baixo:
+        cortar campo esparso legítimo perderia dado real.
+        """
+        registros = [
+            _saida(identificador=f"Item {i}", colesterol_mg=None)[0] for i in range(100)
+        ]
+        for i in range(10):
+            registros[i] = _saida(identificador=f"Item {i}", colesterol_mg=5.0)[0]
+
+        resultado = consolidar({"a": registros, "b": list(registros)})
+
+        assert "colesterol_mg" not in resultado.campos_vazios
+
+    def test_a_coluna_descartada_e_relatada(self):
+        """Sumir com uma coluna em silêncio esconderia extração defeituosa."""
+        resultado = consolidar(
+            {
+                "boa": [
+                    _saida(identificador=f"Item {i}", energia_kcal=100 + i)[0]
+                    for i in range(20)
+                ],
+                "ocr": [
+                    _saida(identificador=f"Item {i}", **{"Energia —": None})[0]
+                    for i in range(20)
+                ],
+            }
+        )
+
+        assert "Energia —" in resultado.campos_vazios
+
+
 class TestSaida:
     def test_o_resultado_e_serializavel(self):
         import json
