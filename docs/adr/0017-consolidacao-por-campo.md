@@ -14,16 +14,26 @@ delas entregar ao consumidor?
 A resposta óbvia — escolher a de maior acurácia — desperdiça informação. Medição
 contra o conjunto de reserva (10 itens, 9 páginas, seções variadas):
 
-| Rota | Acurácia |
-|---|---|
-| posicional | **100%** |
-| pdfplumber | **100%** |
-| camelot | **100%** |
-| ocr | 78% |
-| texto (`qwen3:4b`) | 100% na página medida |
+| Rota | Acurácia | Mesma régua? |
+|---|---|---|
+| posicional | **100%** | sim — no `resumo.json` |
+| pdfplumber | **100%** | sim |
+| camelot | **100%** | sim |
+| ocr | 78% | sim |
+| texto (`qwen3:4b`) | 100% em `energia_kcal`, 1 página | **não** |
 
 **Três empatam em 100%**, e nenhuma foi medida em todas as 23 páginas. Escolher uma
 delas é decisão arbitrária que joga fora a concordância das outras.
+
+> **A rota de texto ainda não é comparável, e a linha acima não deve sugerir que
+> seja.** Ela rodou **uma vez**, por script avulso, fora do fluxo do experimento:
+> uma página, um campo conferido, sem entrar no `resumo.json` e sem acurácia
+> calculada pela mesma régua das demais.
+>
+> Consequência para esta decisão: hoje a consolidação só tem **as seis
+> determinísticas** como votantes reais. Isso basta para construir e validar o
+> **mecanismo**, e não basta para a comparação final — que depende da bateria da
+> seção 1 do plano.
 
 ## Decisão
 
