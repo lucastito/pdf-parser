@@ -483,11 +483,42 @@ A conclusão que isso sustenta, e que a acurácia sozinha esconderia:
 É consistente com o que o projeto já mediu nos degraus de saída (ADR-0015) e
 reforça a decisão de manter a saída validada, nunca confiada.
 
+#### O degrau 1 corrige o formato — e revela o problema seguinte
+
+Refeito com o **esquema como gramática de decodificação** (degrau 1), em vez de
+`format: "json"` (degrau 2, que garante JSON válido sem impor estrutura):
+
+| | degrau 2 | degrau 1 |
+|---|---|---|
+| `glm-ocr` — chaves | inventadas, do documento | **as pedidas** ✅ |
+| `glm-ocr` — formato | objeto solto | **lista `itens`** ✅ |
+| `glm-ocr` — desfecho | `stop`, 6,0 min | **`length`, 33,8 min** |
+
+**A gramática funcionou no que se propunha e expôs a causa seguinte:** a geração
+foi **cortada** no item 15 de 31, com o JSON truncado no meio. Não é recusa nem
+incapacidade — os valores até ali estavam corretos.
+
+**A causa é o contexto, e a lacuna é de desenho:** o perfil declara **um**
+contexto (12271) para todas as rotas de visão, calculado a partir da entrada do
+`qwen3-vl:4b` (2376 tokens). O `glm-ocr` consome **3375** de entrada, e precisaria
+de ~17000 para caber a saída de 31 itens.
+
+> **O contexto é por modelo, não por rota.** Dois modelos com a mesma tarefa
+> consomem entradas diferentes, e um número só serve mal aos dois. É a mesma
+> classe de erro do ADR-0018 — parâmetro herdado onde deveria ser calculado —
+> reaparecendo num nível acima.
+
+E há o custo: a gramática levou de 6,0 a **33,8 min** no mesmo modelo. Restringir
+a decodificação não é grátis, e isso entra na conta de qual degrau usar.
+
 #### Consequência para o desenho
 
 - **A hipótese dos degraus (H1-H3) passa a ser central**, não secundária: modelo
   que falha no esquema completo pode funcionar em JSON livre ou texto recortado.
   Cinco dos seis modelos morreram exatamente nesse ponto.
+- **O contexto precisa ser calculado por modelo**, a partir da entrada medida de
+  cada um — `parser.contexto.dimensionar` já faz a conta; falta o perfil aceitar
+  o valor por rota e o experimento medir a entrada antes de fixá-lo.
 - **Um modelo especializado em documento não é automaticamente melhor.**
   `glm-ocr` lê melhor que o vencedor e entrega pior. A comparação precisa dos dois
   eixos.
