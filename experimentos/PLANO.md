@@ -748,8 +748,21 @@ funções, para calibrar layout. É import local, não dependência estrutural �
 Nascidas de defeitos reais desta sessão. Estão em
 `docs/adr/` e na memória do projeto.
 
-**Uma medição por vez.** Duas em paralelo inflam o tempo das duas, e nada no
-resultado denuncia. Aconteceu, e os números tiveram de ser refeitos.
+**Uma medição por vez — e nada mais na máquina.** Duas medições em paralelo
+inflam o tempo das duas, e nada no resultado denuncia. Aconteceu, e os números
+tiveram de ser refeitos.
+
+**A regra vale para trabalho comum, não só para outra medição.** Aconteceu de
+novo em 2026-07-31, e desta vez o concorrente era rodar a suíte de testes: a
+primeira página da rota de texto passou de 1 h contra os 2904 s de referência.
+Não havia conflito de código — os módulos eram independentes — mas **o
+processador é compartilhado**, e foi ele que faltou. A bateria foi interrompida e
+refeita com a máquina ociosa.
+
+A conclusão que fica: verificar acoplamento de código **não** basta para autorizar
+paralelismo. Se o resultado inclui tempo, a máquina tem de estar livre — inclusive
+de teste, compilação e navegador. É a mesma classe de contaminação que o ADR-0019
+prevê para as máquinas de terceiros, e ela também vale aqui.
 
 **Ensaiar script longo antes de rodar.** Um ensaio de 15 segundos pegou um erro de
 sintaxe que teria custado uma noite de medição.
