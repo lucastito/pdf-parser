@@ -4,11 +4,11 @@
   "processador": "Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz",
   "nucleos": 8,
   "ram_total_gb": 15.8,
-  "ram_livre_gb": 7.1,
+  "ram_livre_gb": 7.2,
   "gpu": "NVIDIA GeForce MX230",
   "vram": "2048 MiB",
   "python": "3.14.5",
-  "data_utc": "2026-08-01T17:25:51+00:00",
+  "data_utc": "2026-08-01T18:07:52+00:00",
   "versao_do_servidor": "0.32.5",
   "modelos": [
     {

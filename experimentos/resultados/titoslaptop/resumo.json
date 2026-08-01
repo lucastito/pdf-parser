@@ -1,7 +1,7 @@
 {
   "documento": "TACO.pdf",
   "maquina": "titoslaptop",
-  "data_utc": "2026-08-01T17:25:51+00:00",
+  "data_utc": "2026-08-01T18:07:52+00:00",
   "execucoes": [
     {
       "estrategia": "posicional",
@@ -9,13 +9,13 @@
         "dpi": 0
       },
       "paginas": 1,
-      "registros": 31,
-      "campos": 372,
-      "campos_preenchidos": 308,
-      "segundos": 0.04060160000517499,
+      "registros": 32,
+      "campos": 384,
+      "campos_preenchidos": 373,
+      "segundos": 0.061710399997537024,
       "erro": null,
-      "cobertura": 0.828,
-      "segundos_por_pagina": 0.04
+      "cobertura": 0.9714,
+      "segundos_por_pagina": 0.06
     },
     {
       "estrategia": "pdfplumber",
@@ -26,10 +26,10 @@
       "registros": 31,
       "campos": 279,
       "campos_preenchidos": 279,
-      "segundos": 0.43836499999451917,
+      "segundos": 0.4591909000009764,
       "erro": null,
       "cobertura": 1.0,
-      "segundos_por_pagina": 0.44
+      "segundos_por_pagina": 0.46
     },
     {
       "estrategia": "camelot",
@@ -37,13 +37,13 @@
         "dpi": 0
       },
       "paginas": 1,
-      "registros": 31,
-      "campos": 279,
-      "campos_preenchidos": 279,
-      "segundos": 0.6974810999963665,
+      "registros": 62,
+      "campos": 558,
+      "campos_preenchidos": 558,
+      "segundos": 0.8164051000057952,
       "erro": null,
       "cobertura": 1.0,
-      "segundos_por_pagina": 0.7
+      "segundos_por_pagina": 0.82
     },
     {
       "estrategia": "ocr",
@@ -51,13 +51,13 @@
         "dpi": 350
       },
       "paginas": 1,
-      "registros": 31,
-      "campos": 403,
-      "campos_preenchidos": 308,
-      "segundos": 3.429862899996806,
+      "registros": 32,
+      "campos": 384,
+      "campos_preenchidos": 373,
+      "segundos": 3.0082884000003105,
       "erro": null,
-      "cobertura": 0.7643,
-      "segundos_por_pagina": 3.43
+      "cobertura": 0.9714,
+      "segundos_por_pagina": 3.01
     },
     {
       "estrategia": "linear",
@@ -68,7 +68,7 @@
       "registros": 0,
       "campos": 0,
       "campos_preenchidos": 0,
-      "segundos": 0.007928500010166317,
+      "segundos": 0.008624699999927543,
       "erro": null,
       "cobertura": 0.0,
       "segundos_por_pagina": 0.01
@@ -79,13 +79,13 @@
         "dpi": 0
       },
       "paginas": 1,
-      "registros": 0,
-      "campos": 0,
+      "registros": 2,
+      "campos": 2,
       "campos_preenchidos": 0,
-      "segundos": 0.09479620000638533,
+      "segundos": 0.18547189999662805,
       "erro": null,
       "cobertura": 0.0,
-      "segundos_por_pagina": 0.09
+      "segundos_por_pagina": 0.19
     },
     {
       "estrategia": "llm",
@@ -93,13 +93,13 @@
         "dpi": 0
       },
       "paginas": 1,
-      "registros": 0,
-      "campos": 0,
-      "campos_preenchidos": 0,
-      "segundos": 89.08524469999247,
+      "registros": 31,
+      "campos": 217,
+      "campos_preenchidos": 217,
+      "segundos": 1340.7705943000037,
       "erro": null,
-      "cobertura": 0.0,
-      "segundos_por_pagina": 89.09
+      "cobertura": 1.0,
+      "segundos_por_pagina": 1340.77
     }
   ],
   "extras": {}
