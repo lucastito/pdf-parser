@@ -208,9 +208,23 @@ class ResultadoConsolidacao:
         menor do que se pensa.
         """
         por_chave = {_chave_de_item(item): campos for item, campos in gabarito.items()}
+        # Reserva: o número do item, quando ele existe e é único.
+        #
+        # Modelo pequeno devolve `"1"` onde as demais rotas dão `"1 Arroz…"` —
+        # medido, e a conferência acusava 0% em modelo que acertava 92,9% dos
+        # campos. Zero por chave que não casa é o pior erro de medição: parece
+        # incapacidade e é defeito do instrumento.
+        por_numero: dict[str, dict[str, Any]] = {}
+        for item, campos in gabarito.items():
+            numero = _numero_de_item(item)
+            if numero and numero not in por_numero:
+                por_numero[numero] = campos
+
         acertos = erros = omissoes = 0
         for celula in self.celulas:
-            esperado = por_chave.get(_chave_de_item(celula.item), {})
+            esperado = por_chave.get(_chave_de_item(celula.item))
+            if esperado is None:
+                esperado = por_numero.get(_numero_de_item(celula.item), {})
             if celula.campo not in esperado:
                 continue
             if not celula.preenche:
@@ -297,6 +311,20 @@ def _chave_de_item(identificador: str) -> str:
     sem_acento = unicodedata.normalize("NFKD", identificador)
     sem_acento = "".join(c for c in sem_acento if not unicodedata.combining(c))
     return "".join(sem_acento.split()).casefold()
+
+
+def _numero_de_item(identificador: str) -> str:
+    """O número que abre o identificador, se houver.
+
+    Serve de chave reserva quando o modelo devolve só `"1"` e o gabarito traz
+    `"1 Arroz, integral, cozido"`. Devolve vazio quando não começa por número —
+    aí não há reserva, e o casamento continua sendo pela forma normalizada.
+    """
+    texto = str(identificador).strip()
+    if not texto:
+        return ""
+    primeiro = texto.split()[0].rstrip(".,)")
+    return primeiro if primeiro.isdigit() else ""
 
 
 def _mais_legivel(a: str, b: str) -> str:

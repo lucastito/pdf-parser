@@ -291,6 +291,47 @@ class TestErroVersusOmissao:
         placar = resultado.contra_gabarito({"1 Arroz, integra l": {"energia_kcal": 124}})
         assert placar.acertos == 1, "o item sumiu do placar por diferença de grafia"
 
+    def test_item_identificado_so_pelo_numero_ainda_casa(self):
+        """Modelo pequeno devolve `"1"` onde as demais rotas dão `"1 Arroz…"`.
+
+        Medido em 2026-08-01: três dos quatro modelos testados devolveram o
+        identificador **sem a descrição**, apesar de o prompt pedir os dois. A
+        conferência acusava **0%** — e a leitura estava certa: `qwen3-vl:2b`
+        acertava 92,9% dos campos que produziu.
+
+        Zero por não casar a chave é o pior tipo de erro de medição: parece
+        incapacidade do modelo e é defeito do instrumento. O número do item já
+        identifica sem ambiguidade neste documento, e usá-lo como reserva
+        recupera a comparação sem afrouxar nada — o valor continua sendo
+        conferido contra o gabarito.
+        """
+        resultado = consolidar(
+            {
+                "a": _saida(identificador="1", energia_kcal=124),
+                "b": _saida(identificador="1", energia_kcal=124),
+            }
+        )
+
+        placar = resultado.contra_gabarito(
+            {"1 Arroz, integral, cozido": {"energia_kcal": 124}}
+        )
+        assert placar.acertos == 1, "o item sumiu do placar por falta da descrição"
+
+    def test_numeros_diferentes_continuam_sem_casar(self):
+        """A reserva por número não pode casar itens distintos."""
+        resultado = consolidar(
+            {
+                "a": _saida(identificador="2", energia_kcal=360),
+                "b": _saida(identificador="2", energia_kcal=360),
+            }
+        )
+
+        placar = resultado.contra_gabarito(
+            {"1 Arroz, integral, cozido": {"energia_kcal": 124}}
+        )
+        assert placar.acertos == 0
+        assert placar.erros == 0
+
     def test_taxa_de_erro_ignora_o_que_virou_pendencia(self):
         """A taxa de erro mede **entre o que foi preenchido** — misturar com o
         que não foi preenchido esconderia um extrator conservador."""

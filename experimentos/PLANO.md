@@ -483,6 +483,35 @@ A conclusão que isso sustenta, e que a acurácia sozinha esconderia:
 É consistente com o que o projeto já mediu nos degraus de saída (ADR-0015) e
 reforça a decisão de manter a saída validada, nunca confiada.
 
+#### Os quatro medidos com esquema como gramática — e a acurácia real
+
+A conferência oficial dá zero em três deles, e **o zero é do instrumento**. Duas
+causas se somam: a geração é cortada antes do fim, e o identificador vem sem
+descrição (`"1"` em vez de `"1 Arroz, integral, cozido"`), então nada casa.
+
+Reconferindo **pelos itens completos que couberam**, casando por número:
+
+| Modelo | Tempo | Itens lidos | Acurácia real | Desfecho |
+|---|---|---|---|---|
+| **`qwen3-vl:2b`** | 9,5 min | 14 | **92,9%** | `stop` |
+| `glm-ocr` | 33,8 min | 14 | 64,3% | `length` |
+| `minicpm-v4.6:1b` | 4,0 min | 8 | 47,5% | `stop` |
+| `deepseek-ocr:3b` | 14,1 min | 10 | **0%** | `length` |
+
+**`qwen3-vl:2b` é o achado.** Um modelo de 1,9 GB lendo a 92,9% em 9,5 min — três
+vezes mais rápido que o de 3,3 GB, com acurácia próxima. É exatamente o joelho da
+curva que o experimento procura, e ele apareceu no denominador comum.
+
+**`deepseek-ocr` erra tudo o que lê**, e de forma sistemática: devolve umidade
+onde se pede energia, energia onde se pede proteína. É deslocamento de coluna, não
+leitura ruim — e é o único cujo resultado **confirma** o descarte que o benchmark
+de terceiro havia sugerido, agora por medição própria.
+
+> **Duas medições do mesmo modelo com desfechos diferentes é assinatura de
+> orçamento, não de capacidade.** `glm-ocr` deu `stop` em 6 min sem gramática e
+> `length` em 34 min com ela — a gramática restringe a decodificação, e o custo
+> aparece no tempo e no corte.
+
 #### O degrau 1 corrige o formato — e revela o problema seguinte
 
 Refeito com o **esquema como gramática de decodificação** (degrau 1), em vez de
