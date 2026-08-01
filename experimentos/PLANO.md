@@ -20,13 +20,29 @@ requisito do produto e contribuição do artigo ao mesmo tempo.
 
 | | |
 |---|---|
-| Testes | **539 passando**, 6 saltados |
+| Testes | **591 passando**, 6 saltados |
 | Estilo | `flake8` e `black` limpos |
 | Guarda de confidencialidade | 9/9 |
-| ADRs | **21** |
+| ADRs | **23** |
 | Ciclos de importação | **nenhum** (39 módulos) |
 | Rotas com resultado gravado | 8 de 8 |
 | Documentos-caso | **1** — é o gargalo, ver eixo B |
+| Vocabulário | [GLOSSARIO.md](../docs/GLOSSARIO.md) — "degrau" tinha 3 sentidos |
+
+### Medido na máquina de referência (página 29, ociosa)
+
+| Rota | Acurácia | Tempo |
+|---|---|---|
+| posicional | 100% | 0,1 s |
+| pdfplumber | 100% | 0,5 s |
+| camelot | 98,7% | 0,8 s |
+| ocr | 99,3% | 3,0 s |
+| **texto** (`qwen3:4b`) | **100%** | **1340,8 s** |
+| **visão** (`qwen3-vl:4b`) | **100%** em 5 itens | 4641 s (página inteira) |
+
+**Esta máquina executa em processador**, e não por falta de memória: a placa de
+2 GB tem arquitetura de 2017, abaixo do que o servidor exige. Forçar o uso dela
+foi medido e é **marginalmente pior** (17,1 contra 17,5 tokens/s).
 
 ## Os três eixos
 
@@ -373,41 +389,91 @@ o que muda é a trilha.
 `resumo.json`. As duas por modelo foram medidas por script avulso, fora do fluxo
 do experimento, e por isso não têm acurácia calculada da mesma forma.
 
-### Defeito medido na rota de texto — corrigir antes de distribuir
+### Rota de texto — ✅ CORRIGIDA e medida (2026-08-01)
 
-A bateria completa rodou em 2026-08-01 (8071 s, 278 registros, máquina ociosa) e
-revelou dois defeitos, ambos de **configuração**, não do modelo:
+**Resultado final na página de referência**, máquina ociosa, modelo descarregado
+antes (o tempo inclui a carga):
 
-| Defeito | Sintoma | Causa |
+| Rota | Acurácia | Tempo |
 |---|---|---|
-| **Colunas deslocadas** | `proteina_g` recebe 517 onde o gabarito diz 2,6 | 517 kJ = 124 kcal: o esquema não declara `energia_kj`, e o modelo alinhou **por posição** em vez de por nome |
-| **Identificador incompleto** | devolve `1.0`, as outras rotas devolvem `1 Arroz, integral, cozido` | nenhum item casa com o gabarito |
+| posicional | **100%** | 0,1 s |
+| pdfplumber | **100%** | 0,5 s |
+| camelot | 98,7% | 0,8 s |
+| ocr | 99,3% | 3,0 s |
+| **texto (`qwen3:4b`)** | **100%** | **1340,8 s** |
 
-O campo que **não** depende do alinhamento mostra a leitura real: `energia_kcal`
-acerta **78,4%** (40 de 51). O modelo lê os dígitos; erra o mapeamento.
+155 de 155 campos, zero erros, zero omissões, em 31 itens. É o número que faltava
+para a comparação ter **os dois lados na mesma régua e na mesma máquina**: o
+modelo empata com as melhores determinísticas e custa ~2700× mais tempo.
 
-- [ ] Declarar `energia_kj` no esquema pedido — a coluna existe no documento e
-      ficava órfã
-- [ ] Pedir o identificador completo (número **e** descrição)
-- [ ] Reforçar no prompt que o mapeamento é **por nome de coluna**, nunca por
-      posição
-- [ ] **Fixar `seed` e `temperature: 0`** — hoje nenhum dos dois é declarado, e
-      sem eles a diferença entre máquinas é indistinguível de ruído (ADR-0020)
-- [ ] Validar em **escopo pequeno** (5 itens, ~18 min), não em página inteira:
-      foi o erro de 2026-08-01, medir 2h14 para descobrir defeito que 1 página
-      revelaria
+#### A correção que resolveu, e as três que não resolveram
 
-### Rota de visão — o timeout, não a capacidade
+O defeito era o modelo devolver a **umidade** — primeira coluna — no campo de
+carboidrato, perdendo a contagem ao passar pelo `NA` do colesterol.
 
-Na mesma bateria ela falhou com `TimeoutError` em 6350 s, contra os 3600 s
-declarados no perfil. **Não é a rota falhando — é o limite chegando antes dela**:
-a medição sem limite de cliente mostrou que ela termina em 77 min.
+| Tentativa | Resultado |
+|---|---|
+| "alinhe por nome de coluna" | 60% |
+| "conte as colunas do cabeçalho" | 60% |
+| "marcador ocupa coluna" | 60% |
+| **entregar a ordem das colunas, numerada** | **100%** |
 
-- [ ] Timeout **sem limite** na máquina de referência, para obter o número real
+**A diferença é de natureza, não de ênfase:** a regra pede que o modelo *infira* o
+alinhamento; a sequência o *entrega*. E o perfil **já declarava** `campos_na_ordem`
+— usado pelas rotas determinísticas desde sempre. As rotas por modelo nunca
+recebiam; a correção foi ligar o que existia.
+
+- [x] Declarar `energia_kj` no esquema pedido
+- [x] Pedir o identificador completo (número **e** descrição)
+- [x] **Entregar a ordem das colunas** ao modelo
+- [x] **Fixar `seed` e `temperature: 0`** (ADR-0020)
+- [x] Validar em escopo pequeno antes de rodar página inteira
+
+> ### ⚠ O prompt que dá 100% aqui não serve a documento desconhecido
+>
+> Ele entrega **as colunas deste documento**. Em qualquer outro, está errado por
+> construção. É limite de desenho, não de execução — e o produto precisa montar o
+> prompt a partir do que o diagnóstico detecta, não do que o humano declara.
+>
+> Decisão em [ADR-0023](../docs/adr/0023-prompt-para-estrutura-desconhecida.md).
+> A peça central já existe: `calibracao.py` **descobre as colunas por geometria**,
+> sem declaração prévia.
+
+#### Duas armadilhas de medição, ambas na régua e não na extração
+
+**Índice contra número de página.** O intervalo do perfil é **base-0**:
+`range(29,30)` lê `doc[29]`, que é a **página 30**. Uma rodada inteira leu a
+página errada e nada casou com o gabarito — os valores eram reais, de outros
+alimentos.
+
+**Nome de campo sem mapeamento.** A conferência comparava nomes canônicos
+(`energia_kcal`) contra os nomes do documento (`Energia (kcal)`), e acusava
+**zero acerto** em rotas que acertam tudo.
+
+> A regra do projeto pegou os dois: *zero absoluto numa rota que acerta em outro
+> gabarito é suspeita do instrumento, não da extração.*
+
+### Rota de visão — era o timeout, e ela acerta 100%
+
+Ela falhou com `TimeoutError` em 6350 s contra os 3600 s do perfil. **Não era a
+rota falhando — era o limite chegando antes dela.** Sem limite de cliente,
+termina em 77 min.
+
+E na validação de prompt ela acertou **25 de 25 campos** em 5 itens — a extração
+estava perfeita e vinha sendo **descartada**, porque o servidor entregou tudo pelo
+canal de raciocínio e deixou a resposta vazia. Já corrigido: o extrator aproveita
+o rascunho quando a resposta vem vazia, e a validação de estrutura continua
+filtrando divagação.
+
+Nesta amostra a rota de visão é **mais precisa que a de texto** — ela lê a imagem
+e não se confunde com o `NA` no meio da linha, que é onde a de texto tropeçava.
+
+- [x] Timeout **sem limite** na máquina de referência
+- [x] Validar o prompt fatiado (5 itens) — 100%
 - [ ] **Teto generoso** no pacote das outras máquinas: sem limite, travar significa
       travar para sempre, e quem está do outro lado não sabe o que fazer
-- [ ] Validar o prompt **fatiado** (5 itens), que é o único modo com resultado
-      válido comprovado nesta máquina
+- [ ] Refazer a página inteira com a ordem das colunas e o canal de raciocínio
+      gravado — o que existe é anterior às duas correções
 
 - [ ] Bateria da rota de texto — 8 casos pareados com os da visão
 - [ ] Consolidar os parâmetros num só lugar: contexto, teto de saída, `dpi` e

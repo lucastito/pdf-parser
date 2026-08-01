@@ -27,9 +27,18 @@
 > consumindo orçamento (isso foi medido de forma independente), mas chamá-lo de
 > "o gargalo" atribuía a ele um efeito que era do contexto não declarado.
 >
-> **O que se sabe com o contexto correto:** a chamada **não termina em uma hora**
-> em processador — o cliente desiste por tempo, o modelo não é cortado. A
-> limitação desta máquina é de **tempo**, não de capacidade.
+> **O que se sabe com o contexto correto:** a chamada **termina em 77 minutos** em
+> processador, sem corte (`done_reason=stop`). A limitação desta máquina é de
+> **tempo**, não de capacidade.
+>
+> **Atualização de 2026-08-01 — a rota de visão acerta 100%.** Em escopo de 5
+> itens ela devolveu **25 de 25 campos corretos**. A extração estava perfeita e
+> vinha sendo **descartada**: o servidor entrega o conteúdo pelo canal de
+> raciocínio e deixa a resposta vazia, e o extrator tratava isso como falha.
+>
+> Ou seja, houve **três causas empilhadas**, e cada uma escondia a seguinte:
+> contexto herdado do padrão → limite de tempo do cliente → conteúdo no canal
+> errado. As três estão corrigidas.
 >
 > Detalhe completo e o que fazer: seção 0 de `experimentos/PLANO.md`.
 
