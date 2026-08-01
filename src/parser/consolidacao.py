@@ -240,11 +240,40 @@ def _agrupar_votos(valores: dict[str, Any]) -> list[list[str]]:
     return grupos
 
 
+def _canonizar(
+    indice: dict[str, dict[str, Any]], mapeamento: dict[str, list[str]]
+) -> dict[str, dict[str, Any]]:
+    """Traduz os nomes lidos para os canônicos declarados no perfil.
+
+    Sem isto, cada variante de nome vira uma coluna própria com **um voto**.
+    Medido sobre as saídas reais das quatro rotas determinísticas: 56% das
+    células saíam como voto único porque `Fibra Alimentar (g)` e `Alimentar
+    Fibra (g)` — o mesmo campo, com o cabeçalho rotacionado — não se
+    encontravam.
+
+    Campo fora do mapeamento mantém o nome lido: mapear é opcional, e sumir com
+    coluna não declarada seria pior que não alinhar.
+    """
+    if not mapeamento:
+        return indice
+
+    de_para = {
+        variante: canonico
+        for canonico, variantes in mapeamento.items()
+        for variante in variantes
+    }
+    return {
+        item: {de_para.get(nome, nome): valor for nome, valor in campos.items()}
+        for item, campos in indice.items()
+    }
+
+
 def consolidar(
     saidas: dict[str, list[dict]],
     *,
     chave_item: str = "identificador",
     pesos: dict[str, float] | None = None,
+    mapeamento: dict[str, list[str]] | None = None,
 ) -> ResultadoConsolidacao:
     """Vota célula a célula entre as saídas das estratégias.
 
@@ -254,6 +283,9 @@ def consolidar(
         pesos: rota → peso do voto. Padrão uniforme, **declarado provisório**:
             o peso definitivo depende da matriz de correlação de erros, que só
             existe depois das medições (ADR-0017).
+        mapeamento: campo canônico → nomes que as rotas usam para ele. É o mesmo
+            `mapeamento` do perfil. Sem ele, variantes do mesmo campo não votam
+            juntas e a concordância se perde.
 
     Raises:
         ValueError: se `pesos` citar rota que não está em `saidas` — nome errado
@@ -270,7 +302,10 @@ def consolidar(
                 f"pesos citam rota inexistente: {', '.join(sorted(desconhecidas))}"
             )
 
-    indices = {nome: _indexar(dados, chave_item) for nome, dados in saidas.items()}
+    indices = {
+        nome: _canonizar(_indexar(dados, chave_item), mapeamento or {})
+        for nome, dados in saidas.items()
+    }
     # Rota sem nenhum registro não rodou; mantê-la na lista de votantes faria
     # cada célula parecer ter mais discordância do que teve.
     ativas = [nome for nome, indice in indices.items() if indice]

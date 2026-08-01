@@ -397,8 +397,37 @@ na lógica.
 entre estratégias (`comparar_estrategias`). Falta a camada que **decide**. A
 `Pendencia` de `lote.py` é o encaixe da saída.
 
-- [ ] Implementar a consolidação com proveniência (quantas rotas concordaram)
-- [ ] **Pesos parametrizados**, com o padrão uniforme declarado como provisório
+- [x] Implementar a consolidação com proveniência (quantas rotas concordaram) —
+      `src/parser/consolidacao.py`, 22 testes
+- [x] **Pesos parametrizados**, com o padrão uniforme declarado como provisório
+
+### O que a primeira execução sobre dados reais revelou
+
+Rodada sobre as saídas gravadas das quatro rotas determinísticas (6304 células):
+
+| Desfecho | Células | |
+|---|---|---|
+| concordância | 2563 | 40,7% |
+| maioria | 8 | 0,1% |
+| **voto único** | **3442** | **54,6%** |
+| pendência | 291 | 4,6% |
+
+**Os 54,6% de voto único não são falha da votação — são alinhamento faltando**,
+em dois níveis:
+
+1. **Identificador.** Só **81 de ~283 itens** aparecem nas quatro rotas. Os nomes
+   dos itens não batem entre extratores (acentuação, quebra de linha no nome).
+   Item presente numa rota só tem, por definição, um voto.
+2. **Campo.** O perfil declara `mapeamento` para **5** campos, e o documento tem
+   ~12. `Proteina (g)` e `Proteína (g)` continuam sendo colunas diferentes.
+
+Aplicar o mapeamento existente subiu a concordância de 39,3% para 40,7% — pouco,
+porque ele cobre menos da metade dos campos.
+
+- [ ] **Ampliar o `mapeamento` do perfil** para todos os campos do documento
+- [ ] **Alinhar identificadores entre rotas** — normalização de acento, espaço e
+      quebra de linha antes de indexar. É o que destrava os outros 200 itens, e
+      vale mais que qualquer ajuste de peso
 - [ ] **A votação precisa lidar com conjuntos diferentes de rotas.** Máquinas com
       mais capacidade rodam modelos que a de referência não roda, e são elas que se
       parecem com o servidor de destino. Uma rota ausente numa máquina não pode

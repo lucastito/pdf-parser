@@ -291,6 +291,67 @@ class TestErroVersusOmissao:
         assert placar.taxa_de_erro == 0.0
 
 
+class TestMapeamentoDeCampos:
+    """Sem canonizar os nomes, cada variante vira uma célula de um voto só.
+
+    Encontrado ao rodar sobre as saídas reais das quatro rotas determinísticas:
+    **56% das células saíram como voto único**, e não porque as rotas leram
+    pouco. Elas leem o mesmo campo com nomes diferentes:
+
+    | Rota | Nome lido |
+    |---|---|
+    | pdfplumber | `Fibra Alimentar (g)` |
+    | posicional | `Alimentar Fibra (g)` — o cabeçalho é rotacionado |
+    | ocr | `Proteina (g)` — sem acento |
+
+    Cada variante virava uma coluna própria, com uma rota votando nela. A
+    votação estava certa; o alinhamento é que faltava — e o perfil já declara
+    `mapeamento` justamente para isso.
+    """
+
+    def test_variantes_do_mesmo_campo_votam_juntas(self):
+        resultado = consolidar(
+            {
+                "pdfplumber": _saida(
+                    identificador="Arroz", **{"Fibra Alimentar (g)": 1.6}
+                ),
+                "posicional": _saida(
+                    identificador="Arroz", **{"Alimentar Fibra (g)": 1.6}
+                ),
+                "ocr": _saida(identificador="Arroz", **{"Fibra Alimentar (g)": 1.6}),
+            },
+            mapeamento={"fibra_g": ["Fibra Alimentar (g)", "Alimentar Fibra (g)"]},
+        )
+
+        celula = resultado.celula("Arroz", "fibra_g")
+        assert celula.desfecho is Desfecho.CONCORDANCIA
+        assert celula.concordaram == 3
+
+    def test_campo_fora_do_mapeamento_continua_com_o_nome_lido(self):
+        """Mapear é opcional: campo não declarado não pode sumir da planilha."""
+        resultado = consolidar(
+            {
+                "a": _saida(identificador="Arroz", **{"Cinzas (g)": 0.5}),
+                "b": _saida(identificador="Arroz", **{"Cinzas (g)": 0.5}),
+            },
+            mapeamento={"fibra_g": ["Fibra Alimentar (g)"]},
+        )
+
+        assert resultado.celula("Arroz", "Cinzas (g)").desfecho is Desfecho.CONCORDANCIA
+
+    def test_divergencia_real_sobrevive_ao_mapeamento(self):
+        """Canonizar o nome não pode mascarar discordância de valor."""
+        resultado = consolidar(
+            {
+                "a": _saida(identificador="Arroz", **{"Fibra Alimentar (g)": 1.6}),
+                "b": _saida(identificador="Arroz", **{"Alimentar Fibra (g)": 9.9}),
+            },
+            mapeamento={"fibra_g": ["Fibra Alimentar (g)", "Alimentar Fibra (g)"]},
+        )
+
+        assert resultado.celula("Arroz", "fibra_g").desfecho is Desfecho.PENDENCIA
+
+
 class TestSaida:
     def test_o_resultado_e_serializavel(self):
         import json
