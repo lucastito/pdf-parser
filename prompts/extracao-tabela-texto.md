@@ -7,8 +7,14 @@ Para modelos de linguagem que recebem o **texto** já extraído da página.
 Extraia os itens da tabela. Para cada item, informe os campos pedidos.
 
 **Cada campo pedido corresponde a uma coluna com nome próprio.** Localize a coluna
-pelo **nome no cabeçalho** e copie o valor daquela coluna. A tabela pode ter
-colunas que não foram pedidas — ignore-as sem deslocar as demais.
+pelo **nome no cabeçalho** e copie o valor daquela coluna.
+
+A tabela tem **mais colunas do que os campos pedidos**, e as não pedidas aparecem
+no meio, não só nas pontas. Antes de extrair, conte as colunas do cabeçalho e
+associe cada valor da linha à sua posição. Só então escolha os campos pedidos.
+
+Marcadores como `NA` e `Tr` **ocupam uma coluna** como qualquer valor. Pular um
+deles desalinha todos os campos seguintes.
 
 O `identificador` é o número do item **seguido da descrição completa**, como
 aparecem no documento. Exemplo de forma: `12 Farinha, de mandioca, torrada`.
@@ -39,6 +45,23 @@ valores uma posição — deixando o último campo vazio.
 
 O defeito é silencioso: os números são todos reais e vêm da linha certa. Só a
 conferência contra gabarito revela que estão na coluna errada.
+
+**A segunda rodada corrigiu três campos e deixou dois**, e a causa remanescente é
+mais específica que a primeira. A ordem real do documento-caso é:
+
+```
+Umidade | Energia(kcal) | Energia(kJ) | Proteína | Lipídeos | Colesterol | Carboidrato | Fibra | ...
+70,1    | 124           | 517         | 2,6      | 1,0      | NA         | 25,8        | 2,7   | ...
+```
+
+O modelo devolveu `carboidrato = 70,1` — que é a **Umidade**, a primeira coluna.
+Ao encontrar `NA` na coluna de colesterol, ele deixou de contá-la como coluna e
+se reorientou a partir do início da linha.
+
+Daí as duas regras acrescentadas: contar as colunas do cabeçalho antes de
+extrair, e tratar marcador (`NA`, `Tr`) como ocupante de coluna. **Não é o mesmo
+defeito da v2** — aquele era coluna não pedida nas pontas; este é marcador não
+numérico no meio.
 
 **"Identificador com número e descrição"** — o modelo devolvia apenas o número
 (`1`), e as demais estratégias devolvem `1 Arroz, integral, cozido`. Nenhum item

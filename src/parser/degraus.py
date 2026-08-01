@@ -239,6 +239,14 @@ class Tentativa:
     que dimensiona a máquina de destino (ADR-0018).
     """
 
+    veio_do_raciocinio: bool = False
+    """A estrutura foi recuperada do canal de raciocínio, não da resposta.
+
+    É informação sobre o modelo, não detalhe interno: um modelo que entrega pelo
+    canal errado precisa da recuperação para funcionar, e comparar dois modelos
+    sem saber disso esconderia a diferença.
+    """
+
     def como_dados(self) -> dict[str, Any]:
         dados: dict[str, Any] = {
             "degrau": self.degrau.value,
@@ -369,6 +377,8 @@ class SaidaEmDegraus:
         self.temperatura = temperatura
         self._ultimo_uso: Uso | None = None
         """Tokens da chamada mais recente. Alimenta diagnóstico e registro."""
+        self._veio_do_raciocinio = False
+        """A última chamada entregou a estrutura pelo canal de raciocínio."""
 
     def _permitidos(self) -> tuple[Degrau, ...]:
         if self.degrau_maximo is None:
@@ -412,6 +422,7 @@ class SaidaEmDegraus:
                         segundos=time.perf_counter() - inicio,
                         tipo_de_falha=_classificar_falha(erro),
                         uso=self._ultimo_uso,
+                        veio_do_raciocinio=self._veio_do_raciocinio,
                     )
                 )
                 continue
@@ -422,6 +433,7 @@ class SaidaEmDegraus:
                     sucesso=True,
                     segundos=time.perf_counter() - inicio,
                     uso=self._ultimo_uso,
+                    veio_do_raciocinio=self._veio_do_raciocinio,
                 )
             )
 
@@ -450,6 +462,7 @@ class SaidaEmDegraus:
                         segundos=time.perf_counter() - inicio,
                         tipo_de_falha=_classificar_falha(erro),
                         uso=self._ultimo_uso,
+                        veio_do_raciocinio=self._veio_do_raciocinio,
                     )
                 )
                 continue
@@ -460,6 +473,7 @@ class SaidaEmDegraus:
                     sucesso=True,
                     segundos=time.perf_counter() - inicio,
                     uso=self._ultimo_uso,
+                    veio_do_raciocinio=self._veio_do_raciocinio,
                 )
             )
             return ResultadoDegrau(dados=dados, degrau=degrau, tentativas=tentativas)
@@ -595,7 +609,19 @@ class SaidaEmDegraus:
             load_ns=resposta.get("load_duration") or 0,
             total_ns=resposta.get("total_duration") or 0,
         )
-        return resposta.get("response", ""), resposta.get("done_reason")
+        texto = resposta.get("response", "")
+        # O servidor às vezes entrega a estrutura pelo canal de raciocínio e
+        # devolve `response` vazio. Medido: cinco itens perfeitos, 25 de 25
+        # campos certos, descartados como "resposta vazia" — a 440 s a chamada.
+        # Aceitar o rascunho é seguro porque a validação seguinte só aprova JSON
+        # com a chave esperada; divagação em prosa continua reprovando.
+        self._veio_do_raciocinio = False
+        if not texto.strip():
+            rascunho = resposta.get("thinking") or ""
+            if rascunho.strip():
+                texto = rascunho
+                self._veio_do_raciocinio = True
+        return texto, resposta.get("done_reason")
 
     def _prompt_do_degrau(self, degrau: Degrau, prompt: str) -> str:
         """Quanto menos a gramática restringe, mais a instrução precisa dizer.

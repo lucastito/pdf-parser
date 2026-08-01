@@ -612,6 +612,65 @@ class TestReprodutibilidade:
         assert transporte.chamadas[0]["options"]["temperature"] == 0.7
 
 
+class TestRespostaNoCanalDeRaciocinio:
+    """Quando a resposta vem vazia e o raciocínio traz a estrutura, aproveitá-la.
+
+    Medido em 2026-08-01, na validação do prompt: o modelo de visão produziu
+    **cinco itens perfeitos** — 25 de 25 campos corretos contra o gabarito — e o
+    servidor entregou tudo em `thinking`, deixando `response` vazio.
+
+    Sem esta recuperação, o extrator descarta uma extração impecável e reporta
+    "resposta vazia". O custo do descarte não é pequeno: naquela chamada foram
+    **440 segundos**, e numa página inteira são 77 minutos.
+
+    O risco oposto — aceitar divagação como se fosse resposta — é contido pela
+    validação que já existe: só entra o que for JSON com a chave esperada. Texto
+    de raciocínio comum não passa por ela.
+    """
+
+    def test_usa_o_raciocinio_quando_a_resposta_vem_vazia(self):
+        transporte = TransporteRoteirizado(
+            {"response": "", "thinking": json.dumps(ITENS), "done_reason": "stop"}
+        )
+
+        resultado = _saida(transporte).obter("prompt")
+
+        assert resultado.dados == ITENS
+
+    def test_a_resposta_tem_precedencia_sobre_o_raciocinio(self):
+        """Se as duas vierem, a resposta é a oficial — o raciocínio é rascunho."""
+        outros = {"itens": [{"identificador": "Outro", "energia_kcal": 999}]}
+        transporte = TransporteRoteirizado(
+            {"response": json.dumps(ITENS), "thinking": json.dumps(outros)}
+        )
+
+        resultado = _saida(transporte).obter("prompt")
+
+        assert resultado.dados == ITENS
+
+    def test_raciocinio_sem_estrutura_nao_vira_resposta(self):
+        """Divagação em prosa continua sendo falha, não resultado."""
+        transporte = TransporteRoteirizado(
+            {"response": "", "thinking": "Vou analisar a tabela...", "done_reason": "stop"},
+            {"response": "", "thinking": "Hmm, deixa ver...", "done_reason": "stop"},
+            {"response": "", "thinking": "A tabela parece ter colunas", "done_reason": "stop"},
+        )
+
+        with pytest.raises(TodosOsDegrausFalharam):
+            _saida(transporte).obter("prompt")
+
+    def test_o_registro_diz_que_a_estrutura_veio_do_raciocinio(self):
+        """Sem marcar, ninguém saberia que o modelo entregou pelo canal errado —
+        e é informação sobre o modelo, não detalhe interno."""
+        transporte = TransporteRoteirizado(
+            {"response": "", "thinking": json.dumps(ITENS), "done_reason": "stop"}
+        )
+
+        resultado = _saida(transporte).obter("prompt")
+
+        assert resultado.tentativas[-1].veio_do_raciocinio
+
+
 class TestUsoNoResultado:
     """Os tokens precisam chegar ao **JSON**, não só à mensagem de erro.
 
