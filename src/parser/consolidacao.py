@@ -23,6 +23,7 @@ agora seria decidir por suposição o que a medição vai responder.
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -168,10 +169,18 @@ class ResultadoConsolidacao:
         ]
 
     def contra_gabarito(self, gabarito: dict[str, dict[str, Any]]) -> Placar:
-        """Confere a planilha consolidada contra valores conferidos à mão."""
+        """Confere a planilha consolidada contra valores conferidos à mão.
+
+        Casa por identificador **normalizado**: o gabarito é transcrito à mão e
+        pode trazer outra grafia do mesmo item. Sem isso o item não casaria e
+        sumiria do placar — nem acerto, nem erro, nem omissão. Zero silencioso é
+        pior que erro, porque a acurácia continua parecendo boa sobre uma amostra
+        menor do que se pensa.
+        """
+        por_chave = {_chave_de_item(item): campos for item, campos in gabarito.items()}
         acertos = erros = omissoes = 0
         for celula in self.celulas:
-            esperado = gabarito.get(celula.item, {})
+            esperado = por_chave.get(_chave_de_item(celula.item), {})
             if celula.campo not in esperado:
                 continue
             if not celula.preenche:
@@ -240,6 +249,40 @@ def _agrupar_votos(valores: dict[str, Any]) -> list[list[str]]:
     return grupos
 
 
+def _chave_de_item(identificador: str) -> str:
+    """Forma normalizada usada **só para casar** o mesmo item entre rotas.
+
+    Medido sobre as saídas reais: apenas 81 de ~283 itens apareciam nas quatro
+    rotas. A causa dominante não é acento — é **espaço espúrio no meio da
+    palavra**, que o extrator de tabela insere ao atravessar a quebra de coluna
+    num cabeçalho rotacionado: `Arroz, integra l` e `Arroz, integral` são o
+    mesmo alimento, e viravam dois itens de um voto cada.
+
+    Remover **todo** espaço é agressivo de propósito, e seguro aqui porque o
+    identificador carrega o número do item: `100 Brocolis, cozido` e
+    `101 Brocolis, cru` continuam distintos. Fosse só o nome, colapsaria
+    demais — e colapsar itens diferentes é pior que não alinhar, porque
+    misturaria valores de alimentos distintos na mesma linha.
+    """
+    sem_acento = unicodedata.normalize("NFKD", identificador)
+    sem_acento = "".join(c for c in sem_acento if not unicodedata.combining(c))
+    return "".join(sem_acento.split()).casefold()
+
+
+def _mais_legivel(a: str, b: str) -> str:
+    """Entre duas grafias do mesmo item, a que vai para a planilha.
+
+    Critério: menos espaços vence — `Arroz, integral` sobre `Arroz, integra l`.
+    Empatando, a que tem acento, que é a forma correta em português. A chave
+    normalizada serve para casar; ninguém quer lê-la.
+    """
+    if a.count(" ") != b.count(" "):
+        return a if a.count(" ") < b.count(" ") else b
+    acentos = sum(1 for c in unicodedata.normalize("NFKD", a) if unicodedata.combining(c))
+    outros = sum(1 for c in unicodedata.normalize("NFKD", b) if unicodedata.combining(c))
+    return a if acentos >= outros else b
+
+
 def _canonizar(
     indice: dict[str, dict[str, Any]], mapeamento: dict[str, list[str]]
 ) -> dict[str, dict[str, Any]]:
@@ -302,10 +345,26 @@ def consolidar(
                 f"pesos citam rota inexistente: {', '.join(sorted(desconhecidas))}"
             )
 
-    indices = {
+    lidos = {
         nome: _canonizar(_indexar(dados, chave_item), mapeamento or {})
         for nome, dados in saidas.items()
     }
+
+    # Reindexa pela forma normalizada, guardando à parte a grafia que vai para a
+    # planilha: sem isso, `Arroz, integra l` e `Arroz, integral` seriam dois
+    # itens de um voto cada — a causa de 204 dos 283 itens ficarem sem votação.
+    indices: dict[str, dict[str, dict[str, Any]]] = {}
+    rotulos: dict[str, str] = {}
+    for nome, indice in lidos.items():
+        indices[nome] = {}
+        for identificador, campos_lidos in indice.items():
+            chave = _chave_de_item(identificador)
+            indices[nome][chave] = campos_lidos
+            anterior = rotulos.get(chave)
+            rotulos[chave] = (
+                identificador if anterior is None else _mais_legivel(anterior, identificador)
+            )
+
     # Rota sem nenhum registro não rodou; mantê-la na lista de votantes faria
     # cada célula parecer ter mais discordância do que teve.
     ativas = [nome for nome, indice in indices.items() if indice]
@@ -321,6 +380,9 @@ def consolidar(
         for nome in ativas:
             campos |= set(indices[nome].get(item, {}))
 
+        # A chave normalizada casa as rotas; o rótulo é o que a planilha mostra.
+        rotulo = rotulos[item]
+
         for campo in sorted(campos):
             # Só quem leu vota. `None` é ausência de leitura, não voto em branco.
             votos = {
@@ -328,10 +390,10 @@ def consolidar(
                 for nome in ativas
                 if item in indices[nome] and indices[nome][item].get(campo) is not None
             }
-            celula = _decidir(item, campo, votos, pesos or {})
+            celula = _decidir(rotulo, campo, votos, pesos or {})
             resultado.celulas.append(celula)
             if celula.rotas_divergentes:
-                resultado.valores_divergentes[(item, campo)] = {
+                resultado.valores_divergentes[(rotulo, campo)] = {
                     rota: votos[rota] for rota in celula.rotas_divergentes
                 }
 

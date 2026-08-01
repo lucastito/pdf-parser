@@ -274,6 +274,23 @@ class TestErroVersusOmissao:
         assert placar.omissoes == 1
         assert placar.erros == 0, "empate não preencheu nada, então não errou"
 
+    def test_o_gabarito_casa_por_identificador_normalizado(self):
+        """O gabarito é transcrito à mão e pode ter outra grafia do mesmo item.
+
+        Sem normalizar dos dois lados, o item não casa e **some do placar** — nem
+        acerto, nem erro, nem omissão. Zero silencioso é pior que erro, porque a
+        acurácia continua parecendo boa sobre uma amostra menor do que se pensa.
+        """
+        resultado = consolidar(
+            {
+                "a": _saida(identificador="1 Arroz, integra l", energia_kcal=124),
+                "b": _saida(identificador="1 Arroz, integral", energia_kcal=124),
+            }
+        )
+
+        placar = resultado.contra_gabarito({"1 Arroz, integra l": {"energia_kcal": 124}})
+        assert placar.acertos == 1, "o item sumiu do placar por diferença de grafia"
+
     def test_taxa_de_erro_ignora_o_que_virou_pendencia(self):
         """A taxa de erro mede **entre o que foi preenchido** — misturar com o
         que não foi preenchido esconderia um extrator conservador."""
@@ -346,6 +363,76 @@ class TestMapeamentoDeCampos:
         )
 
         assert resultado.celula("Arroz", "fibra_g").desfecho is Desfecho.PENDENCIA
+
+
+class TestAlinhamentoDeIdentificador:
+    """Sem normalizar o identificador, o mesmo item vira dois e ninguém vota.
+
+    Medido sobre as saídas reais: apenas **81 de ~283 itens** apareciam nas
+    quatro rotas. A causa não é acento nem maiúscula — é **espaço espúrio no
+    meio da palavra**, que o extrator de tabela insere ao atravessar a quebra de
+    coluna num cabeçalho rotacionado:
+
+    | Rota | Identificador lido |
+    |---|---|
+    | posicional | `1 Arroz, integral, cozido` |
+    | pdfplumber | `1 Arroz, integra l, cozido` |
+
+    São o mesmo alimento. Sem alinhar, cada um vira um item de uma rota só, e
+    204 itens ficam fora da votação por um espaço.
+    """
+
+    def test_espaco_no_meio_da_palavra_nao_separa_o_item(self):
+        resultado = consolidar(
+            {
+                "posicional": _saida(
+                    identificador="1 Arroz, integral, cozido", energia_kcal=124
+                ),
+                "pdfplumber": _saida(
+                    identificador="1 Arroz, integra l, cozido", energia_kcal=124
+                ),
+            }
+        )
+
+        assert len(resultado.celulas) == 1, "o item foi contado duas vezes"
+        celula = resultado.celulas[0]
+        assert celula.desfecho is Desfecho.CONCORDANCIA
+        assert celula.concordaram == 2
+
+    def test_acento_e_caixa_tambem_nao_separam(self):
+        """O OCR devolve sem acento; a comparação não pode depender disso."""
+        resultado = consolidar(
+            {
+                "posicional": _saida(identificador="102 Carálho, cozido", proteina_g=1.0),
+                "ocr": _saida(identificador="102 CARALHO, COZIDO", proteina_g=1.0),
+            }
+        )
+
+        assert len(resultado.celulas) == 1
+
+    def test_itens_realmente_diferentes_continuam_separados(self):
+        """Normalizar não pode colapsar alimentos distintos — seria pior que o
+        problema que resolve, porque misturaria valores de itens diferentes."""
+        resultado = consolidar(
+            {
+                "a": _saida(identificador="100 Brocolis, cozido", energia_kcal=25),
+                "b": _saida(identificador="101 Brocolis, cru", energia_kcal=35),
+            }
+        )
+
+        assert len(resultado.celulas) == 2
+
+    def test_o_identificador_exibido_e_o_mais_legivel(self):
+        """A planilha final mostra a versão com acento e sem espaço quebrado,
+        não a normalizada — que serve para casar, não para ler."""
+        resultado = consolidar(
+            {
+                "pdfplumber": _saida(identificador="1 Arroz, integra l", energia_kcal=124),
+                "posicional": _saida(identificador="1 Arroz, integral", energia_kcal=124),
+            }
+        )
+
+        assert resultado.celulas[0].item == "1 Arroz, integral"
 
 
 class TestSaida:
