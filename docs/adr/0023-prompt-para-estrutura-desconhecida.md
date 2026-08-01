@@ -37,7 +37,23 @@ está.
 ## Decisão
 
 **O prompt é montado a partir do que o pipeline detecta, não do que o humano
-declara.**
+declara.** E o alvo é o **nível intermediário** — nem exato, nem genérico:
+
+| Nível | O que descreve | Problema |
+|---|---|---|
+| exato | as colunas **deste** documento, nomeadas | não generaliza; é o que temos |
+| **intermediário** | **estrutura e metadados detectados** | — |
+| genérico | nada além da tarefa | 0% medido |
+
+**A comparabilidade é o argumento decisivo, e não é sobre qualidade.** Prompt
+exato escrito à mão para cada documento torna os resultados **incomparáveis entre
+documentos**: a diferença medida seria de quem escreveu o prompt, não da
+estratégia. Um prompt montado **pelo mesmo procedimento** em todos os documentos
+preserva a comparação — o procedimento é a constante, e o conteúdo varia com o que
+foi detectado.
+
+Sem isso, a triagem por característica não fecha: uma página por característica,
+cada uma com prompt feito à mão, mediria o esforço de redação.
 
 A peça central já existe e não precisa ser criada: `parser.calibracao.calibrar`
 **descobre as faixas de colunas sozinha**, a partir da geometria da página, sem
@@ -100,6 +116,25 @@ confundir medição com operação.
 automática se aproxima da declaração manual. Hoje há **um** documento, e nele a
 declaração dá 100%. Se a montagem automática der 90% em dez documentos variados,
 é melhor produto que 100% em um só — mas isso é hipótese até haver os dez.
+
+## Considerada e adiada: um modelo que melhora o prompt
+
+Usar um segundo modelo para inspecionar o documento e redigir a instrução —
+padrão conhecido como *modelo como juiz* — foi considerado e **fica para depois**,
+por duas razões que se somam:
+
+**Custo.** Cada chamada custa 20 a 80 min na máquina de referência. Uma etapa
+extra por documento dobra o orçamento antes de qualquer extração.
+
+**Variável a mais na comparação.** Se o prompt for redigido por modelo, a
+diferença medida entre estratégias passa a incluir a qualidade do redator — e o
+redator varia por documento. É o mesmo problema que o ADR-0022 evita ao proibir
+otimização por família.
+
+**Quando faria sentido:** depois que a montagem determinística estiver medida em
+vários documentos, como termo de comparação — *"o modelo redige prompt melhor que
+a regra derivada do diagnóstico?"* é pergunta legítima, e aí ela tem um baseline
+contra o qual ser respondida.
 
 ## Limite declarado
 
