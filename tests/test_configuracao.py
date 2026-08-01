@@ -184,6 +184,59 @@ class TestPerfisDoProjeto:
         for caminho in prompts:
             carregar_prompt(caminho)
 
+    def test_o_mapeamento_cobre_os_campos_que_as_rotas_leem(self):
+        """Campo não mapeado não vota junto com suas variantes.
+
+        Medido sobre as saídas reais das quatro rotas determinísticas: elas leem
+        o mesmo campo com nomes diferentes por três causas distintas —
+
+        | Causa | Exemplo |
+        |---|---|
+        | acento perdido no OCR | `Proteina` / `Proteína` |
+        | ordem trocada pela rotação | `Fibra Alimentar` / `Alimentar Fibra` |
+
+        Cada variante fora do mapeamento vira uma coluna própria, com uma rota
+        votando nela, e a concordância se perde.
+
+        Este teste fixa os campos que o documento-caso realmente tem. Falha se
+        alguém acrescentar rota que leia um campo novo sem declará-lo.
+        """
+        from pathlib import Path
+
+        raiz = Path(__file__).resolve().parent.parent
+        perfil = carregar_perfil(raiz / "perfis" / "nutricional.json")
+
+        esperados = {
+            "energia_kcal",
+            "energia_kj",
+            "proteina_g",
+            "lipideos_g",
+            "carboidrato_g",
+            "fibra_g",
+            "colesterol_mg",
+            "umidade_pct",
+            "cinzas_g",
+            "calcio_mg",
+            "magnesio_mg",
+        }
+        faltando = esperados - set(perfil.mapeamento)
+        assert not faltando, f"campos sem mapeamento declarado: {sorted(faltando)}"
+
+    def test_o_mapeamento_nao_acolhe_leitura_corrompida(self):
+        """`Energia (kd)` é erro de OCR, não variante legítima de `Energia (kJ)`.
+
+        Mapeá-lo faria a leitura errada votar como se fosse boa — e a votação
+        confirmaria o erro com confiança alta, que é o modo de falha que a
+        consolidação existe para evitar.
+        """
+        from pathlib import Path
+
+        raiz = Path(__file__).resolve().parent.parent
+        perfil = carregar_perfil(raiz / "perfis" / "nutricional.json")
+
+        todas = {v for variantes in perfil.mapeamento.values() for v in variantes}
+        assert "Energia (kd)" not in todas
+
     def test_rotas_por_modelo_declaram_contexto(self):
         """Sem declaração vale o padrão do servidor, e ele foi a causa medida.
 

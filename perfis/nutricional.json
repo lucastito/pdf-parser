@@ -23,11 +23,16 @@
     "energia_kcal": [
       "Energia (kcal)"
     ],
+    "energia_kj": [
+      "Energia (kJ)"
+    ],
     "proteina_g": [
-      "Proteína (g)"
+      "Proteína (g)",
+      "Proteina (g)"
     ],
     "lipideos_g": [
-      "Lipídeos (g)"
+      "Lipídeos (g)",
+      "Lipideos (g)"
     ],
     "carboidrato_g": [
       "Carboidrato (g)",
@@ -36,6 +41,23 @@
     "fibra_g": [
       "Fibra Alimentar (g)",
       "Alimentar Fibra (g)"
+    ],
+    "colesterol_mg": [
+      "Colesterol (mg)"
+    ],
+    "umidade_pct": [
+      "Umidade (%)"
+    ],
+    "cinzas_g": [
+      "Cinzas (g)"
+    ],
+    "calcio_mg": [
+      "Cálcio (mg)",
+      "Calcio (mg)"
+    ],
+    "magnesio_mg": [
+      "Magnésio (mg)",
+      "Magnesio (mg)"
     ]
   },
   "rotas": {
