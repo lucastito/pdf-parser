@@ -312,12 +312,8 @@ class TestMapeamentoDeCampos:
     def test_variantes_do_mesmo_campo_votam_juntas(self):
         resultado = consolidar(
             {
-                "pdfplumber": _saida(
-                    identificador="Arroz", **{"Fibra Alimentar (g)": 1.6}
-                ),
-                "posicional": _saida(
-                    identificador="Arroz", **{"Alimentar Fibra (g)": 1.6}
-                ),
+                "pdfplumber": _saida(identificador="Arroz", **{"Fibra Alimentar (g)": 1.6}),
+                "posicional": _saida(identificador="Arroz", **{"Alimentar Fibra (g)": 1.6}),
                 "ocr": _saida(identificador="Arroz", **{"Fibra Alimentar (g)": 1.6}),
             },
             mapeamento={"fibra_g": ["Fibra Alimentar (g)", "Alimentar Fibra (g)"]},
