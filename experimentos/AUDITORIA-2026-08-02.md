@@ -7,6 +7,13 @@ código**, separado do que é hipótese, e o que cada achado obriga a mudar.
 Ele existe porque uma sessão longa produziu afirmações de "pronto" que não
 resistiram à verificação. O registro fica para que a mesma busca não se repita.
 
+> **Documento irmão:** [`AUDITORIA_TECNICA_CIENTIFICA.md`](../AUDITORIA_TECNICA_CIENTIFICA.md),
+> na raiz, é uma auditoria independente feita por outro modelo, com escopo mais
+> amplo — segurança, cadeia de suprimentos, desenho estatístico, corpus e
+> reprodutibilidade. Ela **antecipou** o achado da métrica descrito abaixo, e
+> levanta pontos que as cinco frentes daqui não cobriram. Os dois se somam; onde
+> divergirem, vale o que estiver verificado no código.
+
 ## O achado que precede todos os outros: a acurácia não penaliza invenção
 
 **CONFIRMADO** em `src/parser/concordancia.py:198`:
@@ -173,6 +180,57 @@ dentro do próprio commit que a anunciava.
 `REQUISITOS.md` e `SPEC.md` **não citam** os ADRs 0017, 0021, 0022, 0023 nem 0024.
 Quem lesse só a especificação não saberia que este desenho existe.
 
+## Da auditoria independente: dois achados verificados aqui
+
+O documento irmão levanta muito mais que isto. Registro os dois que reproduzi
+abrindo o código, porque mudam o que precisa ser feito antes de distribuir.
+
+### `--sem-modelos` não desliga todos os modelos
+
+**CONFIRMADO** — `src/parser/fabrica.py:183` exclui apenas os nomes exatos `"llm"`
+e `"vlm"`:
+
+```python
+if not incluir_modelos and nome in ("llm", "vlm"):
+```
+
+Executado contra o perfil real:
+
+```
+rotas com --sem-modelos: camelot, linear, ocr, pdfplumber, posicional, pymupdf, vlm-menor
+```
+
+`vlm-menor` **passa pelo filtro** e dispara carga de modelo numa execução que pediu
+explicitamente para não usar modelo. Aqui custa uma surpresa; na máquina de outra
+pessoa, custa horas de espera sem explicação — e contamina qualquer tempo medido em
+paralelo.
+
+A correção não é acrescentar `"vlm-menor"` à lista: seria de novo por caso. Cada
+rota precisa **declarar** se usa modelo, e o filtro operar sobre a propriedade.
+
+### A métrica: o mesmo achado, por outro caminho
+
+O documento irmão chegou ao problema da acurácia antes desta auditoria, e com uma
+evidência adicional: no conjunto de reserva há rotas com **278-309 itens extraídos
+para 10 itens de referência**, ainda assim com acurácia de 100%.
+
+Ele nomeia o que a métrica atual realmente é: **recall condicional dos campos do
+gabarito** — não acurácia. E indica o conserto: alinhamento por emparelhamento
+explícito, contagem de verdadeiros positivos, falsos positivos e falsos negativos,
+duplicatas e itens sem chave; publicar precisão, recall e F1; falhar diante de
+chave duplicada em vez de sobrescrever; **renomear a métrica histórica** para que
+os números antigos não sejam lidos como se fossem os novos.
+
+### O que não reproduzi
+
+O `F841` que ele reporta em `medicao.py:81` **não existe mais** — `flake8` passa
+limpo. Foi corrigido no caminho, entre a auditoria dele e esta.
+
+Os achados de segurança (isolamento de processo, limites de recurso, injeção de
+instrução via PDF, fórmula em CSV começando por `=`) **não foram verificados
+aqui** e continuam em aberto. Não são hipóteses descartadas; são trabalho não
+feito.
+
 ## O que passou íntegro
 
 - os 51 itens abertos batem exatamente com a contagem por seção, e a seção 4 tem os
@@ -195,6 +253,9 @@ A ordem não é de esforço, é de dependência: cada item torna o seguinte poss
    nova vale mais que as antigas. Erro por invenção precisa de número próprio.
 2. **Suíte determinística.** Guarda que dá resultado diferente na mesma árvore não
    guarda nada — e é o que iria para a máquina dos outros.
+2b. **Rota declarando se usa modelo**, com `--sem-modelos` filtrando por essa
+   propriedade. Pequeno, e bloqueia distribuição: hoje quem pedir para não usar
+   modelo carrega um mesmo assim.
 3. **Diagnóstico por página**, reaproveitando o que já lista páginas internamente.
 4. **Característica como conjunto por página** — o segundo eixo do ADR-0021.
 5. **Perfil com N páginas de triagem por categoria**, substituindo o escalar, e os

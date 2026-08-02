@@ -80,8 +80,14 @@ def test_nenhum_script_impoe_teto_de_tempo_ao_servidor(script: Path):
         # Consulta de estado e descarga têm teto legítimo: não é a geração que
         # está sendo cronometrada, e travar ali só atrasaria a bateria. A janela
         # é generosa porque a carga costuma ser montada bem acima da chamada.
+        #
+        # A isenção nomeia a **classe** — toda rota de consulta do servidor —,
+        # não os dois caminhos que existiam quando o teste foi escrito. Listar um
+        # a um fez `/api/tags` ser acusado como se fosse geração, e a saída seria
+        # deformar o script para contornar o teste em vez de corrigi-lo.
         contexto = "\n".join(linhas[max(0, numero - 20) : numero + 2])
-        if "/api/ps" in contexto or "keep_alive" in contexto:
+        consultas = ("/api/ps", "/api/tags", "/api/show", "/api/version")
+        if "keep_alive" in contexto or any(c in contexto for c in consultas):
             continue
         assert "timeout=None" in linha, (
             f"{script.name}:{numero} impõe limite de tempo numa chamada de "
