@@ -50,9 +50,7 @@ def _esquema() -> dict:
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "properties": {
-                        c: {"type": ["string", "number", "null"]} for c in campos
-                    },
+                    "properties": {c: {"type": ["string", "number", "null"]} for c in campos},
                     "required": campos,
                 },
             }
@@ -196,10 +194,22 @@ def main() -> int:
                     itens = estrutura.get("itens", [])
             except json.JSONDecodeError:
                 pass
+            # Sem os tokens não se distingue corte por contexto de corte por
+            # teto de saída — foi a soma deles que revelou a causa no ADR-0018,
+            # e este script os descartava. Mesmo erro, script novo.
+            entrada = dados.get("prompt_eval_count") or 0
+            saida_tok = dados.get("eval_count") or 0
             resultado = {
                 "modelo": modelo,
                 "minutos": round(segundos / 60, 1),
                 "done_reason": dados.get("done_reason"),
+                "uso": {
+                    "entrada": entrada,
+                    "saida": saida_tok,
+                    "total": entrada + saida_tok,
+                    "contexto_pedido": rota.extras["contexto"],
+                    "bateu_no_contexto": entrada + saida_tok >= rota.extras["contexto"],
+                },
                 **_conferir(itens, gabarito),
                 "resposta": texto[:2000],
             }
@@ -210,9 +220,7 @@ def main() -> int:
             )
 
         registro["resultados"].append(resultado)
-        saida.write_text(
-            json.dumps(registro, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        saida.write_text(json.dumps(registro, ensure_ascii=False, indent=2), encoding="utf-8")
         _descarregar(modelo)
 
     print(f"\ngravado em {saida}")

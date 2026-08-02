@@ -14,7 +14,96 @@ Por isso o cálculo é um `min` de três coisas, e não "o maior valor possível
 
 import pytest
 
-from parser.contexto import CustoDeMemoria, dimensionar
+from parser.contexto import CustoDeMemoria, aferir, dimensionar
+
+
+class TestAfericao:
+    """A entrada é **medida** antes de a bateria começar, nunca herdada.
+
+    É a terceira vez que o mesmo erro aparece neste projeto, e cada vez num
+    nível acima:
+
+    | Quando | Parâmetro | Como estava errado |
+    |---|---|---|
+    | 30/07 | `num_ctx` | herdado do padrão do servidor |
+    | 31/07 | `tokens_maximos` | elevado sem resolver — o limite era outro |
+    | 02/08 | contexto da rota | fixado para um modelo, usado por seis |
+
+    A raiz é sempre a mesma: **um número que depende da entrada foi tratado como
+    constante.** E a entrada varia por modelo — medido, na mesma imagem:
+    `qwen3-vl:2b` consome 2159 tokens, `glm-ocr` consome 2791.
+
+    A regra do ADR-0018 era estreita demais. A formulação correta:
+
+    > Parâmetro que depende da entrada não pode ser fixado antes de medir a
+    > entrada. Vale para padrão de servidor, para valor herdado de outro modelo,
+    > e para qualquer número que alguém escreveu uma vez.
+
+    Isto importa mais na distribuição que aqui: nas outras máquinas cada rodada
+    custa horas, e não dá para pedir que refaçam porque um parâmetro estava
+    errado.
+    """
+
+    def test_a_medicao_devolve_a_entrada_e_o_contexto_calculado(self):
+        chamadas = []
+
+        def medir(modelo, prompt, imagens):
+            chamadas.append(modelo)
+            return 2791  # tokens de entrada, como o servidor reporta
+
+        resultado = aferir(
+            "glm-ocr", medir=medir, prompt="leia", imagens=["x"], saida_esperada=2607
+        )
+
+        assert resultado.entrada == 2791
+        assert resultado.contexto > 2791 + 2607, "o contexto precisa caber os dois lados"
+        assert chamadas == ["glm-ocr"]
+
+    def test_modelos_diferentes_recebem_contextos_diferentes(self):
+        """O ponto todo: um número por modelo, não um por rota."""
+        entradas = {"qwen3-vl:2b": 2159, "glm-ocr": 2791}
+
+        contextos = {
+            nome: aferir(
+                nome,
+                medir=lambda m, p, i: entradas[m],
+                prompt="leia",
+                saida_esperada=2607,
+            ).contexto
+            for nome in entradas
+        }
+
+        assert contextos["glm-ocr"] > contextos["qwen3-vl:2b"]
+
+    def test_entrada_maior_que_o_nativo_falha_cedo(self):
+        """Falhar antes de gastar horas é o propósito da aferição.
+
+        Sem isso a bateria roda, é cortada no meio, e a pessoa do outro lado
+        descobre depois de horas.
+        """
+        with pytest.raises(ValueError, match="não cabe"):
+            aferir(
+                "modelo-grande",
+                medir=lambda m, p, i: 200_000,
+                prompt="leia",
+                saida_esperada=2607,
+                nativo=131072,
+            )
+
+    def test_a_medicao_e_barata_por_construcao(self):
+        """Ela pede **um** token de saída: mede a entrada sem gerar resposta.
+
+        O custo real é carregar o modelo — que a bateria pagaria de qualquer
+        forma logo em seguida.
+        """
+        pedidos = {}
+
+        def medir(modelo, prompt, imagens):
+            pedidos["chamou"] = True
+            return 2159
+
+        aferir("m", medir=medir, prompt="leia", saida_esperada=100)
+        assert pedidos["chamou"]
 
 
 class TestNecessario:

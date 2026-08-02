@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["CustoDeMemoria", "dimensionar"]
+__all__ = ["Afericao", "CustoDeMemoria", "aferir", "dimensionar"]
 
 FOLGA_PADRAO = 1.5
 """Margem sobre o necessário.
@@ -142,3 +142,77 @@ def dimensionar(
         limites.append(custo.contexto_que_cabe(memoria_livre_gb))
 
     return min(limites)
+
+
+@dataclass(frozen=True)
+class Afericao:
+    """O que uma chamada barata revelou sobre um modelo, antes da bateria."""
+
+    modelo: str
+    entrada: int
+    """Tokens que **este** modelo consome com **esta** entrada. Medido."""
+
+    contexto: int
+    """Contexto calculado a partir da entrada medida, não herdado."""
+
+
+def aferir(
+    modelo: str,
+    *,
+    medir,
+    prompt: str,
+    imagens: list[str] | None = None,
+    saida_esperada: int = 2607,
+    nativo: int | None = None,
+    memoria_livre_gb: float | None = None,
+    custo: CustoDeMemoria | None = None,
+) -> Afericao:
+    """Mede a entrada de um modelo e calcula o contexto **dele**.
+
+    Existe porque o mesmo erro apareceu três vezes neste projeto, cada vez num
+    nível acima: contexto herdado do padrão do servidor (ADR-0018), teto de saída
+    elevado sem resolver, e contexto fixado para um modelo e usado por seis.
+
+    A raiz é sempre a mesma — **um número que depende da entrada tratado como
+    constante**. E a entrada varia por modelo: medido na mesma imagem,
+    `qwen3-vl:2b` consome 2159 tokens e `glm-ocr` consome 2791.
+
+    Args:
+        medir: função que faz a chamada e devolve os tokens de entrada. Injetada
+            para que o teste exercite o contrato sem servidor.
+        saida_esperada: quantos tokens a resposta deve ocupar. O padrão vem da
+            maior saída já observada para uma página inteira.
+
+    Raises:
+        ValueError: se nem a entrada couber no contexto nativo. **Falhar aqui é
+            o propósito** — sem isso a bateria roda, é cortada no meio, e quem
+            está do outro lado descobre depois de horas.
+
+    A chamada pede **um** token de saída: mede a entrada sem gerar resposta. O
+    custo real é carregar o modelo, que a bateria pagaria em seguida de qualquer
+    forma.
+    """
+    entrada = medir(modelo, prompt, imagens)
+
+    if nativo and entrada >= nativo:
+        raise ValueError(
+            f"{modelo}: a entrada sozinha ({entrada} tokens) não cabe no contexto "
+            f"nativo ({nativo}). Reduza a resolução da imagem ou fatie a tarefa — "
+            "rodar assim seria cortado no meio, depois de horas."
+        )
+
+    contexto = dimensionar(
+        entrada=entrada,
+        saida_esperada=saida_esperada,
+        nativo=nativo,
+        memoria_livre_gb=memoria_livre_gb,
+        custo=custo,
+    )
+
+    if contexto <= entrada:
+        raise ValueError(
+            f"{modelo}: o contexto viável ({contexto}) não cabe nem a entrada "
+            f"({entrada}). Não há espaço para resposta alguma."
+        )
+
+    return Afericao(modelo=modelo, entrada=entrada, contexto=contexto)

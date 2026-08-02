@@ -155,6 +155,39 @@ porque nem aparece.
 16384, por que cortou em 1870?"* Vale registrar que a pergunta certa veio de
 alguém sem compromisso com a hipótese em curso.
 
+## O mesmo erro voltou — e a regra estava estreita demais (2026-08-02)
+
+A regra registrada acima diz *"não confiar em padrão de servidor"*. Ela é
+verdadeira e **cobre pouco**: o erro reapareceu duas vezes, sem padrão de servidor
+nenhum envolvido.
+
+| Quando | Parâmetro | Como estava errado |
+|---|---|---|
+| 30/07 | `num_ctx` | **herdado** do padrão do servidor |
+| 31/07 | `tokens_maximos` | **elevado sem resolver** — o limite atuante era outro |
+| **02/08** | contexto da rota | **fixado para um modelo, usado por seis** |
+
+Em agosto, o perfil declarava `contexto: 12271` na rota `vlm` — número calculado a
+partir da entrada do `qwen3-vl:4b`. Seis modelos diferentes rodaram com ele. Medido
+depois, na mesma imagem: `qwen3-vl:2b` consome **2159** tokens de entrada,
+`glm-ocr` consome **2791**. Um número não serve aos dois.
+
+**A raiz é sempre a mesma, e a formulação correta é mais ampla:**
+
+> Parâmetro que depende da entrada **não pode ser fixado antes de medir a
+> entrada** — nem por padrão de servidor, nem por valor herdado de outro modelo,
+> nem por número que alguém escreveu uma vez e ficou.
+
+### A guarda que fecha a classe, não o caso
+
+`parser.contexto.aferir` mede a entrada de cada modelo **antes** da bateria, com
+uma chamada que pede um token de saída, e calcula o contexto daquele modelo. Se
+nem a entrada couber, **falha ali** com o número na mensagem.
+
+O propósito é a distribuição: nas outras máquinas cada rodada custa horas, e não
+se pode pedir a quem executa que refaça porque um parâmetro estava errado.
+Descobrir em segundos é a diferença.
+
 ## Consequências
 
 - **Duas afirmações publicadas foram retificadas**, não apagadas: a de que a rota
