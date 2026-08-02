@@ -16,6 +16,10 @@ dev = [
     "pytest-cov>=5.0",
     "black>=24.0",
     "flake8>=7.0",
+    # A suíte lê `experimentos/pdf/manifest.yaml` para conferir os documentos.
+    # Estava instalado por arrasto de outra dependência: funcionava aqui e
+    # quebraria num clone limpo, que é onde ninguém está olhando.
+    "pyyaml>=6.0",
 ]
 
 [build-system]

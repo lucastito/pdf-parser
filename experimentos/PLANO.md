@@ -16,9 +16,9 @@ A ordem é essa e não se inverte. A boa notícia é a sobreposição: **a taxon
 consolidação por campo e a métrica erro × omissão servem às duas** — são
 requisito do produto e contribuição do artigo ao mesmo tempo.
 
-## ⭐ Ordem de execução — 51 itens abertos
+## ⭐ Ordem de execução — 59 itens abertos
 
-> **Isto é uma ordem, não uma lista.** São **51 itens abertos** neste documento,
+> **Isto é uma ordem, não uma lista.** São **59 itens abertos** neste documento,
 > e o que está abaixo diz em que sequência atacá-los — nada é removido nem
 > substituído. O detalhe e a justificativa de cada um vivem na seção
 > correspondente adiante.
@@ -28,7 +28,7 @@ requisito do produto e contribuição do artigo ao mesmo tempo.
 
 | Seção | Abertos |
 |---|---|
-| **4. Outras máquinas** | **21** |
+| **4. Outras máquinas** | **29** — cresceu em 02/08: AMD, Linux, dependências de sistema |
 | 1. Rotas por modelo | 8 |
 | 6. Relatórios e artigo | 7 |
 | 2. Consolidação por campo | 5 |
@@ -42,6 +42,66 @@ requisito do produto e contribuição do artigo ao mesmo tempo.
 > horas, e bug que chega lá custa uma refação que não se pode pedir. Daí a
 > **tolerância zero**: tudo que é necessário para rodar na máquina deles precisa
 > estar pronto e testado **antes**.
+
+### ⚠ P-1 — o que as auditorias de 02/08 puseram na frente de tudo
+
+**Duas auditorias independentes** revisaram o projeto no mesmo dia: uma por outro
+modelo, com escopo amplo ([`AUDITORIA_TECNICA_CIENTIFICA.md`](../AUDITORIA_TECNICA_CIENTIFICA.md)),
+e uma em cinco frentes internas ([`AUDITORIA-2026-08-02.md`](AUDITORIA-2026-08-02.md)).
+Elas convergiram num achado que **precede todo o resto**, e a prioridade agora é
+resolver o que elas apontaram.
+
+| # | O que | Por que antes de tudo |
+|---|---|---|
+| −1.1 | **Métrica que penalize fabricação** | `concordancia.py:198` usa `set.intersection`: itens inventados caem fora da conta. No corpus, `camelot` devolve **62 registros** para uma página de ~31 e marca ~99%. Enquanto isso não muda, **nenhuma medição nova vale mais que as antigas** |
+| −1.2 | **Suíte determinística** | duas auditorias tiveram falhas **diferentes** na mesma árvore; isoladas, todas passam. Guarda instável não guarda nada — e é o que iria para a máquina dos outros |
+| −1.3 | **`--sem-modelos` filtrando por propriedade** | `fabrica.py:183` filtra por nome exato; `vlm-menor` passa e carrega modelo em execução que pediu para não usar nenhum. Pequeno, e bloqueia distribuição |
+| −1.4 | **Diagnóstico por página → característica → páginas de triagem** | ver a seção do corpus abaixo: é o que destrava os perfis, e os perfis destravam a distribuição |
+
+Fora desses, seguem **abertos e não verificados** os achados de segurança da
+auditoria independente: isolamento de processo, limites de recurso, injeção de
+instrução vinda do PDF, e célula de planilha começando por `=`. Não são hipóteses
+descartadas — é trabalho não feito.
+
+### 🔑 O corpus existe: 19 PDFs, 16 características cobertas
+
+**Fechado em 02/08.** O gargalo declarado por meses — "só há um documento-caso" —
+deixou de existir. O corpus está em [`experimentos/pdf/`](pdf/), com
+[`manifest.yaml`](pdf/manifest.yaml) declarando, por documento: SHA-256, páginas,
+proveniência, situação de redistribuição e **características confirmadas por
+página, com a evidência de cada uma**.
+
+| | |
+|---|---|
+| Documentos | **19** |
+| Características com ao menos um caso | **19 de 19** |
+| Reproduzíveis por link público | 16 de 19 |
+| Critério de seleção | [`pdf/CARACTERISTICAS.md`](pdf/CARACTERISTICAS.md) |
+| Método da busca (743 PDFs varridos) | [`pdf/TRIAGEM.md`](pdf/TRIAGEM.md) |
+
+**Este é o insumo da etapa que destrava todo o resto.** A sequência, e a razão de
+cada seta:
+
+```
+experimentos/pdf/  →  descobrir descrição de cada PDF      (metadados + determinismo + modelo)
+                   →  descobrir características por página (taxonomia, ADR-0021)
+                   →  escolher páginas de triagem          (1 por característica, incl. mista)
+                   →  gerar os perfis                      (N páginas por categoria)
+                   →  derivar o prompt de cada modelo      (ADR-0023)
+                   →  DISTRIBUIR
+```
+
+**O endereço `experimentos/pdf/` é o que se passa à ferramenta de descoberta** — não
+um documento por vez, não uma página escolhida à mão.
+
+Sem essa etapa não há perfil; sem perfil não há página de triagem; sem página de
+triagem a distribuição mede a configuração manual de quem escreveu o prompt, que é
+exatamente o que o experimento existe para evitar.
+
+O que **não** existe hoje para isso, confirmado pelas auditorias: `diagnosticar`
+roda no documento inteiro e não por página; a taxonomia não tem estrutura em código
+(`triagem.Classe` é enum de três valores exclusivos, quando uma página tem várias
+características); e o perfil comporta **uma** página de triagem, não N.
 
 ### P0 — o que limitava qualquer execução futura — ✅ **fechado em 2026-08-02**
 
@@ -110,19 +170,19 @@ de resultado.
 é justamente o que dispensa configurar cada documento. Bloqueia a **triagem por
 característica**, que é evidência central do artigo.
 
-Lista do que procurar: [LISTA-DE-BUSCA.md](documentos/LISTA-DE-BUSCA.md).
+Lista do que procurar: [CARACTERISTICAS.md](pdf/CARACTERISTICAS.md).
 
 ## Estado
 
 | | |
 |---|---|
-| Testes | **630 passando**, 8 saltados |
+| Testes | **671 passando**, 8 saltados |
 | Estilo | `flake8` e `black` limpos |
 | Guarda de confidencialidade | 9/9 |
 | ADRs | **24** |
 | Ciclos de importação | **nenhum** (39 módulos) |
-| Rotas com resultado gravado | 8 de 8 |
-| Documentos-caso | **1** — é o gargalo, ver eixo B |
+| Rotas com resultado gravado | 7 de 8 — a de visão vive à parte |
+| Documentos-caso | **19**, cobrindo 19 características — ver [pdf/](pdf/) |
 | Vocabulário | [GLOSSARIO.md](../docs/GLOSSARIO.md) — "degrau" tinha 3 sentidos |
 
 ### Medido na máquina de referência (página 29, ociosa)
@@ -225,6 +285,45 @@ experimento morre. **Coletar é local; decidir é central**, com os dados das ci
 juntos.
 
 ## O que já está medido
+
+> ### ⚠ Toda esta seção é LINHA DE BASE, não resultado
+>
+> Duas razões, e as duas vieram das auditorias de 02/08:
+>
+> **A métrica não penaliza fabricação** (P-1.1) — os percentuais medem concordância
+> entre os itens que sobreviveram à interseção, não fidelidade ao documento.
+>
+> **A página foi escolhida à mão** — a página 29 nunca foi *descoberta* como a
+> melhor do documento para a característica dela. Se a análise do corpus a
+> confirmar, estas medições se reaproveitam; se apontar outra, elas não valem como
+> ponto extremo da curva e a máquina de referência precisa ser remedida.
+>
+> Os dados brutos continuam em disco e podem ser reavaliados com a métrica
+> corrigida. O que cai é a leitura, não a coleta.
+
+### Inventário: quem foi medido, e onde — levantado em 02/08
+
+**Uma única máquina tem resultado gravado.** `experimentos/resultados/` contém
+apenas `titoslaptop`.
+
+| Modelo | Onde aparece | Comparável? |
+|---|---|---|
+| `qwen3-vl:4b` | 3 arquivos, inclusive página inteira sem limite | parcial |
+| `qwen3-vl:2b` | 3 arquivos | parcial |
+| `glm-ocr` | 2 arquivos | não — cortado por contexto herdado |
+| `minicpm-v4.6:1b` | 2 arquivos | não |
+| `deepseek-ocr:3b` | 2 arquivos | não |
+| `minicpm-v4.5:8b` | 1 arquivo | não |
+| `qwen3:4b` | validação de prompt | parcial |
+| **`qwen3:1.7b`** | **nenhum** | **nunca rodou** |
+
+**Nenhum dos oito tem medição comparável**: rodaram com configurações diferentes,
+antes das correções de contexto e de degrau, e todos sob a métrica que não penaliza
+fabricação. Servem de indício sobre o que roda nesta classe de hardware — não de
+resultado.
+
+As máquinas de 6, 8, 12 e 16 GB **não rodaram nada ainda**, e não devem rodar antes
+dos itens P-1.
 
 Contra o conjunto de reserva (10 itens, 9 páginas, seções variadas, transcrito às
 cegas):
@@ -925,11 +1024,54 @@ Fonte correta, **neutra de fabricante**: o registro do Windows, em
 `HardwareInformation.qwMemorySize` (64 bits). Verificado nesta máquina; as
 ferramentas de fabricante servem só para confirmar.
 
-- [ ] Ler do registro; cruzar com as demais fontes e **alertar em discordância**
+✅ **A leitura pelo registro já está implementada** — `procedencia.py:130-168`, com
+o motivo escrito no código: `Win32_VideoController.AdapterRAM` satura em 4 GB, e por
+isso não é usado. Confirmado em 02/08.
+
+- [ ] Cruzar com as demais fontes e **alertar em discordância**
 - [ ] **Gráfico integrado não tem esse campo** — usa memória do sistema
       dinamicamente. É caso distinto, não erro
 - [ ] **Máquina com duas placas** (integrada + dedicada) é comum em portátil:
       escolher a correta e reportar, **nunca somar**
+
+**Lacunas confirmadas em 02/08, e nenhuma é hipotética:**
+
+`_gpu()` tenta `nvidia-smi` e, se não houver, cai no registro do Windows. Disso
+decorre:
+
+- [ ] **Placa AMD não é detectada em lugar nenhum** — a máquina reporta "nenhuma
+      GPU detectada". Falta `rocm-smi`, e no Windows a leitura do registro já
+      funcionaria para AMD, mas não é alcançada quando `nvidia-smi` está ausente
+      e o sistema não é Windows
+- [ ] **Linux só funciona com placa NVIDIA** — sem `nvidia-smi` não há caminho
+      nenhum. Falta `/sys/class/drm/*/device/mem_info_vram_total` (AMD) e
+      `lspci` para o nome
+- [ ] **Saber se o servidor de inferência vai mesmo usar a placa AMD.** Ter a
+      placa não basta: o Ollama traz o próprio ROCm com um conjunto restrito de
+      arquiteturas, e a RX 5700 XT (RDNA 1, gfx1010) **não está nele** — a
+      máquina cairia para processador sem avisar. A verificação honesta é
+      carregar um modelo pequeno e ler `/api/ps`, que informa a divisão real
+      CPU/GPU. É medição, não inferência a partir do nome da placa
+- [ ] **Quanto o sistema já consome** antes de começar — placa e processador —
+      para decidir o que cabe. Sem isso, "16 GB de VRAM" pode significar 11 livres
+- [ ] **Identificador estável de máquina**, para amarrar cada resultado à sua
+      origem sem depender do nome que a pessoa deu ao computador
+
+**O que o pacote de instalação faz e não faz — verificado em 02/08:**
+
+`experimentos/scripts/1-preparar-maquina.ps1` instala o servidor de inferência e os
+oito modelos (~26 GB), é idempotente, e um teste amarra a lista dele à de
+`parser.cli`. `2-rodar-experimento.ps1` dispara a execução.
+
+Mas **os dois são PowerShell**, e portanto:
+
+- [ ] **Não há caminho para Linux** — nem instalação, nem execução
+- [ ] **As dependências determinísticas não são instaladas pelo script**:
+      Tesseract (OCR) e Ghostscript (Camelot) são executáveis de sistema, e sem
+      eles duas rotas falham na máquina de destino sem dizer por quê
+- [ ] Falta um **verificador único** que rode antes de tudo e diga, numa lista, o
+      que está pronto e o que falta: servidor, modelos, Tesseract, Ghostscript,
+      Python, dependências, espaço em disco, placa utilizável
 
 ### 4.2 Contenção — o experimento divide a máquina com o dono dela
 

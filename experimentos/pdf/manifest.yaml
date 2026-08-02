@@ -1,0 +1,270 @@
+schema_version: 1
+generated_at: 2026-08-02
+characteristics_source: CARACTERISTICAS.md
+notes:
+  - "Páginas são numeradas a partir de 1, como vistas pelo usuário."
+  - "Característica confirmada significa inspeção visual; não apenas heurística."
+  - "Status local indica permissão para o experimento, sem afirmar licença de redistribuição."
+  - "Os arquivos estão versionados por decisão explícita, para viabilizar o
+     experimento. `redistribuicao` diz, por documento, o que foi de fato
+     confirmado — e é o campo a consultar antes de publicar o corpus em
+     qualquer outro lugar."
+
+redistribuicao:
+  confirmada:
+    base: "domínio público (obra do governo dos EUA), CC-BY, CC-BY-SA, ou permissão expressa"
+    documentos:
+      - NASA_NACA-TN-117.pdf
+      - NASA_MODIS_MCST_1991.pdf
+      - NARA_JFK_104-10095-10314_skew.pdf
+      - NARA_JFK_104-10337-10011.pdf
+      - CMS_SBC_Sample_1.pdf
+      - hausenblas2013.pdf
+      - lendo - indicado pelo daniel - bav088.pdf
+      - Team Canvas - v. 0.8.pdf
+      - TACO.pdf
+  direitos_possivelmente_da_editora:
+    base: "coautoria própria; publicar costuma transferir direitos patrimoniais.
+           Há link oficial e estável em `source` — preferir linkar a hospedar."
+    documentos:
+      - TitoEtAl_ICEIS2017.pdf
+      - TitoEtAl_SBBD2020_Xi-DL.pdf
+      - CruzEtAl_IHC2018_BlindMagic.pdf
+      - 10.1.1.465.2896.pdf
+  nao_confirmada:
+    base: "editora comercial, sem origem aberta localizada. Uso no experimento é
+           leitura; hospedar é redistribuir. Substituir por equivalente de licença
+           aberta que cubra a mesma característica."
+    documentos:
+      - A Value-Based Review Process for Prioritizing Artifacts(1).pdf
+      - TRADE-OFF ANALYSIS FOR REQUIREMENTS SELECTION.pdf
+      - facce1.pdf
+      - simmhan2005.pdf
+      - software.pdf
+  restricao_de_derivados:
+    base: "CC-BY-NC-ND: a cláusula ND proíbe distribuir derivados, e o experimento
+           gera derivados (páginas renderizadas, extrações). É a mesma cláusula que
+           mantém a TBCA fora deste repositório."
+    documentos:
+      - BMC_Surgery_2025_Recovery.pdf
+
+coverage:
+  1: [lendo - indicado pelo daniel - bav088.pdf, hausenblas2013.pdf, TACO.pdf]
+  2: [NASA_NACA-TN-117.pdf, NASA_MODIS_MCST_1991.pdf, simmhan2005.pdf, NARA_JFK_104-10095-10314_skew.pdf, NARA_JFK_104-10337-10011.pdf]
+  3: [NARA_JFK_104-10095-10314_skew.pdf]
+  4: [Team Canvas - v. 0.8.pdf, A Value-Based Review Process for Prioritizing Artifacts(1).pdf, TACO.pdf]
+  5: [A Value-Based Review Process for Prioritizing Artifacts(1).pdf, TACO.pdf]
+  6: [lendo - indicado pelo daniel - bav088.pdf, hausenblas2013.pdf, 10.1.1.465.2896.pdf, TitoEtAl_ICEIS2017.pdf]
+  7: [software.pdf]
+  8: [10.1.1.465.2896.pdf]
+  9: [lendo - indicado pelo daniel - bav088.pdf, hausenblas2013.pdf, A Value-Based Review Process for Prioritizing Artifacts(1).pdf]
+  10: [NASA_NACA-TN-117.pdf, NARA_JFK_104-10095-10314_skew.pdf]
+  11: [NARA_JFK_104-10337-10011.pdf, CMS_SBC_Sample_1.pdf]
+  12: [NASA_MODIS_MCST_1991.pdf]
+  13: [Team Canvas - v. 0.8.pdf, TRADE-OFF ANALYSIS FOR REQUIREMENTS SELECTION.pdf]
+  14: [TRADE-OFF ANALYSIS FOR REQUIREMENTS SELECTION.pdf]
+  15: [NARA_JFK_104-10337-10011.pdf, NARA_JFK_104-10095-10314_skew.pdf]
+  16: [10.1.1.465.2896.pdf, Team Canvas - v. 0.8.pdf]
+  17: [BMC_Surgery_2025_Recovery.pdf]
+  18: [NASA_NACA-TN-117.pdf, TitoEtAl_ICEIS2017.pdf, 10.1.1.465.2896.pdf]
+  19: [NASA_NACA-TN-117.pdf, NASA_MODIS_MCST_1991.pdf, NARA_JFK_104-10095-10314_skew.pdf]
+
+documents:
+  - file: 10.1.1.465.2896.pdf
+    sha256: 3A091FA694250B1B6200578A15DD9B7220879043966E4694CBF47C194BC326C6
+    pages: 6
+    status: local
+    source: "arquivo científico no acervo H:; cópia pública: https://www.cs.montana.edu/izurieta/pubs/caine2009.pdf"
+    characteristics:
+      - {code: 6, pages: [1, 2, 3, 4, 5, 6], evidence: "artigo em duas colunas"}
+      - {code: 8, pages: [3, 4], evidence: "tabelas-fonte e gráficos com os mesmos valores"}
+      - {code: 16, pages: [3], evidence: "cabeçalhos amarelos e linhas alternadas"}
+      - {code: 18, pages: [1], evidence: "inglês"}
+
+  - file: A Value-Based Review Process for Prioritizing Artifacts(1).pdf
+    sha256: 93741D5460F66338A45F8BF8B53994EC195B4185197D700F63CB5E75949A14BA
+    pages: 10
+    status: local
+    source: "artigo científico no acervo H:"
+    characteristics:
+      - {code: 4, pages: [7, 8], evidence: "cabeçalhos hierárquicos/mesclados"}
+      - {code: 5, pages: [7, 8], evidence: "Table 15 continua na página seguinte"}
+      - {code: 9, pages: [7, 8, 10], evidence: "registros textuais multilinha"}
+
+  - file: BMC_Surgery_2025_Recovery.pdf
+    sha256: 814F500CF38663CA4D9ED10BFCE56F65DD1C55CB2C3AB6AE5BD31E15514073D1
+    pages: 10
+    status: public
+    source: "https://d-nb.info/1363309064/34"
+    license: CC-BY-NC-ND-4.0
+    characteristics:
+      - {code: 17, pages: [6, 7], evidence: "tabelas com -1,234.56, 2,478.12 e 2,567.45"}
+      - {code: 18, pages: [1], evidence: "inglês"}
+
+  - file: CMS_SBC_Sample_1.pdf
+    sha256: 460E1CAFF69505F7A8BB0F1453E8ADA65FE5D4EA75F568CC4692505C2F26016D
+    pages: 5
+    status: public
+    source: "https://www.cms.gov/CCIIO/Resources/Regulations-and-Guidance/Downloads/Sample-completed-sbc-12-19-14-FINAL.pdf"
+    characteristics:
+      - {code: 11, pages: [1, 2, 3, 4, 5], evidence: "template oficial preenchido com valores fictícios; sem checkbox marcado"}
+      - {code: 16, pages: [1, 2, 3, 4, 5], evidence: "tabelas com fundo azul alternado"}
+      - {code: 18, pages: [1], evidence: "inglês"}
+
+  - file: CruzEtAl_IHC2018_BlindMagic.pdf
+    sha256: 7C3EA570C248E08AE8E6E09B9C73BA7D27174206FB2B1B80BF2F31D4D1433393
+    pages: 2
+    status: local
+    source: "https://sol.sbc.org.br/index.php/ihc_estendido/article/download/4188/4119"
+    characteristics:
+      - {code: 6, pages: [1, 2], evidence: "duas colunas"}
+
+  - file: facce1.pdf
+    sha256: FEFD8F4E1F93FF7FED94C51FE74C46E3707F36561A8B5FA69D633002228ED9BB
+    pages: 12
+    status: local
+    source: "artigo científico no acervo H:"
+    characteristics:
+      - {code: 4, pages: [4, 6, 8, 9, 10], evidence: "cabeçalhos agrupados"}
+      - {code: 6, pages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], evidence: "duas colunas"}
+
+  - file: hausenblas2013.pdf
+    sha256: 1AFFD195BF89954BC25FC75221125EE3B4297B8BF6DB7B464AFE1575B72446B6
+    pages: 5
+    status: public
+    source: "https://journals.sagepub.com/doi/10.1089/big.2013.0011"
+    license: CC-BY-3.0-US
+    characteristics:
+      - {code: 1, pages: [5], evidence: "tabela essencialmente sem grade"}
+      - {code: 6, pages: [1, 2, 3, 4, 5], evidence: "duas colunas"}
+      - {code: 9, pages: [5], evidence: "valores multilinha"}
+      - {code: 18, pages: [1], evidence: "inglês"}
+
+  - file: lendo - indicado pelo daniel - bav088.pdf
+    sha256: 21D4D3444C9498D6F218B55E8BF92F8B2E41CF9CB47F4ADB77AE705665C0F25F
+    pages: 10
+    status: public
+    source: "https://academic.oup.com/database/article/doi/10.1093/database/bav088/2433221"
+    license: CC-BY-4.0
+    characteristics:
+      - {code: 1, pages: [8], evidence: "tabela comparativa sem grade"}
+      - {code: 6, pages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], evidence: "duas colunas"}
+      - {code: 9, pages: [8], evidence: "células multilinha"}
+      - {code: 18, pages: [1], evidence: "inglês"}
+
+  - file: NARA_JFK_104-10095-10314_skew.pdf
+    sha256: BC0873A5134C5D7D161540336B0C6BC2E4DA64675E58E6BFD1FEDEBD2AF12503
+    pages: 36
+    status: public
+    source: "https://www.archives.gov/files/research/jfk/releases/104-10095-10314.pdf"
+    characteristics:
+      - {code: 2, pages: [1, 2, 3, 4, 5, 31], evidence: "páginas rasterizadas sem texto extraível"}
+      - {code: 3, pages: [2, 3, 4, 8, 11, 24, 30, 31, 35], evidence: "recortes escaneados com inclinação inequívoca; página 31 é o caso principal"}
+      - {code: 10, pages: [17, 20, 29, 31], evidence: "ruído, manchas, baixo contraste e material degradado"}
+      - {code: 15, pages: [1, 6], evidence: "anotações manuscritas sobre o scan"}
+      - {code: 19, pages: [1, 2, 3, 4, 5, 31], evidence: "fotocópia/digitalização histórica ruidosa"}
+
+  - file: NARA_JFK_104-10337-10011.pdf
+    sha256: 64E405513C5787828E61A82E996710FA5446C95A43F158FA6B7021057C194330
+    pages: 51
+    status: public
+    source: "https://www.archives.gov/files/research/jfk/releases/2023/104-10337-10011.pdf"
+    characteristics:
+      - {code: 2, pages: [1, 29, 30, 51], evidence: "scan sem camada de texto"}
+      - {code: 11, pages: [29, 30, 51], evidence: "formulários preenchidos; página 29 contém checkboxes marcados"}
+      - {code: 15, pages: [23, 24, 25, 26, 27, 28, 30, 51], evidence: "anotações e campos extensamente preenchidos à mão"}
+      - {code: 19, pages: [1, 29, 30, 51], evidence: "fotocópia histórica com ruído"}
+
+  - file: NASA_MODIS_MCST_1991.pdf
+    sha256: D8E32E43B9BE89D4F1723B3833684581AE54A64A6B6F431EB910EEBC8F316394
+    pages: 22
+    status: public
+    source: "https://modis.gsfc.nasa.gov/sci_team/meetings/199110/presentations/v.pdf"
+    characteristics:
+      - {code: 2, pages: [1, 11, 12], evidence: "uma imagem escaneada por página, acompanhada de OCR"}
+      - {code: 10, pages: [1, 11, 12], evidence: "OCR e imagem degradados"}
+      - {code: 12, pages: [11, 12], evidence: "Note 1, Note 2 e Note 3 imediatamente abaixo das tabelas"}
+      - {code: 19, pages: [1, 11, 12], evidence: "scan antigo e texto sujo"}
+
+  - file: NASA_NACA-TN-117.pdf
+    sha256: A8203755C9094D6535416C40EA4E2DF02E522D10DA4058F497E0D7DB635AF304
+    pages: 6
+    status: public
+    source: "https://ntrs.nasa.gov/citations/19930080893"
+    license: "Work of the US Gov. Public Use Permitted"
+    characteristics:
+      - {code: 2, pages: [1, 2, 3, 4, 5, 6], evidence: "relatório histórico escaneado"}
+      - {code: 10, pages: [1, 2, 3, 4, 5, 6], evidence: "manchas, tonalidade irregular e texto fraco"}
+      - {code: 18, pages: [1], evidence: "inglês"}
+      - {code: 19, pages: [1, 2, 3, 4, 5, 6], evidence: "scan antigo"}
+
+  - file: simmhan2005.pdf
+    sha256: 2FAF309E6046536B7AF29E5D514C9E9DA84A3133EB33C9491E2A025FCB55BDAD
+    pages: 6
+    status: local
+    source: "artigo científico no acervo H:"
+    characteristics:
+      - {code: 2, pages: [1, 2, 3, 4, 5, 6], evidence: "todas as páginas são imagens sem texto extraível"}
+      - {code: 9, pages: [5], evidence: "tabela com conteúdo multilinha"}
+      - {code: 18, pages: [1], evidence: "inglês"}
+
+  - file: software.pdf
+    sha256: D2D07B49300F384D5D98ED4091DEB4B0C20702F2B396130CAFABA899F18C16A1
+    pages: 10
+    status: local
+    source: "artigo científico no acervo H:"
+    characteristics:
+      - {code: 7, pages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], evidence: "páginas 3 e 5 são imagem; as demais têm texto nativo"}
+      - {code: 6, pages: [1, 2, 4, 6, 8, 9, 10], evidence: "layout em duas colunas"}
+
+  - file: TACO.pdf
+    sha256: 2002AEC5615B5B1395AAA8FA675635BBB7F712C33F278AF5E332F1CAC8F108C8
+    pages: 164
+    status: local
+    source: "arquivo já existente no projeto; Tabela Brasileira de Composição de Alimentos"
+    characteristics:
+      - {code: 1, pages: [50], evidence: "tabela larga alinhada sem divisórias verticais"}
+      - {code: 4, pages: [17, 50], evidence: "cabeçalhos agrupados"}
+      - {code: 5, pages: [17, 18, 19, 20, 50, 51], evidence: "tabelas continuam por várias páginas"}
+
+  - file: Team Canvas - v. 0.8.pdf
+    sha256: 77830D954ABAD5C8F1827EA0885FAAE8E01219E39E518BD1CAFAACD21BF5C427
+    pages: 1
+    status: public
+    source: "https://www.theteamcanvas.com/"
+    license: CC-BY-SA-4.0
+    characteristics:
+      - {code: 4, pages: [1], evidence: "regiões irregulares/mescladas"}
+      - {code: 13, pages: [1], evidence: "página em paisagem"}
+      - {code: 16, pages: [1], evidence: "fundos coloridos"}
+
+  - file: TitoEtAl_ICEIS2017.pdf
+    sha256: 623CD13AA6211BAE86760814A13866E54C6FC97C6D28E097A5076D7F19CFC05C
+    pages: 8
+    status: local
+    source: "https://www.scitepress.org/papers/2017/63626/63626.pdf"
+    characteristics:
+      - {code: 4, pages: [4], evidence: "tabela com cabeçalhos agrupados"}
+      - {code: 6, pages: [1, 2, 3, 4, 5, 6, 7, 8], evidence: "duas colunas"}
+      - {code: 9, pages: [4], evidence: "células textuais multilinha"}
+      - {code: 18, pages: [1], evidence: "inglês"}
+
+  - file: TitoEtAl_SBBD2020_Xi-DL.pdf
+    sha256: B5A85DDF99B47B9966710FCFC4FE7AEB092C0CCF27B529F1EE1B5D7D2906787C
+    pages: 6
+    status: local
+    source: "https://sol.sbc.org.br/index.php/sbbd/article/download/13633/13481"
+    special_case: "glifos convertidos em contornos vetoriais; zero texto extraível sem ser scan raster"
+    characteristics:
+      - {code: 6, pages: [1, 2, 3, 4, 5, 6], evidence: "duas colunas visuais"}
+      - {code: 9, pages: [6], evidence: "tabela visual com células multilinha"}
+
+  - file: TRADE-OFF ANALYSIS FOR REQUIREMENTS SELECTION.pdf
+    sha256: BBE7C0A3C7DF03C573F5630912601EE48389C802F01E9A153288B243158D84B3
+    pages: 22
+    status: local
+    source: "artigo científico no acervo H:"
+    characteristics:
+      - {code: 9, pages: [16, 20], evidence: "conteúdo de tabela multilinha"}
+      - {code: 13, pages: [12], evidence: "página física em paisagem"}
+      - {code: 14, pages: [16], evidence: "linha Total size dentro do corpo da tabela"}

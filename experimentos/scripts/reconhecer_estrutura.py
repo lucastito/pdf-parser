@@ -85,7 +85,7 @@ def _sinais_nativos(caminho: Path, pagina: int) -> dict:
 
 
 def main() -> int:
-    documento = RAIZ / "experimentos" / "documentos" / "TACO.pdf"
+    documento = RAIZ / "experimentos" / "pdf" / "TACO.pdf"
     pagina = 29
     modelo = sys.argv[1] if len(sys.argv) > 1 else "qwen3-vl:2b"
 

@@ -113,11 +113,11 @@ Convenções usadas:
 
 ### P0.7 — O ambiente não é reproduzível
 
-**Fato:** o `pyproject.toml` usa limites inferiores abertos e não declara várias dependências efetivamente usadas: pdfplumber, Camelot, pytesseract, Pillow, psutil e executáveis do sistema. Não há lockfile, CI ou matriz de plataformas. Tags de modelos são mutáveis.
+**Fato:** o `pyproject.toml` usa limites inferiores abertos e não declara várias dependências efetivamente usadas: pdfplumber, Camelot, pytesseract, Pillow, psutil e executáveis do sistema. Não há lockfile, CI ou matriz de sistemas operacionais. Tags de modelos são mutáveis.
 
 **Impacto:** duas máquinas podem executar código semanticamente diferente. Resultados não podem ser atribuídos apenas a modelo/VRAM.
 
-**Correção obrigatória:** ambientes travados por plataforma/backend; versões e hashes; manifesto de Tesseract/Ghostscript/Ollama/driver; digest real do modelo por execução; CI para o núcleo; snapshot completo do ambiente em cada run.
+**Correção obrigatória:** ambientes travados por sistema operacional/backend; versões e hashes; manifesto de Tesseract/Ghostscript/Ollama/driver; digest real do modelo por execução; CI para o núcleo; snapshot completo do ambiente em cada run.
 
 ## 5. Arquitetura e pipeline
 
