@@ -103,6 +103,21 @@ roda no documento inteiro e não por página; a taxonomia não tem estrutura em 
 (`triagem.Classe` é enum de três valores exclusivos, quando uma página tem várias
 características); e o perfil comporta **uma** página de triagem, não N.
 
+### 📌 Regra: a alocação de modelos só fecha com as máquinas medidas
+
+**Fonte única:** [`ALOCACAO-POR-MAQUINA.md`](ALOCACAO-POR-MAQUINA.md) define quem
+roda o quê. [`MODELOS.md`](MODELOS.md) define a escada e **referencia** aquele
+documento em vez de repetir a tabela — ela já existiu em três lugares e os três
+divergiram.
+
+**Ela é rascunho, e permanece assim até que as seis máquinas relatem** placa,
+memória total e livre, e a **divisão real medida** por `/api/ps` — não inferida do
+nome da placa. Só então o martelo é batido e o aviso de rascunho sai.
+
+Motivo: a tabela atual usa estimativa de memória para cinco das seis máquinas.
+Fechar antes seria alocar por palpite, e cada erro custa horas de download na
+máquina de outra pessoa.
+
 ### P0 — o que limitava qualquer execução futura — ✅ **fechado em 2026-08-02**
 
 Sem isto, medir 4-6 h produzia dado que seria descartado — aconteceu duas vezes.

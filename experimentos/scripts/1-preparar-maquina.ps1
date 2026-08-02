@@ -29,9 +29,11 @@ $env:PYTHONIOENCODING = "utf-8"
 # A escada do ADR-0014, revisada em 2026-08-01. Ordem crescente de tamanho:
 # se o disco ou a rede falharem, falham no fim, com os menores ja baixados.
 $MODELOS = @(
-    "qwen3:1.7b", "qwen3:4b",
-    "minicpm-v4.6:1b", "qwen3-vl:2b", "qwen3-vl:4b",
-    "glm-ocr", "deepseek-ocr:3b", "minicpm-v4.5:8b"
+    "qwen3:1.7b", "minicpm-v4.6:1b", "qwen3-vl:2b",
+    "glm-ocr", "qwen3:4b", "qwen3-vl:4b",
+    "qwen3:8b", "qwen3-vl:8b", "minicpm-v4.5:8b",
+    "deepseek-ocr:3b", "gemma4:12b", "qwen3:14b",
+    "qwen3:30b", "qwen3-vl:30b"
 )
 
 function Passo($n, $t) { Write-Host "`n[$n/5] $t" -ForegroundColor Cyan }

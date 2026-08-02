@@ -278,21 +278,41 @@ na máquina de referência, e vão fixados no script.
 
 ## O que cada máquina roda
 
-Quatro envelopes, de fabricantes diferentes. Cada modelo roda na **menor máquina
-que o comporta**; quando couber em mais de uma, roda também na maior — comparar o
-mesmo modelo em envelopes distintos é o que responde "mais capacidade ajuda?".
+> ### ➜ A alocação vive em [`ALOCACAO-POR-MAQUINA.md`](ALOCACAO-POR-MAQUINA.md)
+>
+> **Este documento define a escada; aquele define quem roda o quê.** A tabela que
+> ficava aqui foi movida, e não duplicada: ela existia em três lugares — aqui, no
+> instalador e em `parser.cli` — e os três divergiram. `gemma4:12b` estava alocado
+> a partir de 12 GB por um tamanho errado (~8 GB documentado, **7,6 GB** real), e o
+> instalador ficou com 8 dos 13 modelos.
+>
+> **Aquele documento é rascunho** até as seis máquinas relatarem placa, memória e a
+> divisão real medida. Enquanto isso, nenhuma alocação está fechada.
 
-| Envelope | Escada de visão | Escada de texto |
-|---|---|---|
-| **2 GB** | `minicpm-v4.6:1b`, `glm-ocr`, `qwen3-vl:2b`, `qwen3-vl:4b` | `qwen3:1.7b`, `qwen3:4b` |
-| **6 GB** | + `deepseek-ocr:3b`, `minicpm-v4.5:8b` | + `qwen3:8b` |
-| **8 GB** | os mesmos do degrau de 6 GB | os mesmos do degrau de 6 GB |
-| **12 GB** | + `gemma4:12b` | + `gemma4:12b`, `qwen3:14b` |
-| **16 GB** | + `qwen3-vl:30b` (teto) | + `qwen3:30b` (teto) |
+O princípio permanece: cada modelo roda na **menor máquina que o comporta**; quando
+couber em mais de uma, roda também na maior — comparar o mesmo modelo em envelopes
+distintos é o que responde *"mais capacidade ajuda?"*.
 
-> **Medido em 2026-08-01, e refuta a expectativa:** modelos menores **não** passam
-> a usar a placa. O de 0,69 GB, que cabe folgado nos 2 GB, roda com 7% em placa; o
-> servidor reporta `96%/4% CPU/GPU` e a placa fica com **0 MiB em uso**.
+> ### ⚠ RETIFICAÇÃO (2026-08-02) — a placa é usável, e o modelo não precisa caber nela
+>
+> Duas afirmações desta seção estavam erradas, e as duas foram corrigidas por
+> medição.
+>
+> **"A placa fica com 0 MiB em uso" — falso.** Forçando o descarregamento total, o
+> modelo vai a **100% na placa** e roda a **17,1 tokens/s contra 17,5** em
+> processador. A placa **é usável**; o que ela não é, é mais rápida. A causa
+> continua sendo a capacidade de computação (6.1, de 2017), não o tamanho do
+> modelo — mas a conclusão correta é *"usá-la não compensa"*, que é afirmação sobre
+> a placa, não sobre o software.
+>
+> **"Modelo precisa caber na placa" — falso.** O servidor **reparte sozinho**:
+> carrega na placa o que couber e deixa o resto na memória do sistema. Medido em
+> 02/08 com `/api/ps`: `qwen3:4b` ocupa 3,28 GB, dos quais **0,54 GB (16%) na placa**
+> e 2,75 GB na memória do sistema. **O modelo é maior que a placa inteira e roda.**
+>
+> Isso muda o critério de alocação: memória de vídeo determina **a fração
+> acelerada**, não se o modelo executa. Por isso a alocação passou a ter dois
+> conjuntos — o que cabe na placa e o que cabe somando a memória do sistema.
 >
 > A causa é a **capacidade de computação da placa (6.1, de 2017)**, abaixo do que
 > o servidor exige para descarregar — não o tamanho do modelo.

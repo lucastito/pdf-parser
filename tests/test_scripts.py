@@ -131,9 +131,15 @@ class TestEscadaDeModelos:
     horas depois — na máquina de outra pessoa, sem ninguém para depurar, e o custo
     é uma refação que não se pode pedir.
 
-    Ordem também importa, e por isso é conferida: o script baixa do menor para o
-    maior de propósito, para que uma falha de rede ou de disco aconteça no fim,
-    com os pequenos já em disco.
+    **Conjunto e ordem são conferidos separadamente**, porque respondem a coisas
+    diferentes. O conjunto tem de ser idêntico ao da escada — é o que garante que
+    quem baixa e quem mede falam do mesmo. A ordem tem de ser **crescente por
+    tamanho** no script, e essa é regra dele, não da escada: assim uma falha de rede
+    ou de disco acontece no fim, com os pequenos já baixados.
+
+    Exigir a mesma ordem dos dois seria amarrar o instalador ao agrupamento por rota
+    que a escada usa para explicar o desenho — dois propósitos distintos, e a
+    divergência entre eles não é defeito.
     """
 
     def _modelos_do_script(self) -> list[str]:
@@ -145,14 +151,28 @@ class TestEscadaDeModelos:
         return re.findall(r'"([^"]+)"', bloco.group(1))
 
     def test_o_script_baixa_exatamente_os_modelos_do_experimento(self):
-        from parser.cli import MODELOS_DO_EXPERIMENTO
+        from parser.escada import MODELOS_DO_EXPERIMENTO
 
-        assert self._modelos_do_script() == list(MODELOS_DO_EXPERIMENTO), (
-            "a escada do script de preparação divergiu de "
-            "`parser.cli.MODELOS_DO_EXPERIMENTO`. Quem executar baixa um conjunto "
-            "e a bateria espera outro — e só descobre horas depois, na máquina de "
-            "outra pessoa."
+        assert set(self._modelos_do_script()) == set(MODELOS_DO_EXPERIMENTO), (
+            "a escada do script de preparação divergiu de `parser.escada`. Quem "
+            "executar baixa um conjunto e a bateria espera outro — e só descobre "
+            "horas depois, na máquina de outra pessoa."
         )
+
+    def test_o_script_baixa_do_menor_para_o_maior(self):
+        """Falha de rede ou disco acontece no fim, com os pequenos já em disco.
+
+        Sem isso, um download interrompido pode deixar a máquina sem nenhum modelo
+        utilizável depois de horas — e o que se perde primeiro é justamente o piso,
+        que é o único que toda máquina precisa ter.
+        """
+        from parser.escada import ESCADA
+
+        tamanho = {m.nome: m.tamanho_gb for m in ESCADA}
+        no_script = [tamanho[n] for n in self._modelos_do_script() if n in tamanho]
+        assert no_script == sorted(
+            no_script
+        ), f"o script não baixa em ordem crescente de tamanho: {no_script}"
 
     def test_a_escada_nao_tem_repetido(self):
         """Baixar duas vezes o mesmo custa banda e sugere edição descuidada."""

@@ -29,27 +29,13 @@ from pathlib import Path
 
 from parser.configuracao import ConfiguracaoInvalida, carregar_perfil
 
-__all__ = ["main"]
+# Reexportado de `parser.escada`, nunca escrito aqui: a lista já esteve duplicada
+# em três lugares e os três divergiram — o instalador chegou a trazer 8 de 13
+# modelos, e o teste que deveria pegar isso comparava justamente os dois que
+# concordavam entre si.
+from parser.escada import MODELOS_DO_EXPERIMENTO
 
-MODELOS_DO_EXPERIMENTO = (
-    # Texto — o denominador comum é o par de tamanhos da mesma família.
-    "qwen3:1.7b",
-    "qwen3:4b",
-    # Visão — generalistas pequenos, do menor ao maior.
-    "minicpm-v4.6:1b",
-    "qwen3-vl:2b",
-    "qwen3-vl:4b",
-    # Visão — especializados em documento, um tamanho cada (ADR-0014).
-    "glm-ocr",
-    "deepseek-ocr:3b",
-    "minicpm-v4.5:8b",
-)
-"""Modelos que os comandos de comparação esperam encontrar, se usados.
-
-Reflete a escada do ADR-0014 revisada em 2026-08-01. A lista anterior tinha três
-modelos e ficou para trás quando a escada cresceu — o que faria uma máquina nova
-ser preparada com menos do que o experimento precisa.
-"""
+__all__ = ["main", "MODELOS_DO_EXPERIMENTO"]
 
 RAM_LIVRE_RECOMENDADA_GB = 6.0
 """Abaixo disto, um modelo de 4 bilhões de parâmetros não carrega com folga."""
