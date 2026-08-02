@@ -34,6 +34,7 @@ vale mais que argumento.
 | [0021](0021-taxonomia-de-caracteristicas.md) | Característica estrutural é **2º eixo da página**, ao lado da classe de conteúdo *(proposto)* | Uma página é `DADOS` **e** `DIGITALIZADA` ao mesmo tempo; rótulo por documento apagaria o **documento misto**, que é o caso difícil |
 | [0022](0022-politica-de-prompt.md) | Prompt-base comum, adaptação só de formato; otimização automática fica para depois *(proposto)* | Prompt por modelo torna o resultado **não reproduzível** — a comparação vira "quem otimizou melhor" |
 | [0023](0023-prompt-para-estrutura-desconhecida.md) | No produto, o prompt é **montado do diagnóstico**, não declarado por humano *(proposto)* | Genérico dá **0%**, regra descrita dá **60%**, ordem declarada dá **100%** — mas só funciona num documento por vez |
+| [0024](0024-reconhecimento-antes-da-extracao.md) | O parser **reconhece** a página antes de extrair, em três níveis de custo *(proposto)* | Descrever a estrutura custa **9%** do que custa extraí-la; e geometria e modelo têm **pontos cegos complementares** |
 
 > **Vocabulário:** ver [GLOSSARIO.md](../GLOSSARIO.md). "Degrau" tinha três
 > sentidos colidindo; agora só um.
