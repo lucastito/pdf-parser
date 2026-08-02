@@ -38,8 +38,17 @@ __all__ = [
     "CalibracaoFalhou",
     "Candidato",
     "calibrar",
+    "descobrir_nomes_de_coluna",
     "descobrir_paginas_de_dados",
 ]
+
+DISTANCIA_DE_ROTULO = 14.0
+"""Até onde dois fragmentos ainda são o mesmo rótulo, em pontos.
+
+Medido no documento-caso: `Carbo-` (y=221,0) e `idrato` (y=223,0) distam 2
+pontos; `Fibra` (186,3) e `Alimentar` (178,5) distam 7,8. O rótulo seguinte
+começa 30 pontos adiante. O valor separa os dois casos com folga.
+"""
 
 PASSO = 5.0
 """Granularidade da varredura de X, em pontos tipográficos."""
@@ -383,3 +392,134 @@ def _avaliar(palavras: list[Palavra], layout: dict, evidencias: list[str]) -> fl
         f"tokens de identificador={len(identificadores)}"
     )
     return pontos
+
+
+def descobrir_nomes_de_coluna(
+    caminho: str | Path, *, pagina: int, layout: dict[str, Any] | None = None
+) -> list[str]:
+    """Os nomes das colunas, na ordem em que aparecem no documento.
+
+    É a peça que torna o prompt independente do documento. Hoje o modelo recebe a
+    ordem das colunas porque **alguém escreveu** `campos_na_ordem` no perfil, à
+    mão — o que dá 100% neste documento e não vale para nenhum outro.
+
+    O problema não é qualidade, é comparabilidade: se cada documento tiver a
+    ordem digitada por uma pessoa, a diferença medida entre estratégias inclui
+    quem digitou. Descobrir pelo mesmo procedimento em todos torna o
+    **procedimento** a constante (ADR-0023).
+
+    Args:
+        layout: as faixas já calibradas. Omitido, calibra a página pedida.
+
+    Devolve lista **vazia** quando não há estrutura reconhecível — nunca nomes
+    plausíveis. Nome inventado produziria um prompt que parece certo e alinha
+    errado, que é o modo de falha silencioso que este projeto evita.
+
+    ## Como funciona, e por que assim
+
+    Os rótulos ficam numa faixa vertical estreita, à esquerda das unidades — a
+    mesma que a calibração já localiza por geometria. Dentro dela, cada rótulo
+    ocupa uma posição na coordenada perpendicular à leitura.
+
+    Dois cuidados que vieram da medição, não da teoria:
+
+    **Rótulo quebrado em fragmentos** (`Carbo-` + `idrato`, `Fibra` +
+    `Alimentar`) é reunido por proximidade. Sem isso, uma coluna viraria duas e a
+    ordem sairia errada.
+
+    **A ordem segue o sentido da página.** No documento-caso, rotacionado, os
+    rótulos empilham em `y` decrescente — a primeira coluna é a de maior `y`.
+    Ordenar ingenuamente inverteria a tabela inteira.
+    """
+    from parser.fontes.pdf import FontePDF
+
+    try:
+        if layout is None:
+            layout = calibrar(caminho, paginas=[pagina]).layout
+        documento = FontePDF(paginas=[pagina - 1]).carregar(str(caminho))
+    except (CalibracaoFalhou, FileNotFoundError, IndexError):
+        return []
+
+    if not documento.paginas:
+        return []
+
+    inicio, fim = layout["x_rotulos"]
+    limite_y = layout["y_identificadores_min"]
+    palavras = documento.paginas[0].palavras
+    na_faixa = [
+        palavra
+        for palavra in palavras
+        if inicio <= palavra.x0 <= fim
+        and palavra.y0 < limite_y
+        and not _numerico(palavra.texto)
+    ]
+    if not na_faixa:
+        return []
+
+    # Maior y primeiro: é o sentido de leitura da página rotacionada.
+    na_faixa.sort(key=lambda p: -p.y0)
+
+    grupos: list[list[Palavra]] = [[na_faixa[0]]]
+    for anterior, atual in zip(na_faixa, na_faixa[1:]):
+        if abs(anterior.y0 - atual.y0) <= DISTANCIA_DE_ROTULO:
+            grupos[-1].append(atual)
+        else:
+            grupos.append([atual])
+
+    # `Carbo-` + `idrato` vira `Carboidrato`; `Fibra` + `Alimentar` vira
+    # `Fibra Alimentar`. O hífen no fim do fragmento é marca de quebra.
+    #
+    # Dentro do grupo a ordem é por **x**, não por y: os fragmentos de um rótulo
+    # quebrado ficam lado a lado na horizontal, e a coordenada vertical entre
+    # eles é praticamente igual — ordenar por ela devolveu `idrato Carbo-`.
+    rotulos: list[tuple[float, str]] = []
+    for grupo in grupos:
+        texto = ""
+        for palavra in sorted(grupo, key=lambda p: p.x0):
+            fragmento = palavra.texto
+            if texto.endswith("-"):
+                texto = texto[:-1] + fragmento
+            elif texto:
+                texto = f"{texto} {fragmento}"
+            else:
+                texto = fragmento
+        rotulos.append((max(p.y0 for p in grupo), texto.strip()))
+
+    return _casar_com_unidades(rotulos, palavras, layout)
+
+
+def _casar_com_unidades(
+    rotulos: list[tuple[float, str]], palavras: list[Palavra], layout: dict[str, Any]
+) -> list[str]:
+    """Junta cada rótulo à sua unidade, e é a unidade que define a coluna.
+
+    A distinção importa num caso que o documento-caso exibe: **`Energia` é um
+    rótulo e duas colunas** — `(kcal)` e `(kJ)`. Contar rótulos daria 10 colunas
+    onde há 11, e a ordem entregue ao modelo estaria errada a partir dali.
+
+    As unidades são a âncora mais confiável da tabela (é o que sustenta a
+    calibração inteira) e há **uma por coluna real**. Então elas comandam: cada
+    unidade recebe o rótulo mais próximo acima dela.
+
+    Sem unidades reconhecíveis, devolve os rótulos como estão — tabela sem
+    unidade é caso legítimo, e inventar não ajudaria.
+    """
+    inicio, fim = layout["x_unidades"]
+    limite_y = layout["y_identificadores_min"]
+    unidades = [
+        palavra
+        for palavra in palavras
+        if inicio <= palavra.x0 <= fim and palavra.y0 < limite_y and _unidade(palavra.texto)
+    ]
+    if not unidades:
+        return [nome for _, nome in rotulos]
+
+    unidades.sort(key=lambda p: -p.y0)
+    nomes = []
+    for unidade in unidades:
+        # O rótulo da coluna é o mais próximo em y — no documento-caso ele fica
+        # ligeiramente acima da unidade, mas a distância absoluta é o critério
+        # robusto para as duas orientações.
+        proximo = min(rotulos, key=lambda r: abs(r[0] - unidade.y0), default=(0.0, ""))
+        nomes.append(f"{proximo[1]} {unidade.texto}".strip())
+    return nomes

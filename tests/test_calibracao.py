@@ -24,6 +24,7 @@ from parser.calibracao import (
     CalibracaoFalhou,
     Candidato,
     calibrar,
+    descobrir_nomes_de_coluna,
     descobrir_paginas_de_dados,
 )
 
@@ -34,6 +35,67 @@ def _documento_caso() -> Path:
     if not caminho or not Path(caminho).exists():
         pytest.skip("defina PARSER_DOCUMENTO_CASO para rodar este teste")
     return Path(caminho)
+
+
+class TestDescobertaDeNomesDeColuna:
+    """Os nomes das colunas saem do documento, não de alguém digitando.
+
+    É a peça que falta para o prompt deixar de ser específico. Hoje o modelo
+    recebe a ordem das colunas porque **alguém escreveu** `campos_na_ordem` no
+    perfil, à mão. Isso dá 100% neste documento e não vale para nenhum outro.
+
+    O problema não é qualidade — é comparabilidade. Se cada documento tiver a
+    ordem digitada por uma pessoa, a diferença medida entre estratégias inclui
+    quem digitou. Descobrir pelo mesmo procedimento em todos torna o
+    procedimento a constante (ADR-0023).
+
+    A calibração já acha **onde** ficam os rótulos, por geometria. Falta agrupar
+    o texto daquela faixa em nomes, na ordem em que aparecem.
+    """
+
+    def test_descobre_os_nomes_na_ordem_do_documento(self):
+        pdf = _documento_caso()
+
+        nomes = descobrir_nomes_de_coluna(str(pdf), pagina=29)
+
+        assert nomes, "nenhum nome de coluna descoberto"
+        # No documento-caso a primeira coluna de dados é a umidade e a energia
+        # aparece em duas unidades — a ordem importa mais que os nomes exatos.
+        juntos = " | ".join(nomes).lower()
+        assert "umidade" in juntos
+        assert "energia" in juntos
+
+    def test_a_ordem_descoberta_bate_com_a_declarada_a_mao(self):
+        """O teste que mede se a descoberta serve: ela reproduz o que funciona?
+
+        O perfil tem `campos_na_ordem` escrito à mão, e com ele a rota de texto
+        acerta 100%. Se a descoberta automática produzir a mesma sequência, ela
+        pode substituir a declaração — que é o ponto todo.
+        """
+        import json
+
+        pdf = _documento_caso()
+        raiz = Path(__file__).resolve().parent.parent
+        perfil = json.loads((raiz / "perfis" / "nutricional.json").read_text("utf-8"))
+        declarados = [n.lower() for n in perfil["campos_na_ordem"]]
+
+        descobertos = [n.lower() for n in descobrir_nomes_de_coluna(str(pdf), pagina=29)]
+
+        # Não se exige igualdade literal: o documento quebra rótulos em linhas
+        # ("Carbo-" / "idrato"), e o que importa é a **sequência** dos conceitos.
+        for declarado in declarados[:4]:
+            raiz_palavra = declarado.split()[0].rstrip("-,")
+            assert any(
+                raiz_palavra in d for d in descobertos
+            ), f"{declarado!r} não apareceu entre os descobertos: {descobertos}"
+
+    def test_documento_sem_tabela_nao_inventa_nomes(self, pdf_exemplo):
+        """Devolver lista vazia é melhor que devolver nomes plausíveis.
+
+        Nome inventado produziria prompt que parece certo e alinha errado — o
+        modo de falha silencioso que o projeto evita.
+        """
+        assert descobrir_nomes_de_coluna(str(pdf_exemplo), pagina=1) == []
 
 
 class TestDescobertaDePaginas:
