@@ -38,12 +38,23 @@ sys.path.insert(0, str(RAIZ / "src"))
 from parser.concordancia import _equivalentes, _indexar  # noqa: E402
 from parser.configuracao import carregar_perfil, carregar_prompt  # noqa: E402
 from parser.consolidacao import _chave_de_item  # noqa: E402
+from parser.contexto import aferir  # noqa: E402
 from parser.degraus import Uso  # noqa: E402
 
 PAGINA = 29
 """Índice 28 no documento. A mesma de todas as medições comparáveis."""
 
 CAMPOS = ["energia_kcal", "proteina_g", "lipideos_g", "carboidrato_g", "fibra_g"]
+
+SAIDA_ESPERADA = 2607
+"""Tokens que a resposta ocupa. Vem da maior saída já observada nesta página."""
+
+NATIVO_MINIMO = 32768
+"""Contexto nativo assumido. Conservador: o menor entre os modelos da escada.
+
+Pedir além do que o modelo comporta é recusado pelo servidor, e a aferição
+precisa de um teto para poder falhar cedo quando nem a entrada couber.
+"""
 
 # Ordem crescente de tamanho: se a memória apertar, aperta no fim.
 MODELOS_VISAO = [
@@ -189,6 +200,30 @@ def _imagem(dpi: int) -> str:
         return base64.b64encode(pixels.tobytes("png")).decode("ascii")
 
 
+def _medir_entrada(modelo: str, prompt: str, imagens: list[str] | None) -> int:
+    """Uma chamada de um token: quantos o modelo consome para ler esta entrada.
+
+    É o que a aferição precisa e o que nunca era medido. Custa a carga do
+    modelo — que a medição pagaria em seguida de qualquer forma.
+    """
+    carga = {
+        "model": modelo,
+        "prompt": prompt,
+        "stream": False,
+        "think": False,
+        "options": {"num_predict": 1, "num_ctx": 4096},
+    }
+    if imagens:
+        carga["images"] = imagens
+    pedido = urllib.request.Request(
+        "http://localhost:11434/api/generate",
+        data=json.dumps(carga).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(pedido, timeout=None) as resposta:
+        return json.load(resposta).get("prompt_eval_count") or 0
+
+
 def medir(modelo: str, imagem: str, gabarito: dict) -> dict:
     perfil = carregar_perfil(RAIZ / "perfis" / "nutricional.json")
     rota = perfil.rotas["vlm"]
@@ -203,6 +238,19 @@ def medir(modelo: str, imagem: str, gabarito: dict) -> dict:
         'Responda {"itens": [...]} com todos os itens da página.'
     )
 
+    # O contexto é aferido **deste** modelo, não herdado da rota. Medido: na
+    # mesma imagem, um modelo consome 2159 tokens de entrada e outro 2791 — e o
+    # valor único da rota, calculado para um terceiro, cortou a geração no meio
+    # do `glm-ocr` (ADR-0018).
+    afericao = aferir(
+        modelo,
+        medir=_medir_entrada,
+        prompt=instrucao,
+        imagens=[imagem],
+        saida_esperada=SAIDA_ESPERADA,
+        nativo=NATIVO_MINIMO,
+    )
+
     carga = {
         "model": modelo,
         "prompt": instrucao,
@@ -211,7 +259,7 @@ def medir(modelo: str, imagem: str, gabarito: dict) -> dict:
         "think": False,
         "format": _esquema_de_saida(CAMPOS),
         "options": {
-            "num_ctx": rota.extras["contexto"],
+            "num_ctx": afericao.contexto,
             "seed": rota.extras["semente"],
             "temperature": 0,
         },
@@ -256,6 +304,8 @@ def medir(modelo: str, imagem: str, gabarito: dict) -> dict:
 
     return {
         "modelo": modelo,
+        "entrada_aferida": afericao.entrada,
+        "contexto_calculado": afericao.contexto,
         "segundos": round(segundos, 1),
         "minutos": round(segundos / 60, 1),
         "done_reason": dados.get("done_reason"),
