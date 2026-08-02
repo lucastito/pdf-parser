@@ -134,6 +134,8 @@ def main() -> int:
         "images": [imagem],
         "stream": False,
         "think": False,
+        # Degrau 2 deliberado: este script mede a rota como ela roda em
+        # produção sem restrição de esquema, para comparar com o degrau 1.
         "format": "json",
         "options": {"num_ctx": contexto},
     }

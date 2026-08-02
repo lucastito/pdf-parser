@@ -111,6 +111,31 @@ def _ocupacao_de_placa(modelo: str) -> dict:
     return {}
 
 
+def _esquema_de_saida(campos: list[str]) -> dict:
+    """O esquema como **gramática de decodificação** — o degrau 1 (SPEC §4.4).
+
+    Difere de pedir `format: "json"`, que é o degrau 2: aquele garante JSON
+    válido e não impõe a estrutura, e um objeto solto com os nomes do documento é
+    JSON perfeitamente válido. Medido: com o degrau 2, três modelos leram a
+    tabela certo e pontuaram zero por devolverem forma diferente da pedida.
+    """
+    todos = ["identificador", *campos]
+    return {
+        "type": "object",
+        "properties": {
+            "itens": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {c: {"type": ["string", "number", "null"]} for c in todos},
+                    "required": todos,
+                },
+            }
+        },
+        "required": ["itens"],
+    }
+
+
 def _gabarito() -> dict[str, dict[str, float]]:
     import csv
 
@@ -184,7 +209,7 @@ def medir(modelo: str, imagem: str, gabarito: dict) -> dict:
         "images": [imagem],
         "stream": False,
         "think": False,
-        "format": "json",
+        "format": _esquema_de_saida(CAMPOS),
         "options": {
             "num_ctx": rota.extras["contexto"],
             "seed": rota.extras["semente"],
