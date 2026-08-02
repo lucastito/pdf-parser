@@ -48,6 +48,55 @@ class TestExclusaoMutua:
         with travar(tmp_path / "trava"):
             pass
 
+    def test_trava_de_processo_morto_nao_bloqueia(self, tmp_path):
+        """Interromper uma medição deixava a máquina travada para sempre.
+
+        Aconteceu **duas vezes** em 2026-08-01/02: parar a execução matou o
+        processo pai, o filho ficou órfão segurando a trava, e a bateria seguinte
+        foi recusada. Nas duas vezes a saída foi apagar o arquivo à mão.
+
+        Na máquina de outra pessoa isso é pior que perda de tempo: ela não sabe
+        que arquivo apagar, e a alternativa é pedir que reinicie tudo.
+
+        O PID já era gravado — só nunca era conferido.
+        """
+        import json
+
+        trava = tmp_path / "trava"
+        trava.write_text(
+            json.dumps({"descricao": "morta", "quando": "2026-08-02", "pid": 999_999}),
+            encoding="utf-8",
+        )
+
+        # Não deve levantar: o processo 999999 não existe.
+        with travar(trava, descricao="nova"):
+            pass
+
+    def test_trava_de_processo_vivo_continua_bloqueando(self, tmp_path):
+        """A limpeza não pode virar atropelo: processo vivo ainda barra."""
+        import os
+
+        import pytest as _pytest
+
+        trava = tmp_path / "trava"
+        trava.write_text(
+            json.dumps({"descricao": "viva", "quando": "2026-08-02", "pid": os.getpid()}),
+            encoding="utf-8",
+        )
+
+        with _pytest.raises(MedicaoEmAndamento):
+            with travar(trava):
+                pass
+
+    def test_trava_ilegivel_nao_bloqueia_para_sempre(self, tmp_path):
+        """Arquivo corrompido (disco cheio, desligamento abrupto) não pode
+        deixar a máquina inutilizável — já houve desligamento abrupto aqui."""
+        trava = tmp_path / "trava"
+        trava.write_text("{lixo nao json", encoding="utf-8")
+
+        with travar(trava, descricao="nova"):
+            pass
+
     def test_trava_libera_mesmo_com_erro(self, tmp_path):
         """Medição que falha no meio não pode deixar a máquina travada."""
         with pytest.raises(ValueError):

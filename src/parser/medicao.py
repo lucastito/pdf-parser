@@ -55,6 +55,39 @@ class MedicaoEmAndamento(RuntimeError):
     """
 
 
+def _processo_vive(pid: Any) -> bool:
+    """O dono da trava ainda está rodando?
+
+    Sem esta pergunta, uma medição interrompida deixava a máquina bloqueada para
+    sempre — o processo morria, o arquivo ficava, e a execução seguinte era
+    recusada. O PID já era gravado; só nunca era conferido.
+
+    **Na dúvida, responde que vive.** Se não dá para saber, o certo é manter a
+    trava: recusar uma medição custa um aviso, e atropelar outra em curso custa
+    as duas.
+    """
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+
+    try:
+        # Sinal 0 não envia nada — só verifica se o processo existe e é
+        # acessível.
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Existe, e é de outro usuário. Vive.
+        return True
+    except OSError as erro:
+        # No Windows, PID inexistente não vira ProcessLookupError: vem um
+        # OSError com "parâmetro incorreto" (winerror 87). Medido — sem este
+        # caso, toda trava órfã continuava bloqueando.
+        if getattr(erro, "winerror", None) == 87:
+            return False
+        return True
+    return True
+
+
 @contextmanager
 def travar(caminho: str | Path, *, descricao: str = "") -> Iterator[Path]:
     """Impede que duas medições rodem ao mesmo tempo.
@@ -76,14 +109,21 @@ def travar(caminho: str | Path, *, descricao: str = "") -> Iterator[Path]:
             dono = json.loads(trava.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             dono = {}
-        raise MedicaoEmAndamento(
-            f"já há uma medição em andamento nesta máquina: "
-            f"{dono.get('descricao') or 'sem descrição'} "
-            f"(iniciada em {dono.get('quando', '?')}, processo {dono.get('pid', '?')}).\n"
-            f"Rodar duas ao mesmo tempo infla o tempo das duas e invalida a "
-            f"comparação. Espere terminar, ou apague {trava} se souber que a "
-            f"anterior morreu."
-        )
+
+        if _processo_vive(dono.get("pid")):
+            raise MedicaoEmAndamento(
+                f"já há uma medição em andamento nesta máquina: "
+                f"{dono.get('descricao') or 'sem descrição'} "
+                f"(iniciada em {dono.get('quando', '?')}, processo {dono.get('pid', '?')}).\n"
+                f"Rodar duas ao mesmo tempo infla o tempo das duas e invalida a "
+                f"comparação. Espere terminar, ou apague {trava} se souber que a "
+                f"anterior morreu."
+            )
+        # Trava órfã: o dono morreu sem liberar. Aconteceu duas vezes ao
+        # interromper uma bateria — o processo pai morria, o filho ficava
+        # segurando o arquivo, e a execução seguinte era recusada. Na máquina de
+        # outra pessoa isso é pior: ela não sabe que arquivo apagar.
+        trava.unlink(missing_ok=True)
 
     trava.write_text(
         json.dumps(

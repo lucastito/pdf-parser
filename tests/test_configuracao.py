@@ -222,6 +222,37 @@ class TestPerfisDoProjeto:
         faltando = esperados - set(perfil.mapeamento)
         assert not faltando, f"campos sem mapeamento declarado: {sorted(faltando)}"
 
+    def test_o_intervalo_de_paginas_e_base_zero_e_o_perfil_diz_qual_pagina_le(self):
+        """`[28, 29, 1]` lê a **página 29** do documento — índice 28.
+
+        Custou uma bateria inteira em 2026-08-01: o intervalo foi lido como
+        número de página, a rodada leu a página seguinte à pretendida, e os
+        valores extraídos eram reais — de outros itens. Nenhum casou com o
+        gabarito, e o sintoma parecia incapacidade do modelo.
+
+        O contrato sempre esteve documentado como base 0. O que faltava era o
+        perfil **dizer em voz alta** que páginas vai ler, para que a confusão
+        apareça antes de horas de medição.
+        """
+        from pathlib import Path
+
+        raiz = Path(__file__).resolve().parent.parent
+        perfil = carregar_perfil(raiz / "perfis" / "nutricional.json")
+
+        # As páginas humanas são o índice + 1.
+        assert perfil.paginas_do_documento()[0] == perfil.intervalo_de_paginas()[0] + 1
+
+    def test_o_perfil_relata_as_paginas_em_numeracao_humana(self, tmp_path):
+        dados = {**PERFIL_MINIMO, "paginas": [28, 31, 1]}
+        perfil = carregar_perfil(_escrever(tmp_path, dados))
+
+        assert perfil.paginas_do_documento() == [29, 30, 31]
+
+    def test_sem_paginas_declaradas_relata_lista_vazia(self, tmp_path):
+        """Documento inteiro não tem lista de páginas — e não pode inventar."""
+        perfil = carregar_perfil(_escrever(tmp_path, PERFIL_MINIMO))
+        assert perfil.paginas_do_documento() == []
+
     def test_o_denominador_comum_e_um_par_de_tamanhos(self):
         """Duas rotas de visão da mesma família, só o tamanho mudando.
 

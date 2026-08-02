@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Instala e verifica, sem repetir trabalho: Python, dependências, servidor de
-    inferência e os três modelos (~7 GB). Idempotente — interromper e rodar de
+    inferência e os oito modelos (~26 GB). Idempotente — interromper e rodar de
     novo continua de onde parou.
 
     Ao final roda a suíte de testes. Se ela falhar, o script para: medir com um
@@ -26,7 +26,13 @@ $RAIZ = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $RAIZ
 $env:PYTHONIOENCODING = "utf-8"
 
-$MODELOS = @("qwen3:1.7b", "qwen3:4b", "qwen3-vl:4b")
+# A escada do ADR-0014, revisada em 2026-08-01. Ordem crescente de tamanho:
+# se o disco ou a rede falharem, falham no fim, com os menores ja baixados.
+$MODELOS = @(
+    "qwen3:1.7b", "qwen3:4b",
+    "minicpm-v4.6:1b", "qwen3-vl:2b", "qwen3-vl:4b",
+    "glm-ocr", "deepseek-ocr:3b", "minicpm-v4.5:8b"
+)
 
 function Passo($n, $t) { Write-Host "`n[$n/5] $t" -ForegroundColor Cyan }
 function Ok($t)        { Write-Host "      ok   $t" -ForegroundColor Green }

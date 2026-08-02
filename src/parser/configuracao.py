@@ -215,7 +215,11 @@ class Perfil:
         return self.rotas[nome]
 
     def intervalo_de_paginas(self) -> range | None:
-        """`[inicio, fim]` ou `[inicio, fim, passo]`, base 0."""
+        """`[inicio, fim]` ou `[inicio, fim, passo]`, **base 0**.
+
+        Índice, não número de página: `[28, 29, 1]` lê a **página 29**. Ver
+        `paginas_do_documento` para a numeração que humano usa.
+        """
         if not self.paginas:
             return None
         if len(self.paginas) not in (2, 3):
@@ -224,6 +228,22 @@ class Perfil:
                 f"[inicio, fim, passo], recebido {self.paginas!r}"
             )
         return range(*self.paginas)
+
+    def paginas_do_documento(self) -> list[int]:
+        """As páginas que serão lidas, na numeração que aparece no documento.
+
+        Existe porque a diferença entre índice e número de página custou uma
+        bateria inteira: o intervalo foi lido como número, a rodada leu a página
+        seguinte à pretendida, e os valores extraídos eram reais — de outros
+        itens. Nada casou com o gabarito, e o sintoma parecia incapacidade do
+        modelo.
+
+        O contrato sempre esteve documentado. O que faltava era o perfil **dizer
+        em voz alta** o que vai ler, para que a confusão apareça em segundos e
+        não depois de horas.
+        """
+        intervalo = self.intervalo_de_paginas()
+        return [indice + 1 for indice in intervalo] if intervalo else []
 
 
 def carregar_perfil(caminho: str | Path) -> Perfil:

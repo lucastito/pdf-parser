@@ -31,8 +31,25 @@ from parser.configuracao import ConfiguracaoInvalida, carregar_perfil
 
 __all__ = ["main"]
 
-MODELOS_DO_EXPERIMENTO = ("qwen3:1.7b", "qwen3:4b", "qwen3-vl:4b")
-"""Modelos que os comandos de comparação esperam encontrar, se usados."""
+MODELOS_DO_EXPERIMENTO = (
+    # Texto — o denominador comum é o par de tamanhos da mesma família.
+    "qwen3:1.7b",
+    "qwen3:4b",
+    # Visão — generalistas pequenos, do menor ao maior.
+    "minicpm-v4.6:1b",
+    "qwen3-vl:2b",
+    "qwen3-vl:4b",
+    # Visão — especializados em documento, um tamanho cada (ADR-0014).
+    "glm-ocr",
+    "deepseek-ocr:3b",
+    "minicpm-v4.5:8b",
+)
+"""Modelos que os comandos de comparação esperam encontrar, se usados.
+
+Reflete a escada do ADR-0014 revisada em 2026-08-01. A lista anterior tinha três
+modelos e ficou para trás quando a escada cresceu — o que faria uma máquina nova
+ser preparada com menos do que o experimento precisa.
+"""
 
 RAM_LIVRE_RECOMENDADA_GB = 6.0
 """Abaixo disto, um modelo de 4 bilhões de parâmetros não carrega com folga."""
@@ -465,7 +482,18 @@ def _experimentar(opcoes: argparse.Namespace) -> int:
 
             experimento = Experimento(documento, destino)
             print(f"EXPERIMENTO — {Path(documento).name}")
-            print(f"máquina: {experimento.ambiente.maquina}\n")
+            print(f"máquina: {experimento.ambiente.maquina}")
+            # Dizer em voz alta qual página vai ser lida: o intervalo é base 0,
+            # e confundi-lo com número de página já custou uma bateria inteira
+            # lida na página errada, com valores reais de outros itens.
+            paginas = perfil.paginas_do_documento()
+            if paginas:
+                mostradas = ", ".join(str(p) for p in paginas[:6])
+                reticencias = "…" if len(paginas) > 6 else ""
+                print(f"páginas do documento: {mostradas}{reticencias} ({len(paginas)})")
+            else:
+                print("páginas: documento inteiro")
+            print()
 
             for nome, extrator in extratores.items():
                 print(f"  {nome} ...", flush=True)
