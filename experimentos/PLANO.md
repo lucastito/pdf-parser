@@ -16,6 +16,97 @@ A ordem é essa e não se inverte. A boa notícia é a sobreposição: **a taxon
 consolidação por campo e a métrica erro × omissão servem às duas** — são
 requisito do produto e contribuição do artigo ao mesmo tempo.
 
+## ⭐ Ordem de execução — 51 itens abertos
+
+> **Isto é uma ordem, não uma lista.** São **51 itens abertos** neste documento,
+> e o que está abaixo diz em que sequência atacá-los — nada é removido nem
+> substituído. O detalhe e a justificativa de cada um vivem na seção
+> correspondente adiante.
+>
+> A distinção não é formal: ao resumir a lista, a seção 4 — sozinha com **21
+> itens** — desapareceu três vezes nesta sessão. Contagem por seção:
+
+| Seção | Abertos |
+|---|---|
+| **4. Outras máquinas** | **21** |
+| 1. Rotas por modelo | 8 |
+| 6. Relatórios e artigo | 7 |
+| 2. Consolidação por campo | 5 |
+| 5. Taxonomia | 4 |
+| 0. Contexto (refazer visão) | 3 |
+| 3. TACO completo | 2 |
+| 5b. Outros formatos | 1 |
+
+> **A ordem tem uma razão:** distribuir é uma das **últimas** etapas — depois que
+> os amigos rodarem, o que resta é consolidar e escrever. Cada rodada lá custa
+> horas, e bug que chega lá custa uma refação que não se pode pedir. Daí a
+> **tolerância zero**: tudo que é necessário para rodar na máquina deles precisa
+> estar pronto e testado **antes**.
+
+### P0 — o que limita qualquer execução futura
+
+Sem isto, medir 4-6 h produz dado que será descartado — já aconteceu duas vezes.
+
+| # | Item | Evidência |
+|---|---|---|
+| 1 | índice de página base-0 | uma rodada inteira leu a página seguinte |
+| 2 | trava órfã | o PID é gravado, **e não se confere se vive** |
+| 3 | teto de tempo do cliente | abortou duas medições no meio |
+| 4 | degrau de esquema como padrão | 3 de 6 modelos falharam por formato |
+| 5 | contexto aferido por modelo | cortou o `glm-ocr` no meio da geração |
+
+### P1 — antes de distribuir (tolerância zero)
+
+| # | Item | Por que primeiro |
+|---|---|---|
+| 6 | **Ligar a aferição à bateria** | o parâmetro tem de ser medido **lá**, não herdado daqui |
+| 7 | **Ensaio prévio em escopo mínimo** | erro aparece em minutos, não em horas |
+| 8 | **Script de preparação com os modelos novos** | hoje instala três modelos desatualizados |
+| 9 | **A seção 4 inteira — os 21 itens** | detecção de ambiente, contenção, contaminação silenciosa, robustez, experiência de quem executa |
+
+O item 9 não é recorte: **tudo** que a seção 4 lista é pré-requisito de rodar sem
+supervisão na máquina de outra pessoa.
+
+**Os cinco defeitos, verificados — nenhum tem guarda hoje:**
+
+| Defeito | O que aconteceu | Guarda que falta |
+|---|---|---|
+| índice de página base-0 | rodada inteira leu a página seguinte | teste + validação na carga do perfil |
+| trava órfã | o PID é gravado, **mas não se confere se vive** | verificar processo antes de bloquear |
+| limite de tempo do cliente | matou duas medições no meio | ausência de teto no experimento, teto no pacote |
+| chaves inventadas pelo modelo | 3 de 6 modelos devolveram nomes próprios | degrau de esquema como padrão |
+| colunas deslocadas | valores reais no campo errado | ordem entregue, e vinda do reconhecimento |
+
+### P2 — destrava o chefe (e o produto)
+
+| # | Item | Estado |
+|---|---|---|
+| 5 | **Prompt intermediário para qualquer PDF** | decidido (ADR-0023/0024), **não implementado** |
+| 6 | **Pipeline conectado** — reconhecimento → prompt → extração | peças prontas, fiação faltando |
+
+O que existe: nomes de coluna por geometria (11/11 no documento-caso) e
+reconhecimento por modelo (9% do custo da extração). O que falta: montar o prompt
+com isso e ligar ao fluxo.
+
+### P3 — fecha o artigo
+
+| # | Item | Custo |
+|---|---|---|
+| 7 | **Refazer os modelos sob as correções** | ~4-6 h de máquina parada |
+| 8 | **Documentação e varredura final** | sem máquina |
+
+**Só 2 dos 8 modelos estão medidos de forma comparável.** Os outros rodaram cada
+um com uma configuração diferente, antes das correções — servem de indício, não
+de resultado.
+
+### Fora desta lista, e é sua ação
+
+**Coletar os PDFs por característica.** Não bloqueia P1 nem P2 — o reconhecimento
+é justamente o que dispensa configurar cada documento. Bloqueia a **triagem por
+característica**, que é evidência central do artigo.
+
+Lista do que procurar: [LISTA-DE-BUSCA.md](documentos/LISTA-DE-BUSCA.md).
+
 ## Estado
 
 | | |
