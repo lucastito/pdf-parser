@@ -110,6 +110,13 @@ roda o quê. [`MODELOS.md`](MODELOS.md) define a escada e **referencia** aquele
 documento em vez de repetir a tabela — ela já existiu em três lugares e os três
 divergiram.
 
+**Em código, a fonte é `src/parser/escada.py`** — nome, rota, tamanho verificado no
+catálogo, fabricante e a pergunta que cada degrau responde. O instalador e a linha
+de comando **derivam** dela; nenhum dos dois escreve modelo à mão. Para acrescentar
+um modelo à escada, é o único arquivo a tocar. `alocar()` devolve os três conjuntos
+de uma máquina — obrigatório, estendido e o de falha proposital — a partir de placa,
+memória livre e se a placa **de fato acelera**, que é medição, não nome de peça.
+
 **Ela é rascunho, e permanece assim até que as seis máquinas relatem** placa,
 memória total e livre, e a **divisão real medida** por `/api/ps` — não inferida do
 nome da placa. Só então o martelo é batido e o aviso de rascunho sai.
@@ -191,7 +198,7 @@ Lista do que procurar: [CARACTERISTICAS.md](pdf/CARACTERISTICAS.md).
 
 | | |
 |---|---|
-| Testes | **671 passando**, 8 saltados |
+| Testes | **706 passando**, 8 saltados |
 | Estilo | `flake8` e `black` limpos |
 | Guarda de confidencialidade | 9/9 |
 | ADRs | **24** |
@@ -1075,8 +1082,10 @@ decorre:
 **O que o pacote de instalação faz e não faz — verificado em 02/08:**
 
 `experimentos/scripts/1-preparar-maquina.ps1` instala o servidor de inferência e os
-oito modelos (~26 GB), é idempotente, e um teste amarra a lista dele à de
-`parser.cli`. `2-rodar-experimento.ps1` dispara a execução.
+**14 modelos da escada** (92,9 GB), é idempotente, e um teste amarra a lista dele à
+de `parser.escada` — conjunto e ordem conferidos separadamente, porque a ordem
+crescente é regra do instalador (falha de rede acontece no fim, com os pequenos já
+em disco) e não da escada. `2-rodar-experimento.ps1` dispara a execução.
 
 Mas **os dois são PowerShell**, e portanto:
 
