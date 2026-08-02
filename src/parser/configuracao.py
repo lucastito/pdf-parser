@@ -201,6 +201,12 @@ class Perfil:
 
     campos_na_ordem: list[str] = field(default_factory=list)
     paginas: list[int] | None = None
+    pagina_de_triagem_declarada: int | None = None
+    """Página única da triagem, em numeração do documento.
+
+    Separada de `paginas` porque os propósitos são diferentes — ver
+    `pagina_de_triagem`.
+    """
     tolerancia: float = field(default_factory=lambda: _default("tolerancia"))
     gabarito: str | None = None
     holdout: str | None = None
@@ -228,6 +234,32 @@ class Perfil:
                 f"[inicio, fim, passo], recebido {self.paginas!r}"
             )
         return range(*self.paginas)
+
+    @property
+    def pagina_de_triagem(self) -> int | None:
+        """A página única em que a triagem roda — não as páginas de avaliação.
+
+        **São propósitos diferentes, e confundi-los custa caro.** As páginas
+        declaradas em `paginas` servem ao gabarito e ao conjunto de reserva, onde
+        amostra maior mede generalização. A triagem mede **configuração de
+        modelo**, e para isso uma página basta — desde que seja a mesma em todas
+        as máquinas.
+
+        Medido no documento-caso: as 9 páginas avaliadas são estruturalmente
+        idênticas (rotação 90°, densidade numérica de 0,65 a 0,76, sem imagem).
+        Rodar as nove custaria ~18 h contra ~2 h de uma — 9× o custo para a mesma
+        informação.
+
+        A amostra da triagem só cresce quando entra **outra característica**
+        (ADR-0016, ADR-0021), nunca por quantidade.
+
+        Sem declaração, cai na primeira página avaliada: rodar o documento inteiro
+        por omissão seria o oposto do pretendido.
+        """
+        if self.pagina_de_triagem_declarada:
+            return int(self.pagina_de_triagem_declarada)
+        paginas = self.paginas_do_documento()
+        return paginas[0] if paginas else None
 
     def paginas_do_documento(self) -> list[int]:
         """As páginas que serão lidas, na numeração que aparece no documento.
@@ -286,6 +318,7 @@ def carregar_perfil(caminho: str | Path) -> Perfil:
         esquema=dados.get("esquema", {}),
         campos_na_ordem=dados.get("campos_na_ordem", []),
         paginas=dados.get("paginas"),
+        pagina_de_triagem_declarada=dados.get("pagina_de_triagem"),
         tolerancia=dados.get("tolerancia", _default("tolerancia")),
         gabarito=dados.get("gabarito"),
         holdout=dados.get("holdout"),

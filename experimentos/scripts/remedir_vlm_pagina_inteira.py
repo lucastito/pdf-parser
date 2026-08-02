@@ -35,6 +35,7 @@ RAIZ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(RAIZ / "src"))
 
 from parser.configuracao import carregar_perfil, carregar_prompt  # noqa: E402
+from parser.contexto import aferir  # noqa: E402
 from parser.degraus import Uso  # noqa: E402
 
 PAGINA = 29
@@ -75,6 +76,33 @@ def _renderizar(documento: Path, pagina: int, dpi: int) -> str:
         alvo = pdf[pagina - 1]
         pixels = alvo.get_pixmap(dpi=dpi)
         return base64.b64encode(pixels.tobytes("png")).decode("ascii")
+
+
+def _medir_entrada(modelo: str, prompt: str, imagens: list[str] | None) -> int:
+    """Uma chamada de um token: quantos o modelo consome para ler esta entrada.
+
+    O contexto passa a ser aferido **deste** modelo, não herdado da rota. Medido:
+    na mesma imagem, um modelo consome 2159 tokens de entrada e outro 2791 — e o
+    valor único cortou a geração no meio (ADR-0018).
+    """
+    import urllib.request
+
+    carga: dict = {
+        "model": modelo,
+        "prompt": prompt,
+        "stream": False,
+        "think": False,
+        "options": {"num_predict": 1, "num_ctx": 4096},
+    }
+    if imagens:
+        carga["images"] = imagens
+    pedido = urllib.request.Request(
+        "http://localhost:11434/api/generate",
+        data=json.dumps(carga).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(pedido, timeout=None) as resposta:
+        return json.load(resposta).get("prompt_eval_count") or 0
 
 
 def main() -> int:
@@ -125,6 +153,16 @@ def main() -> int:
 
     import urllib.request
 
+    afericao = aferir(
+        rota.modelo,
+        medir=_medir_entrada,
+        prompt=prompt.texto(),
+        imagens=[imagem],
+        saida_esperada=5948,
+        nativo=32768,
+    )
+    print(f"contexto aferido: {afericao.contexto} (entrada {afericao.entrada})", flush=True)
+
     carga = {
         "model": rota.modelo,
         # `texto()` é método, não atributo: passar `prompt.texto` enviaria o
@@ -137,7 +175,7 @@ def main() -> int:
         # Degrau 2 deliberado: este script mede a rota como ela roda em
         # produção sem restrição de esquema, para comparar com o degrau 1.
         "format": "json",
-        "options": {"num_ctx": contexto},
+        "options": {"num_ctx": afericao.contexto},
     }
     # Serializa antes de cronometrar: erro de carga tem de aparecer agora, não
     # depois de o servidor já estar ocupado.

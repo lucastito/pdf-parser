@@ -253,6 +253,55 @@ class TestPerfisDoProjeto:
         perfil = carregar_perfil(_escrever(tmp_path, PERFIL_MINIMO))
         assert perfil.paginas_do_documento() == []
 
+    def test_a_pagina_de_triagem_e_uma_so_e_declarada(self):
+        """Triagem mede configuração; avaliação mede generalização.
+
+        As 9 páginas do perfil são **estruturalmente idênticas** — medido:
+        rotação 90°, densidade numérica entre 0,65 e 0,76, sem imagem. Para
+        gabarito e conjunto de reserva isso é certo, porque amostra maior mede
+        generalização dentro da característica.
+
+        Para **triagem** não acrescenta nada: nove medições da mesma
+        característica custam 9× e informam 1×. Medido: seis modelos numa página
+        levam ~2 h; nas nove, ~18 h.
+
+        E a triagem tem de ser **idêntica entre máquinas** — mesma página, mesmos
+        modelos, mesma configuração. Sem isso, tempo e qualidade não são
+        comparáveis, que é o propósito inteiro do experimento multimáquina.
+
+        Por isso o perfil declara as duas coisas separadamente, em vez de deixar
+        quem lê adivinhar qual lista serve a quê.
+        """
+        from pathlib import Path
+
+        raiz = Path(__file__).resolve().parent.parent
+        perfil = carregar_perfil(raiz / "perfis" / "nutricional.json")
+
+        assert perfil.pagina_de_triagem == 29
+        assert perfil.pagina_de_triagem in perfil.paginas_do_documento()
+
+    def test_sem_pagina_de_triagem_declarada_usa_a_primeira(self, tmp_path):
+        """Perfil que não declara cai na primeira página avaliada — nunca em
+        nenhuma, que faria a triagem rodar o documento inteiro por engano."""
+        dados = {**PERFIL_MINIMO, "paginas": [28, 45, 2]}
+        perfil = carregar_perfil(_escrever(tmp_path, dados))
+
+        assert perfil.pagina_de_triagem == 29
+
+    def test_a_declaracao_vence_o_padrao(self, tmp_path):
+        """Declarar tem de mudar o resultado — senão a declaração é decorativa.
+
+        O perfil real declara justamente o valor que o padrão já daria (29). Isso
+        é intencional: fixa por escrito o que hoje é coincidência entre o
+        `range` base-0 e a página medida. Mas um perfil que declarasse e fosse
+        ignorado seria pior que não declarar — a pessoa leria 29 e mediria outra.
+        """
+        dados = {**PERFIL_MINIMO, "paginas": [28, 45, 2], "pagina_de_triagem": 35}
+        perfil = carregar_perfil(_escrever(tmp_path, dados))
+
+        assert perfil.pagina_de_triagem == 35
+        assert perfil.pagina_de_triagem in perfil.paginas_do_documento()
+
     def test_o_denominador_comum_e_um_par_de_tamanhos(self):
         """Duas rotas de visão da mesma família, só o tamanho mudando.
 

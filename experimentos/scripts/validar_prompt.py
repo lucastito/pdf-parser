@@ -45,6 +45,7 @@ RAIZ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(RAIZ / "src"))
 
 from parser.configuracao import carregar_perfil, carregar_prompt  # noqa: E402
+from parser.contexto import aferir  # noqa: E402
 from parser.degraus import Uso  # noqa: E402
 
 PAGINA = 29
@@ -218,6 +219,33 @@ def _conferir(itens: list[dict], gabarito: dict[str, dict[str, float]]) -> dict:
     }
 
 
+def _medir_entrada(modelo: str, prompt: str, imagens: list[str] | None) -> int:
+    """Uma chamada de um token: quantos o modelo consome para ler esta entrada.
+
+    O contexto passa a ser aferido **deste** modelo, não herdado da rota. Medido:
+    na mesma imagem, um modelo consome 2159 tokens de entrada e outro 2791 — e o
+    valor único cortou a geração no meio (ADR-0018).
+    """
+    import urllib.request
+
+    carga: dict = {
+        "model": modelo,
+        "prompt": prompt,
+        "stream": False,
+        "think": False,
+        "options": {"num_predict": 1, "num_ctx": 4096},
+    }
+    if imagens:
+        carga["images"] = imagens
+    pedido = urllib.request.Request(
+        "http://localhost:11434/api/generate",
+        data=json.dumps(carga).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(pedido, timeout=None) as resposta:
+        return json.load(resposta).get("prompt_eval_count") or 0
+
+
 def _chamar(rota, prompt_texto: str, imagem: str | None) -> tuple[dict, float]:
     import urllib.request
 
@@ -228,7 +256,14 @@ def _chamar(rota, prompt_texto: str, imagem: str | None) -> tuple[dict, float]:
         "think": False,
         "format": _esquema_de_saida(CAMPOS_CONFERIDOS),
         "options": {
-            "num_ctx": rota.extras["contexto"],
+            "num_ctx": aferir(
+                rota.modelo,
+                medir=_medir_entrada,
+                prompt=prompt_texto,
+                imagens=[imagem] if imagem else None,
+                saida_esperada=2607,
+                nativo=32768,
+            ).contexto,
             "seed": rota.extras["semente"],
             "temperature": 0,
         },
