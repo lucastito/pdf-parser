@@ -188,6 +188,17 @@ O propósito é a distribuição: nas outras máquinas cada rodada custa horas, 
 se pode pedir a quem executa que refaça porque um parâmetro estava errado.
 Descobrir em segundos é a diferença.
 
+**A função existir não era a guarda.** Escrita em 02/08, `aferir` passou o dia sem
+uma única chamada: os scripts de medição continuavam fixando o contexto por rota,
+exatamente como antes. Uma guarda que ninguém invoca documenta a intenção e não
+impede nada — e o defeito teria reaparecido na terceira máquina, onde a correção
+custa mais.
+
+Os três scripts de medição hoje aferem o modelo que vão usar, antes de gerar
+qualquer coisa. O parâmetro passa a ser **medido no destino**, que é o único lugar
+onde ele é verdadeiro: o modelo é o mesmo em toda máquina, mas o que se mede não é
+propriedade da máquina — e herdar desta seria repetir a falha numa escala maior.
+
 ## Consequências
 
 - **Duas afirmações publicadas foram retificadas**, não apagadas: a de que a rota

@@ -43,39 +43,44 @@ requisito do produto e contribuição do artigo ao mesmo tempo.
 > **tolerância zero**: tudo que é necessário para rodar na máquina deles precisa
 > estar pronto e testado **antes**.
 
-### P0 — o que limita qualquer execução futura
+### P0 — o que limitava qualquer execução futura — ✅ **fechado em 2026-08-02**
 
-Sem isto, medir 4-6 h produz dado que será descartado — já aconteceu duas vezes.
+Sem isto, medir 4-6 h produzia dado que seria descartado — aconteceu duas vezes.
 
-| # | Item | Evidência |
+**Os cinco defeitos, cada um fechado por classe e com guarda que falha antes da
+correção.** A distinção importa: corrigir o caso deixa a próxima ocorrência passar,
+e na máquina de outra pessoa ela custa horas.
+
+| Defeito | O que aconteceu | Guarda que fechou a classe |
 |---|---|---|
-| 1 | índice de página base-0 | uma rodada inteira leu a página seguinte |
-| 2 | trava órfã | o PID é gravado, **e não se confere se vive** |
-| 3 | teto de tempo do cliente | abortou duas medições no meio |
-| 4 | degrau de esquema como padrão | 3 de 6 modelos falharam por formato |
-| 5 | contexto aferido por modelo | cortou o `glm-ocr` no meio da geração |
+| índice de página base-0 | rodada inteira leu a página seguinte | `paginas_do_documento()` + página de triagem **declarada**, e a CLI imprime as páginas antes de começar |
+| trava órfã | o PID era gravado, **e nunca conferido** | `_processo_vive()`, incluindo o `OSError` 87 que o Windows levanta no lugar de `ProcessLookupError` |
+| limite de tempo do cliente | matou duas medições no meio | teste que lê o código dos scripts e barra teto em chamada de geração |
+| chaves inventadas pelo modelo | 3 de 6 modelos devolveram nomes próprios | teste que barra `format: "json"` sem justificativa adjacente |
+| contexto fixo para seis modelos | cortou o `glm-ocr` no meio da geração | `aferir` **chamada** nos três scripts — medir a entrada antes de dimensionar |
+
+Sobre o último: a função existia desde cedo e **passou o dia sem uma chamada**.
+Guarda que ninguém invoca documenta a intenção e não impede nada.
 
 ### P1 — antes de distribuir (tolerância zero)
 
 | # | Item | Por que primeiro |
 |---|---|---|
-| 6 | **Ligar a aferição à bateria** | o parâmetro tem de ser medido **lá**, não herdado daqui |
 | 7 | **Ensaio prévio em escopo mínimo** | erro aparece em minutos, não em horas |
-| 8 | **Script de preparação com os modelos novos** | hoje instala três modelos desatualizados |
-| 9 | **A seção 4 inteira — os 21 itens** | detecção de ambiente, contenção, contaminação silenciosa, robustez, experiência de quem executa |
+| 8 | **A seção 4 inteira — os 21 itens** | detecção de ambiente, contenção, contaminação silenciosa, robustez, experiência de quem executa |
+
+✅ **Script de preparação com a escada nova** — fechado em 02/08. Ele instalava
+três modelos quando a escada do ADR-0014 já tinha oito. Agora traz os oito, **e um
+teste amarra a lista dele à de `parser.cli`**: eram duas listas em linguagens
+diferentes, sem nada impedindo que divergissem de novo. Quem executa baixaria
+~26 GB do conjunto errado e descobriria horas depois.
 
 O item 9 não é recorte: **tudo** que a seção 4 lista é pré-requisito de rodar sem
 supervisão na máquina de outra pessoa.
 
-**Os cinco defeitos, verificados — nenhum tem guarda hoje:**
-
-| Defeito | O que aconteceu | Guarda que falta |
-|---|---|---|
-| índice de página base-0 | rodada inteira leu a página seguinte | teste + validação na carga do perfil |
-| trava órfã | o PID é gravado, **mas não se confere se vive** | verificar processo antes de bloquear |
-| limite de tempo do cliente | matou duas medições no meio | ausência de teto no experimento, teto no pacote |
-| chaves inventadas pelo modelo | 3 de 6 modelos devolveram nomes próprios | degrau de esquema como padrão |
-| colunas deslocadas | valores reais no campo errado | ordem entregue, e vinda do reconhecimento |
+Fica de fora dos cinco, e continua aberto: **colunas deslocadas** — valores reais
+no campo errado. A guarda é a ordem de colunas entregue ao modelo, e ela só fecha
+quando vier do reconhecimento (P2), não de perfil escrito à mão.
 
 ### P2 — destrava o chefe (e o produto)
 
@@ -111,10 +116,10 @@ Lista do que procurar: [LISTA-DE-BUSCA.md](documentos/LISTA-DE-BUSCA.md).
 
 | | |
 |---|---|
-| Testes | **591 passando**, 6 saltados |
+| Testes | **630 passando**, 8 saltados |
 | Estilo | `flake8` e `black` limpos |
 | Guarda de confidencialidade | 9/9 |
-| ADRs | **23** |
+| ADRs | **24** |
 | Ciclos de importação | **nenhum** (39 módulos) |
 | Rotas com resultado gravado | 8 de 8 |
 | Documentos-caso | **1** — é o gargalo, ver eixo B |

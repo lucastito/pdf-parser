@@ -119,6 +119,47 @@ class TestInstrucoesDeUso:
             assert (raiz / "experimentos" / "scripts" / nome).exists()
 
 
+class TestEscadaDeModelos:
+    """A lista que baixa modelos e a lista que os compara têm de ser a mesma.
+
+    Ela vive em dois lugares por necessidade — `parser.cli` em Python, o script de
+    preparação em PowerShell — e nada além deste teste impede que divirjam.
+
+    A divergência já aconteceu: o script instalava três modelos quando a escada do
+    ADR-0014 tinha crescido para oito. O modo de falha é caro e chega tarde. Quem
+    executa baixa ~26 GB, roda a preparação inteira, vê "ok", e a bateria falha
+    horas depois — na máquina de outra pessoa, sem ninguém para depurar, e o custo
+    é uma refação que não se pode pedir.
+
+    Ordem também importa, e por isso é conferida: o script baixa do menor para o
+    maior de propósito, para que uma falha de rede ou de disco aconteça no fim,
+    com os pequenos já em disco.
+    """
+
+    def _modelos_do_script(self) -> list[str]:
+        import re
+
+        texto = (_PASTA / "1-preparar-maquina.ps1").read_text(encoding="utf-8-sig")
+        bloco = re.search(r"\$MODELOS\s*=\s*@\((.*?)\)", texto, re.DOTALL)
+        assert bloco, "não achei a lista $MODELOS no script de preparação"
+        return re.findall(r'"([^"]+)"', bloco.group(1))
+
+    def test_o_script_baixa_exatamente_os_modelos_do_experimento(self):
+        from parser.cli import MODELOS_DO_EXPERIMENTO
+
+        assert self._modelos_do_script() == list(MODELOS_DO_EXPERIMENTO), (
+            "a escada do script de preparação divergiu de "
+            "`parser.cli.MODELOS_DO_EXPERIMENTO`. Quem executar baixa um conjunto "
+            "e a bateria espera outro — e só descobre horas depois, na máquina de "
+            "outra pessoa."
+        )
+
+    def test_a_escada_nao_tem_repetido(self):
+        """Baixar duas vezes o mesmo custa banda e sugere edição descuidada."""
+        modelos = self._modelos_do_script()
+        assert len(modelos) == len(set(modelos)), f"modelo repetido em {modelos}"
+
+
 class TestGuardaDeConfidencialidade:
     """A guarda precisa distinguir palavra comum de nome de produto.
 

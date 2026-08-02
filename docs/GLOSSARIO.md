@@ -102,6 +102,18 @@ A **página 29** do documento-caso, usada em todas as medições comparáveis.
 > base-0**. `[28, 29, 1]` lê `doc[28]`, que é a **página 29** do PDF. Confundir os
 > dois faz a medição ler a página seguinte e não casar com o gabarito — aconteceu.
 
+Por isso o perfil **declara** `pagina_de_triagem` em numeração de documento, em vez
+de deixar que ela caia do intervalo. As duas coisas coincidem hoje, e coincidência
+não é garantia: mudar o intervalo de avaliação mudaria silenciosamente a página
+medida, e as máquinas deixariam de ser comparáveis sem que nada denunciasse.
+
+Note que **triagem e avaliação usam listas diferentes de propósito**. A avaliação
+usa as 9 páginas do intervalo, porque amostra maior mede generalização. A triagem
+usa uma, porque mede **configuração de modelo** — e as 9 são estruturalmente
+idênticas, de modo que as outras 8 custariam 9× pela mesma informação. A amostra da
+triagem cresce por **característica** nova (ADR-0016, ADR-0021), nunca por
+quantidade.
+
 ### prompt-base
 
 A instrução comum a todos os modelos no **experimento**, congelada antes da
