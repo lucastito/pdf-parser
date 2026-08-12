@@ -7,6 +7,10 @@ em licença de documento de terceiro.
 
 import pytest
 
+pytest_plugins = ["_gatilho_instabilidade"]
+"""Gatilho automático pro achado −1.2 (PLANO.md) — captura evidência se um
+teste falhar rodando a suíte completa. Ver `tests/_gatilho_instabilidade.py`."""
+
 
 @pytest.fixture
 def pdf_exemplo(tmp_path):

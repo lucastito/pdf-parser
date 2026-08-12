@@ -54,3 +54,7 @@ htmlcov/
 # Resultados de experimento — mantidos locais para que a execução em outra
 # máquina seja cega. Destravar quando a rodada dela chegar por PR.
 resultados/
+
+# Evidência automática de teste que falhou na suíte completa (−1.2, PLANO.md)
+# — ver tests/_gatilho_instabilidade.py. Achado local, não artefato versionado.
+diagnostico-instabilidade/
