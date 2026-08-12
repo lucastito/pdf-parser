@@ -69,9 +69,7 @@ class TestPaginaDeTextoCorrido:
         def _falha_se_chamado(*args, **kwargs):
             raise AssertionError("descobrir_nomes_de_coluna não deveria ser chamado aqui")
 
-        monkeypatch.setattr(
-            "parser.planejador.descobrir_nomes_de_coluna", _falha_se_chamado
-        )
+        monkeypatch.setattr("parser.planejador.descobrir_nomes_de_coluna", _falha_se_chamado)
         _planejar(pdf_texto_corrido)  # não deve levantar
 
 
@@ -134,6 +132,24 @@ class TestDecisaoEntreRotasDeterministicas:
             "pdfplumber": [_registro("1 X", v=9999.0)],
         }
         assert _decidir_entre_deterministicos(1, divergentes, None, None) is None
+
+    def test_item_lido_por_uma_so_rota_nao_vaza_como_dado_confirmado(self):
+        """Reprodução do achado real (PLANO.md): uma rota devolveu itens que a
+        outra nunca listou — no corpus, camelot chegou a inventar 62 registros
+        para uma página de ~31. `consolidar()` recebe todos os itens de todas
+        as rotas, inclusive os exclusivos; o item que só uma rota leu, entre
+        as consultadas, não pode sair como dado confirmado a 0,9 de
+        confiança."""
+        saidas = {
+            "posicional": [_registro("1 X", v=10.0)],
+            "pdfplumber": [_registro("1 X", v=10.0), _registro("2 Fantasma", v=999.0)],
+        }
+        decisao = _decidir_entre_deterministicos(1, saidas, None, None)
+        assert decisao is not None
+
+        por_item = {r["campos"]["identificador"]["valor"]: r for r in decisao.registros}
+        assert por_item["1 X"]["campos"]["v"]["valor"] == 10.0
+        assert por_item["2 Fantasma"]["campos"]["v"]["origem"] == "ausente"
 
     def test_uma_so_rota_com_resultado_e_aceita_sem_segunda_opiniao(self):
         decisao = _decidir_entre_deterministicos(

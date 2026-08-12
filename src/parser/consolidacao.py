@@ -101,6 +101,18 @@ class Desfecho(StrEnum):
     PENDENCIA = "pendencia"
     """Empate, ou ninguém leu. **Não preenche** — vai para revisão humana."""
 
+    ITEM_EXCLUSIVO = "item-exclusivo"
+    """O item inteiro (não só este campo) foi lido por uma só rota, entre
+    várias consultadas. **Não preenche** — vai para revisão humana.
+
+    Distinto de `VOTO_UNICO` de propósito: lá, as outras rotas leram o item e
+    não confirmaram *este campo* — cobertura parcial genuína. Aqui, as outras
+    rotas nem chegaram a listar o item — é o padrão medido de rota que inventa
+    linha (camelot devolveu 62 registros para uma página de ~31, achado da
+    auditoria de 2026-08-02). Sem gabarito, a votação não decide sozinha se é
+    fabricação ou cobertura que só uma rota alcançou — por isso vira pendência
+    em vez de voto automático a 0,9 de confiança."""
+
 
 @dataclass(frozen=True)
 class Celula:
@@ -116,7 +128,7 @@ class Celula:
 
     @property
     def preenche(self) -> bool:
-        return self.desfecho is not Desfecho.PENDENCIA
+        return self.desfecho not in (Desfecho.PENDENCIA, Desfecho.ITEM_EXCLUSIVO)
 
     def como_dados(self) -> dict[str, Any]:
         return {
@@ -208,13 +220,9 @@ class ResultadoConsolidacao:
     @property
     def pendencias(self) -> list[PendenciaDeCampo]:
         return [
-            PendenciaDeCampo(
-                item=c.item,
-                campo=c.campo,
-                motivo=("ninguém leu" if c.concordaram == 0 else "empate entre rotas"),
-            )
+            PendenciaDeCampo(item=c.item, campo=c.campo, motivo=_motivo_da_pendencia(c))
             for c in self.celulas
-            if c.desfecho is Desfecho.PENDENCIA
+            if not c.preenche
         ]
 
     def contra_gabarito(self, gabarito: dict[str, dict[str, Any]]) -> Placar:
@@ -262,6 +270,10 @@ class ResultadoConsolidacao:
             detalhe = f"  {celula.item} / {celula.campo}: {celula.desfecho.value}"
             if celula.preenche:
                 detalhe += f" = {celula.valor}"
+            if celula.desfecho is Desfecho.ITEM_EXCLUSIVO:
+                lidos = self.valores_divergentes.get((celula.item, celula.campo), {})
+                rota = celula.rotas_a_favor[0] if celula.rotas_a_favor else "?"
+                detalhe += f" — só {rota} leu, valor não confirmado: {lidos.get(rota)}"
             if celula.rotas_divergentes:
                 # O valor lido vai junto do nome da rota: sem ele, quem confere
                 # precisa abrir as planilhas de origem para saber o que estava
@@ -292,6 +304,12 @@ class ResultadoConsolidacao:
                 {"item": p.item, "campo": p.campo, "motivo": p.motivo} for p in self.pendencias
             ],
         }
+
+
+def _motivo_da_pendencia(celula: Celula) -> str:
+    if celula.desfecho is Desfecho.ITEM_EXCLUSIVO:
+        return "item lido por 1 só rota entre as consultadas — possível fabricação"
+    return "ninguém leu" if celula.concordaram == 0 else "empate entre rotas"
 
 
 def _agrupar_votos(valores: dict[str, Any]) -> list[list[str]]:
@@ -451,6 +469,16 @@ def consolidar(
         # A chave normalizada casa as rotas; o rótulo é o que a planilha mostra.
         rotulo = rotulos[item]
 
+        # Item lido por uma só rota, havendo outras para comparar, é o padrão
+        # medido de fabricação (camelot: 62 registros numa página de ~31) tanto
+        # quanto o de cobertura genuína que as outras não alcançaram. Sem
+        # gabarito, a votação não decide sozinha qual dos dois é — por isso
+        # vira pendência (`ITEM_EXCLUSIVO`) em vez de voto automático a 0,9 de
+        # confiança. Com uma única rota ativa não há o que comparar: aí é o
+        # caso normal de voto único do Cenário A.
+        rotas_com_item = [nome for nome in ativas if item in indices[nome]]
+        item_exclusivo = len(ativas) > 1 and len(rotas_com_item) == 1
+
         for campo in sorted(campos):
             # Só quem leu vota. `None` é ausência de leitura, não voto em branco.
             votos = {
@@ -458,12 +486,25 @@ def consolidar(
                 for nome in ativas
                 if item in indices[nome] and indices[nome][item].get(campo) is not None
             }
-            celula = _decidir(rotulo, campo, votos, pesos or {})
-            resultado.celulas.append(celula)
-            if celula.rotas_divergentes:
+            if item_exclusivo and votos:
+                (rota_unica,) = votos.keys()
+                celula = Celula(
+                    item=rotulo,
+                    campo=campo,
+                    valor=None,
+                    desfecho=Desfecho.ITEM_EXCLUSIVO,
+                    rotas_a_favor=(rota_unica,),
+                )
                 resultado.valores_divergentes[(rotulo, campo)] = {
-                    rota: votos[rota] for rota in celula.rotas_divergentes
+                    rota_unica: votos[rota_unica]
                 }
+            else:
+                celula = _decidir(rotulo, campo, votos, pesos or {})
+                if celula.rotas_divergentes:
+                    resultado.valores_divergentes[(rotulo, campo)] = {
+                        rota: votos[rota] for rota in celula.rotas_divergentes
+                    }
+            resultado.celulas.append(celula)
 
     return resultado
 

@@ -16,7 +16,7 @@ O que estes testes protegem, em ordem de gravidade:
 
 import pytest
 
-from parser.consolidacao import Desfecho, consolidar
+from parser.consolidacao import Desfecho, consolidar, materializar
 
 
 def _saida(**campos):
@@ -595,6 +595,119 @@ class TestColunaFantasma:
         )
 
         assert "Energia —" in resultado.campos_vazios
+
+
+class TestItemExclusivo:
+    """Item lido por uma só rota, entre várias consultadas, não é voto único.
+
+    Lacuna registrada em PLANO.md (pendência P-1.1/P0.1, achado das auditorias
+    de 02/08): a rota `"consolidado"` chamava `consolidar()` com todos os itens
+    de todas as rotas, inclusive os que só uma delas produziu. Um item assim
+    virava `VOTO_UNICO` com confiança 0,9 — quase tão alta quanto concordância
+    plena —, sem checar se veio de uma rota propensa a inventar linha. Medido:
+    `camelot` devolveu 62 registros para uma página de ~31.
+
+    A distinção que importa: item lido por **algumas** rotas (cobertura
+    parcial genuína) continua com confiança normal — só o caso extremo, uma
+    única rota entre várias consultadas, vira pendência.
+    """
+
+    def test_item_lido_por_uma_so_rota_entre_varias_vira_pendencia(self):
+        resultado = consolidar(
+            {
+                "pdfplumber": _saida(identificador="Arroz", energia_kcal=124),
+                "posicional": _saida(identificador="Arroz", energia_kcal=124),
+                "camelot": _saida(identificador="Item Fantasma", energia_kcal=999),
+            }
+        )
+
+        celula = resultado.celula("Item Fantasma", "energia_kcal")
+        assert celula.desfecho is Desfecho.ITEM_EXCLUSIVO
+        assert not celula.preenche
+        assert celula.valor is None
+
+    def test_item_exclusivo_nao_e_confundido_com_voto_unico_de_campo(self):
+        """Voto único de **campo** (item lido por todas, só uma preencheu este
+        campo) continua sendo aproveitado — é caso diferente, já coberto por
+        `TestPendencia.test_um_voto_so_nao_e_concordancia`."""
+        resultado = consolidar(
+            {
+                "a": _saida(identificador="Arroz", energia_kcal=124),
+                "b": _saida(identificador="Arroz", energia_kcal=None),
+                "c": _saida(identificador="Item Fantasma", energia_kcal=999),
+            }
+        )
+
+        assert resultado.celula("Arroz", "energia_kcal").desfecho is Desfecho.VOTO_UNICO
+        assert resultado.celula("Item Fantasma", "energia_kcal").desfecho is (
+            Desfecho.ITEM_EXCLUSIVO
+        )
+
+    def test_cobertura_parcial_genuina_nao_e_penalizada(self):
+        """Item lido por 2 de 3 rotas, com as duas concordando, continua
+        concordância normal — só a leitura solitária é suspeita."""
+        resultado = consolidar(
+            {
+                "a": _saida(identificador="Arroz", energia_kcal=124),
+                "b": _saida(identificador="Arroz", energia_kcal=124),
+                "c": _saida(identificador="Feijao", energia_kcal=76),
+            }
+        )
+
+        assert resultado.celula("Arroz", "energia_kcal").desfecho is Desfecho.CONCORDANCIA
+
+    def test_com_uma_unica_rota_ativa_nao_ha_item_exclusivo(self):
+        """Sem outra rota para comparar, a única leitura disponível continua
+        sendo aproveitada como voto único — é o caso do Cenário A
+        (`pipeline.Pipeline`, um extrator por documento)."""
+        resultado = consolidar({"a": _saida(identificador="Arroz", energia_kcal=124)})
+
+        celula = resultado.celula("Arroz", "energia_kcal")
+        assert celula.desfecho is Desfecho.VOTO_UNICO
+        assert celula.valor == 124
+
+    def test_item_exclusivo_vira_pendencia_para_o_humano_com_motivo_proprio(self):
+        resultado = consolidar(
+            {
+                "a": _saida(identificador="Arroz", energia_kcal=124),
+                "b": _saida(identificador="Arroz", energia_kcal=124),
+                "camelot": _saida(identificador="Item Fantasma", energia_kcal=999),
+            }
+        )
+
+        pendencia = next(p for p in resultado.pendencias if p.item == "Item Fantasma")
+        assert "fabricação" in pendencia.motivo or "só" in pendencia.motivo
+
+    def test_item_exclusivo_nao_entra_na_planilha_materializada(self):
+        """O bug real: o valor fabricado ia para o CSV/JSON como dado com
+        confiança 0,9. Depois da correção, vira ausente — trabalho humano, não
+        dado publicado."""
+        resultado = consolidar(
+            {
+                "a": _saida(identificador="Arroz", energia_kcal=124),
+                "b": _saida(identificador="Arroz", energia_kcal=124),
+                "camelot": _saida(identificador="Item Fantasma", energia_kcal=999),
+            }
+        )
+
+        registros = materializar(resultado, fonte="teste")
+        fantasma = next(
+            r for r in registros if r.campos["identificador"].valor == "Item Fantasma"
+        )
+        assert fantasma.campos["energia_kcal"].origem.value == "ausente"
+
+    def test_o_valor_nao_confirmado_fica_visivel_para_conferencia(self):
+        """Pendência não é sumir com o dado — é não publicá-lo sem revisão.
+        Quem for conferir precisa ver o que a rota solitária leu."""
+        resultado = consolidar(
+            {
+                "a": _saida(identificador="Arroz", energia_kcal=124),
+                "b": _saida(identificador="Arroz", energia_kcal=124),
+                "camelot": _saida(identificador="Item Fantasma", energia_kcal=999),
+            }
+        )
+
+        assert "999" in resultado.relatorio()
 
 
 class TestSaida:
