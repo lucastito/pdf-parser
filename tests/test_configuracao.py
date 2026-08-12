@@ -253,7 +253,7 @@ class TestPerfisDoProjeto:
         perfil = carregar_perfil(_escrever(tmp_path, PERFIL_MINIMO))
         assert perfil.paginas_do_documento() == []
 
-    def test_a_pagina_de_triagem_e_uma_so_e_declarada(self):
+    def test_uma_caracteristica_tem_uma_so_pagina_declarada(self):
         """Triagem mede configuração; avaliação mede generalização.
 
         As 9 páginas do perfil são **estruturalmente idênticas** — medido:
@@ -261,24 +261,27 @@ class TestPerfisDoProjeto:
         gabarito e conjunto de reserva isso é certo, porque amostra maior mede
         generalização dentro da característica.
 
-        Para **triagem** não acrescenta nada: nove medições da mesma
-        característica custam 9× e informam 1×. Medido: seis modelos numa página
-        levam ~2 h; nas nove, ~18 h.
+        Para **triagem** dessa mesma característica não acrescenta nada: nove
+        medições dela custam 9× e informam 1×. Medido: seis modelos numa
+        página levam ~2 h; nas nove, ~18 h.
 
         E a triagem tem de ser **idêntica entre máquinas** — mesma página, mesmos
         modelos, mesma configuração. Sem isso, tempo e qualidade não são
         comparáveis, que é o propósito inteiro do experimento multimáquina.
 
-        Por isso o perfil declara as duas coisas separadamente, em vez de deixar
-        quem lê adivinhar qual lista serve a quê.
+        Por isso o perfil declara as duas coisas separadamente — e por
+        característica, não um escalar geral: outra característica ganha sua
+        própria lista, sem disputar espaço com esta (ADR-0021, −1.4 PLANO.md).
         """
         from pathlib import Path
 
         raiz = Path(__file__).resolve().parent.parent
         perfil = carregar_perfil(raiz / "perfis" / "nutricional.json")
 
-        assert perfil.pagina_de_triagem == 29
-        assert perfil.pagina_de_triagem in perfil.paginas_do_documento()
+        assert perfil.paginas_de_triagem("pagina-rotacionada") == [29]
+        assert perfil.paginas_de_triagem("pagina-rotacionada")[0] in (
+            perfil.paginas_do_documento()
+        )
 
     def test_sem_pagina_de_triagem_declarada_usa_a_primeira(self, tmp_path):
         """Perfil que não declara cai na primeira página avaliada — nunca em
@@ -286,7 +289,7 @@ class TestPerfisDoProjeto:
         dados = {**PERFIL_MINIMO, "paginas": [28, 45, 2]}
         perfil = carregar_perfil(_escrever(tmp_path, dados))
 
-        assert perfil.pagina_de_triagem == 29
+        assert perfil.paginas_de_triagem("qualquer-caracteristica") == [29]
 
     def test_a_declaracao_vence_o_padrao(self, tmp_path):
         """Declarar tem de mudar o resultado — senão a declaração é decorativa.
@@ -296,11 +299,55 @@ class TestPerfisDoProjeto:
         `range` base-0 e a página medida. Mas um perfil que declarasse e fosse
         ignorado seria pior que não declarar — a pessoa leria 29 e mediria outra.
         """
-        dados = {**PERFIL_MINIMO, "paginas": [28, 45, 2], "pagina_de_triagem": 35}
+        dados = {
+            **PERFIL_MINIMO,
+            "paginas": [28, 45, 2],
+            "paginas_de_triagem": {"pagina-rotacionada": [35]},
+        }
         perfil = carregar_perfil(_escrever(tmp_path, dados))
 
-        assert perfil.pagina_de_triagem == 35
-        assert perfil.pagina_de_triagem in perfil.paginas_do_documento()
+        assert perfil.paginas_de_triagem("pagina-rotacionada") == [35]
+        assert perfil.paginas_de_triagem("pagina-rotacionada")[0] in (
+            perfil.paginas_do_documento()
+        )
+
+    def test_caracteristicas_diferentes_tem_paginas_independentes(self, tmp_path):
+        """Duas características não disputam a mesma lista — é exatamente a
+        lacuna que um campo escalar não permitia fechar."""
+        dados = {
+            **PERFIL_MINIMO,
+            "paginas_de_triagem": {
+                "pagina-rotacionada": [29],
+                "imagem-embutida": [7],
+            },
+        }
+        perfil = carregar_perfil(_escrever(tmp_path, dados))
+
+        assert perfil.paginas_de_triagem("pagina-rotacionada") == [29]
+        assert perfil.paginas_de_triagem("imagem-embutida") == [7]
+
+    def test_uma_caracteristica_pode_declarar_mais_de_uma_pagina(self, tmp_path):
+        """N cresce dentro da própria característica quando isso for decidido
+        — o campo é uma lista, não mais um escalar de página única."""
+        dados = {
+            **PERFIL_MINIMO,
+            "paginas_de_triagem": {"tabela-sem-grade": [10, 22, 40]},
+        }
+        perfil = carregar_perfil(_escrever(tmp_path, dados))
+
+        assert perfil.paginas_de_triagem("tabela-sem-grade") == [10, 22, 40]
+
+    def test_caracteristica_nao_declarada_cai_no_padrao(self, tmp_path):
+        """Só a característica pedida sem declaração cai no padrão — as
+        outras, já declaradas, continuam valendo o que foi escrito."""
+        dados = {
+            **PERFIL_MINIMO,
+            "paginas": [28, 45, 2],
+            "paginas_de_triagem": {"pagina-rotacionada": [29]},
+        }
+        perfil = carregar_perfil(_escrever(tmp_path, dados))
+
+        assert perfil.paginas_de_triagem("caracteristica-nunca-declarada") == [29]
 
     def test_o_denominador_comum_e_um_par_de_tamanhos(self):
         """Duas rotas de visão da mesma família, só o tamanho mudando.

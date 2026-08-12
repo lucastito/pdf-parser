@@ -130,12 +130,62 @@ resolver o que elas apontaram.
 | −1.1 | **Métrica que penalize fabricação** | ✅ **Fechado em 2026-08-12.** `concordancia.py:198` usa `set.intersection` e continua medindo só a interseção — isso não mudou, é o papel de `concordancia.py` — mas a lacuna que publicava o item fabricado como dado (na consolidação, não na medição) foi fechada; ver "Cenário B" no topo deste arquivo e ADR-0017 |
 | −1.2 | **Suíte determinística** | ⚠ **Investigado a fundo em 2026-08-12, não reproduzido — não é o mesmo que fechado.** Duas auditorias tiveram falhas **diferentes** na mesma árvore, isoladas todas passavam. Tentativas de reprodução hoje: 3 rodadas completas em ordem fixa, 4 rodadas com ordem **de verdade** embaralhada (`pytest-randomly`, sementes 111/222/333/42 — `PYTHONHASHSEED` não é fixo neste ambiente, então cada rodada já usava semente de hash diferente) e leitura de código dos 4 módulos citados (`configuracao.py`, `degraus.py`, `consolidacao.py`, `concordancia.py`) atrás de `set()` sem `sorted()`, mutação de `os.environ` fora de `monkeypatch`, `lru_cache` compartilhado, threading — nada encontrado; todo `set()` nos dois últimos módulos já passa por `sorted()` antes de virar saída. **Todas as sete rodadas passaram integralmente.** A única pista que este arquivo registrava (arquivo temporário deixado para trás) já tinha sido corrigida — nome único + limpeza — **antes** da auditoria de 02/08 encontrar a instabilidade, e não explicaria falha em `test_configuracao.py`/`test_degraus.py`, que não tocam PDF. **`pytest-randomly` adotado permanentemente** (`pyproject.toml`) como tripwire: se a instabilidade for real e só não apareceu hoje, uma rodada futura com ordem embaralhada tem mais chance de expor. **Gatilho automático de captura criado** (`tests/_gatilho_instabilidade.py`, testado em `tests/test_gatilho_instabilidade.py` contra um caso real e controlado de contaminação entre testes): quando um teste falha rodando a suíte completa, grava sozinho — sem precisar de ninguém notar na hora — a ordem exata dos testes que rodaram antes, a semente do `pytest-randomly`, e o resultado de rodar o mesmo teste sozinho num processo novo (confirma ou não o padrão "passa isolado, falha no conjunto"), tudo em `diagnostico-instabilidade/` (fora do git). Guarda instável não guarda nada — e é o que iria para a máquina dos outros; permanece aberto até haver uma falha real para investigar, não uma hipótese |
 | −1.3 | **`--sem-modelos` filtrando por propriedade** | ✅ **Fechado.** `fabrica.py` filtra por identidade de função (`ROTAS.get(nome) in (_llm, _vlm)`), não por nome exato — cobre `vlm-menor`/`llm-menor`. Teste dedicado: `tests/test_fabrica.py::test_exclui_tambem_as_variantes_menores_de_modelo`. Esta linha estava desatualizada: o código já tinha corrigido antes de o texto ser revisado |
-| −1.4 | **Diagnóstico por página → característica → páginas de triagem** | ver a seção do corpus abaixo: é o que destrava os perfis, e os perfis destravam a distribuição |
+| −1.4 | **Diagnóstico por página → característica → páginas de triagem** | ✅ **Parcialmente fechado em 2026-08-12** — ver detalhe logo abaixo. Destrava os perfis; os perfis destravam a distribuição |
 
 Fora desses, seguem **abertos e não verificados** os achados de segurança da
 auditoria independente: isolamento de processo, limites de recurso, injeção de
 instrução vinda do PDF, e célula de planilha começando por `=`. Não são hipóteses
 descartadas — é trabalho não feito.
+
+### −1.4, o que foi fechado e o que continua aberto — 2026-08-12
+
+**Correção de escopo, feita ao planejar, antes de escrever código:** o
+`ADR-0021` diz explicitamente que a taxonomia é *"um segundo eixo de
+classificação da página, ao lado de `triagem.Classe` — e não um módulo
+novo"*. `Classe` (DADOS/CONTEXTO/DESCARTÁVEL) não devia virar conjunto — é
+uma classificação grosseira intencional, que continua exclusiva de
+propósito. E a característica **já é** um conjunto em produção: `achados =
+{a.codigo for a in caracterizar_pagina(...)}` já existe em
+`planejador.py:132`, testado, sem enum exclusivo. Não havia necessidade
+(nem justificativa no próprio ADR) de mexer em `planejador.py`/`Classe` —
+seria risco em código de produção já validado, sem ganho.
+
+Também **não faz parte deste item**, ainda que relacionado: fazer
+`pipeline.Pipeline` (Cenário A) rotear por página durante a extração — isso
+é a outra metade do **P0.5** ("fechado só para o Cenário B"), rastreada à
+parte, não duplicada aqui.
+
+**Fechado:**
+- `diagnostico.caracterizar_documento(caminho)` — `caracterizar_pagina`
+  para todas as páginas do documento, de forma estruturada
+  (`{página: [Achado, ...]}`), em vez de só por-página isolada ou agregada
+  em texto (`diagnosticar`, que cita número de página dentro da string
+  `detalhe`, não como dado consultável).
+- `diagnostico.paginas_por_caracteristica(...)` — a relação inversa,
+  código de achado → páginas que o têm; a forma que escolher página de
+  triagem por característica precisa.
+- `Perfil.paginas_de_triagem_declaradas: dict[str, list[int]]` substitui o
+  escalar `pagina_de_triagem_declarada: int | None` — N páginas **por
+  característica**, não um valor só pro documento inteiro.
+  `perfis/nutricional.json` migrado (`"pagina_de_triagem": 29` →
+  `"paginas_de_triagem": {"pagina-rotacionada": [29]}`); os dois scripts
+  que liam o campo antigo (`medir_modelos_pagina29.py`, `ensaio_previo.py`)
+  atualizados.
+- Validado contra documento real do corpus (36 páginas,
+  `NARA_JFK_104-10095-10314_skew.pdf`), não só sintético — rodou limpo.
+
+**Ainda aberto, de propósito, fora do escopo de hoje:**
+- Os achados estruturais cobrem só 5 características (rotação, ausência de
+  texto, texto vertical, mapa de caracteres, imagem embutida) — a taxonomia
+  completa do `ADR-0021` (19 códigos em `CARACTERISTICAS.md`, eixos
+  layout/degradação/domínio) continua maior do que o que há em código; o
+  próprio ADR já declara isso "aberto".
+- P0.5 (Cenário A, `pipeline.Pipeline` sem roteamento por página) — item
+  separado, não tocado.
+- O algoritmo de "quantas páginas por característica" continua sem regra
+  fechada — o `ADR-0021` só fixa o princípio ("1 por combinação relevante,
+  sem duplicar coleta"), não o "quantas". `Perfil` agora **comporta** N; o
+  "como escolher N" ainda é decisão de quem monta o perfil, não automação.
 
 ### Mapa completo dos P0 da auditoria externa (`AUDITORIA_TECNICA_CIENTIFICA.md`)
 
@@ -347,7 +397,7 @@ Lista do que procurar: [CARACTERISTICAS.md](experimentos/pdf/CARACTERISTICAS.md)
 
 | | |
 |---|---|
-| Testes | **786 passando**, 10 saltados (`pytest -m "not experimento_a"`) — atualizado em 2026-08-12 após fechar P-1.1/P0.1 e cobrir `cli.py::_comparar`, branches de erro de `_avaliar`, e um teste de integração ponta a ponta contra um documento real do corpus. `pytest-randomly` ligado por padrão (ordem embaralhada a cada rodada) e gatilho automático de captura de instabilidade — ver −1.2 |
+| Testes | **795 passando**, 10 saltados (`pytest -m "not experimento_a"`) — atualizado em 2026-08-12 após fechar P-1.1/P0.1, −1.3 e (parcialmente) −1.4, cobrir `cli.py::_comparar`, branches de erro de `_avaliar`, e um teste de integração ponta a ponta contra um documento real do corpus. `pytest-randomly` ligado por padrão (ordem embaralhada a cada rodada) e gatilho automático de captura de instabilidade — ver −1.2 |
 | Estilo | `flake8` e `black` limpos — drift de formatação (versão de `black` mais nova) corrigido em 2026-08-12 |
 | Guarda de confidencialidade | 9/9 |
 | ADRs | **24** |

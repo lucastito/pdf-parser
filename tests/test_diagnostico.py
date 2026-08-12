@@ -15,8 +15,10 @@ import pytest
 from parser.diagnostico import (
     Achado,
     Severidade,
+    caracterizar_documento,
     caracterizar_pagina,
     diagnosticar,
+    paginas_por_caracteristica,
     validar_registros,
 )
 from parser.modelo import Campo, Evidencia, Registro, Sentinela
@@ -153,6 +155,104 @@ class TestCaracterizarPagina:
             aberto.close()
         (achado,) = [a for a in achados if a.codigo == "sem-camada-de-texto"]
         assert "1" in achado.detalhe
+
+
+class TestCaracterizarDocumento:
+    """`caracterizar_pagina` já existe página a página, mas só serve a quem
+    já sabe qual página perguntar (o roteador, um número por vez). Falta a
+    forma consultável do documento inteiro — "que características cada
+    página tem" — que é o que descobrir característica por característica
+    no corpus (−1.4, PLANO.md) precisa: sem isso, a única saída é chamar
+    `caracterizar_pagina` em laço manual, ou ler número de página de dentro
+    da string `detalhe` de `diagnosticar`.
+    """
+
+    def test_arquivo_inexistente_falha_claro(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            caracterizar_documento(str(tmp_path / "nao-existe.pdf"))
+
+    def test_devolve_um_conjunto_de_achados_por_pagina(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        normal = documento.new_page()
+        normal.insert_text((72, 72), "texto")
+        rotacionada = documento.new_page()
+        rotacionada.insert_text((72, 72), "texto")
+        rotacionada.set_rotation(90)
+        caminho = tmp_path / "mista.pdf"
+        documento.save(str(caminho))
+        documento.close()
+
+        resultado = caracterizar_documento(str(caminho))
+
+        assert set(resultado) == {1, 2}
+        assert "pagina-rotacionada" not in {a.codigo for a in resultado[1]}
+        assert "pagina-rotacionada" in {a.codigo for a in resultado[2]}
+
+    def test_bate_com_caracterizar_pagina_chamada_a_mao(self, pdf_exemplo):
+        import fitz
+
+        aberto = fitz.open(pdf_exemplo)
+        try:
+            esperado = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+
+        resultado = caracterizar_documento(str(pdf_exemplo))
+        assert resultado[1] == esperado
+
+
+class TestPaginasPorCaracteristica:
+    """A relação que a escolha de página de triagem por característica
+    precisa (ADR-0021): não "que características esta página tem", mas
+    "quais páginas têm esta característica" — o inverso."""
+
+    def test_inverte_pagina_para_caracteristica_em_caracteristica_para_paginas(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        normal = documento.new_page()
+        normal.insert_text((72, 72), "texto")
+        rotacionada = documento.new_page()
+        rotacionada.insert_text((72, 72), "texto")
+        rotacionada.set_rotation(90)
+        caminho = tmp_path / "mista.pdf"
+        documento.save(str(caminho))
+        documento.close()
+
+        caracterizacao = caracterizar_documento(str(caminho))
+        por_caracteristica = paginas_por_caracteristica(caracterizacao)
+
+        assert por_caracteristica["pagina-rotacionada"] == [2]
+
+    def test_pagina_com_varias_caracteristicas_aparece_em_varias_listas(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        pagina = documento.new_page()
+        pagina.insert_text((72, 72), "texto")
+        pagina.set_rotation(90)
+        pixmap = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 4, 4))
+        pixmap.set_rect(pixmap.irect, (255, 0, 0))
+        pagina.insert_image(
+            fitz.Rect(0, 0, pagina.rect.width, pagina.rect.height * 0.5), pixmap=pixmap
+        )
+        caminho = tmp_path / "dupla.pdf"
+        documento.save(str(caminho))
+        documento.close()
+
+        por_caracteristica = paginas_por_caracteristica(caracterizar_documento(str(caminho)))
+
+        assert 1 in por_caracteristica.get("pagina-rotacionada", [])
+        assert 1 in por_caracteristica.get("imagem-embutida", [])
+
+    def test_documento_sem_nenhum_achado_devolve_dicionario_vazio(self, pdf_exemplo):
+        # pdf_exemplo não tem rotação, imagem, nem página sem texto.
+        por_caracteristica = paginas_por_caracteristica(
+            caracterizar_documento(str(pdf_exemplo))
+        )
+        assert por_caracteristica == {}
 
 
 class TestImagemEmbutida:

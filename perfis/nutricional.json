@@ -6,7 +6,9 @@
     45,
     2
   ],
-  "pagina_de_triagem": 29,
+  "paginas_de_triagem": {
+    "pagina-rotacionada": [29]
+  },
   "gabarito": "experimentos/golden/taco.csv",
   "holdout": "experimentos/golden/holdout.csv",
   "tolerancia": 0.01,

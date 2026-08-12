@@ -201,11 +201,15 @@ class Perfil:
 
     campos_na_ordem: list[str] = field(default_factory=list)
     paginas: list[int] | None = None
-    pagina_de_triagem_declarada: int | None = None
-    """Página única da triagem, em numeração do documento.
+    paginas_de_triagem_declaradas: dict[str, list[int]] = field(default_factory=dict)
+    """Páginas de triagem, por característica — característica → páginas.
 
-    Separada de `paginas` porque os propósitos são diferentes — ver
-    `pagina_de_triagem`.
+    Separado de `paginas` porque os propósitos são diferentes — ver
+    `paginas_de_triagem`. A chave é livre: código de achado
+    (`parser.diagnostico.Achado.codigo`), combinação de vários (o que o
+    ADR-0021 chama de unidade real de triagem — "tabela sem grade +
+    digitalizada torta", por exemplo) ou rótulo curado à mão. Este módulo
+    não impõe vocabulário de característica, só guarda a relação.
     """
     tolerancia: float = field(default_factory=lambda: _default("tolerancia"))
     gabarito: str | None = None
@@ -235,31 +239,33 @@ class Perfil:
             )
         return range(*self.paginas)
 
-    @property
-    def pagina_de_triagem(self) -> int | None:
-        """A página única em que a triagem roda — não as páginas de avaliação.
+    def paginas_de_triagem(self, caracteristica: str = "") -> list[int]:
+        """As páginas de triagem de uma característica — não as de avaliação.
 
         **São propósitos diferentes, e confundi-los custa caro.** As páginas
         declaradas em `paginas` servem ao gabarito e ao conjunto de reserva, onde
         amostra maior mede generalização. A triagem mede **configuração de
-        modelo**, e para isso uma página basta — desde que seja a mesma em todas
-        as máquinas.
+        modelo** por característica, e para isso uma página por característica
+        basta — desde que seja a mesma em todas as máquinas.
 
-        Medido no documento-caso: as 9 páginas avaliadas são estruturalmente
-        idênticas (rotação 90°, densidade numérica de 0,65 a 0,76, sem imagem).
-        Rodar as nove custaria ~18 h contra ~2 h de uma — 9× o custo para a mesma
-        informação.
+        Medido no documento-caso, para a única característica coberta hoje
+        (rotação 90°, densidade numérica de 0,65 a 0,76, sem imagem): as 9
+        páginas avaliadas são estruturalmente idênticas. Rodar as nove custaria
+        ~18 h contra ~2 h de uma — 9× o custo para a mesma informação.
 
-        A amostra da triagem só cresce quando entra **outra característica**
-        (ADR-0016, ADR-0021), nunca por quantidade.
+        A amostra só cresce quando entra **outra característica** (ADR-0016,
+        ADR-0021) — cada uma com sua própria lista de páginas —, nunca por
+        quantidade dentro da mesma característica.
 
-        Sem declaração, cai na primeira página avaliada: rodar o documento inteiro
-        por omissão seria o oposto do pretendido.
+        Sem declaração para a característica pedida, cai na primeira página do
+        documento: rodar o documento inteiro por omissão seria o oposto do
+        pretendido.
         """
-        if self.pagina_de_triagem_declarada:
-            return int(self.pagina_de_triagem_declarada)
+        declaradas = self.paginas_de_triagem_declaradas.get(caracteristica)
+        if declaradas:
+            return list(declaradas)
         paginas = self.paginas_do_documento()
-        return paginas[0] if paginas else None
+        return paginas[:1] if paginas else []
 
     def paginas_do_documento(self) -> list[int]:
         """As páginas que serão lidas, na numeração que aparece no documento.
@@ -318,7 +324,7 @@ def carregar_perfil(caminho: str | Path) -> Perfil:
         esquema=dados.get("esquema", {}),
         campos_na_ordem=dados.get("campos_na_ordem", []),
         paginas=dados.get("paginas"),
-        pagina_de_triagem_declarada=dados.get("pagina_de_triagem"),
+        paginas_de_triagem_declaradas=dados.get("paginas_de_triagem", {}),
         tolerancia=dados.get("tolerancia", _default("tolerancia")),
         gabarito=dados.get("gabarito"),
         holdout=dados.get("holdout"),

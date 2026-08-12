@@ -32,8 +32,10 @@ from parser.modelo import Registro
 __all__ = [
     "Achado",
     "Severidade",
+    "caracterizar_documento",
     "caracterizar_pagina",
     "diagnosticar",
+    "paginas_por_caracteristica",
     "relatorio",
     "validar_registros",
 ]
@@ -93,6 +95,57 @@ def diagnosticar(caminho: str | Path) -> list[Achado]:
         return achados
     finally:
         documento.close()
+
+
+def caracterizar_documento(caminho: str | Path) -> dict[int, list[Achado]]:
+    """`caracterizar_pagina`, para todas as páginas do documento — a forma
+    consultável que faltava (−1.4, PLANO.md).
+
+    `diagnosticar` agrega achados no nível do documento, com o número de
+    página só citado dentro da string `detalhe` (ex.: "páginas 1, 2, 3…") —
+    útil para leitura humana, inútil para perguntar em código "que
+    características a página 7 tem". `caracterizar_pagina` responde isso,
+    mas uma página de cada vez, exigindo um laço manual de quem quiser o
+    documento inteiro. Esta função é esse laço, feito uma vez.
+
+    Levanta:
+        FileNotFoundError: arquivo inexistente.
+    """
+    import fitz
+
+    arquivo = Path(caminho)
+    if not arquivo.exists():
+        raise FileNotFoundError(f"arquivo não encontrado: {arquivo}")
+
+    documento = fitz.open(arquivo)
+    try:
+        return {
+            numero: caracterizar_pagina(documento, numero)
+            for numero in range(1, documento.page_count + 1)
+        }
+    finally:
+        documento.close()
+
+
+def paginas_por_caracteristica(
+    caracterizacao: dict[int, list[Achado]],
+) -> dict[str, list[int]]:
+    """Inverte `caracterizar_documento`: de "página → achados" para
+    "código de característica → páginas que a têm".
+
+    É a forma que a escolha de página de triagem por característica precisa
+    (ADR-0021: "uma página por combinação relevante") — sem isso, achar
+    "quais páginas têm característica X" exigiria varrer o dicionário na
+    mão toda vez. Uma página com várias características aparece em várias
+    listas — de propósito: o ADR valoriza exatamente esse caso ("um
+    documento pode marcar várias características de uma vez, e esses são os
+    melhores").
+    """
+    paginas: dict[str, list[int]] = {}
+    for numero, achados in sorted(caracterizacao.items()):
+        for achado in achados:
+            paginas.setdefault(achado.codigo, []).append(numero)
+    return paginas
 
 
 def caracterizar_pagina(documento, numero: int) -> list[Achado]:

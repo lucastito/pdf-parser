@@ -7,6 +7,18 @@
 > foi implementada em `diagnostico.py` em 2026-08-12, junto com o piso de
 > área que a torna utilizável em produção (evita disparar em todo logotipo
 > de cabeçalho). Ver `PLANO.md`, seção "5. Taxonomia".
+>
+> **Retificação de escopo, 2026-08-12 (−1.4, PLANO.md).** Esta ADR já
+> decidia que a taxonomia é "um segundo eixo... ao lado de `triagem.Classe`,
+> e não um módulo novo" (ver "Decisão" abaixo) — `Classe` não precisava (nem
+> devia) virar conjunto, e a característica como conjunto de códigos de
+> achado já roda em produção desde `planejador.py:132`. O que faltava era só
+> a forma consultável do documento inteiro (`diagnostico.caracterizar_documento`
+> + `diagnostico.paginas_por_caracteristica`, novos) e o `Perfil` comportar N
+> páginas de triagem por característica (`paginas_de_triagem_declaradas`,
+> substitui o escalar `pagina_de_triagem_declarada`). Ver o detalhe completo
+> — inclusive o que continua fora de escopo — em `PLANO.md`, seção "−1.4, o
+> que foi fechado e o que continua aberto".
 
 ## Contexto
 

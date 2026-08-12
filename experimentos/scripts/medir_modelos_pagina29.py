@@ -53,7 +53,9 @@ def _pagina_de_triagem() -> int:
     A amostra só cresce quando entra **outra característica**, nunca por
     quantidade (ADR-0016).
     """
-    return carregar_perfil(RAIZ / "perfis" / "nutricional.json").pagina_de_triagem
+    return carregar_perfil(RAIZ / "perfis" / "nutricional.json").paginas_de_triagem(
+        "pagina-rotacionada"
+    )[0]
 
 
 PAGINA = _pagina_de_triagem()
