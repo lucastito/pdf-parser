@@ -31,6 +31,14 @@ from parser.medicao import (
     travar,
 )
 
+pytestmark = pytest.mark.experimento_a
+"""Este módulo só faz sentido no cenário de pesquisa (A): trava de execução
+concorrente entre baterias de medição em máquinas de experimento emprestadas.
+Produção (B) roda num servidor só, sem essa disputa. `pytest -m "not
+experimento_a"` roda a suíte inteira sem isto — útil numa máquina onde os
+testes sondam PID de processo (`_processo_vive`) de um jeito que ferramentas
+de segurança de endpoint podem interpretar mal."""
+
 
 class TestExclusaoMutua:
     """Duas medições simultâneas contaminam as duas — a segunda tem de falhar."""

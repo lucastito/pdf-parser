@@ -2,6 +2,14 @@
 
 **Status:** aceito · **Data:** 2026-07-31
 
+> **Limite aberto, confirmado no código em 2026-08-12** (achado originalmente
+> pela auditoria de 02/08): esta ADR fala em "uma página de triagem", e
+> `src/parser/configuracao.py` implementa isso como campo **escalar**
+> (`pagina_de_triagem_declarada: int | None`), não uma página por
+> característica da taxonomia (ADR-0021) como a seção 5 de `PLANO.md` já
+> reconhece ser necessário. Ainda não corrigido — não é regressão desta
+> sessão, é dívida que já existia e continua existindo.
+
 ## Contexto
 
 O experimento compara oito estratégias de extração. Duas delas — as rotas por

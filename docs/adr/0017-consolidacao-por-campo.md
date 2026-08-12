@@ -1,10 +1,20 @@
 # ADR-0017 — Consolidação por campo, não escolha de planilha
 
-**Status:** proposto · **Data:** 2026-07-31
+**Status:** aceito · **Data:** 2026-07-31 · **Implementado:** 2026-08-11/12
 
-> **Proposto, não aceito.** A decisão está tomada; a implementação não começou.
-> Registrado agora porque o desenho já influencia o que a fase de preenchimento
-> precisa produzir (ADR-0016).
+> **Retificação de 2026-08-12.** Esta ADR ficou marcada "proposto, implementação
+> não começou" por mais de uma semana depois de `src/parser/consolidacao.py`
+> já existir com 35 testes — inconsistência confirmada pela auditoria de
+> 02/08 e só corrigida agora. O mecanismo está implementado (`consolidar()` +
+> `materializar()`) e, desde 2026-08-11/12, ligado à produção do Cenário B via
+> `parser.planejador._decidir_entre_deterministicos` (rota `"consolidado"`).
+>
+> **Limitação conhecida, não fechada:** a votação recebe todos os itens de
+> todas as rotas, inclusive os que só uma rota produziu — um item exclusivo
+> vira `Desfecho.VOTO_UNICO` com confiança 0,9, sem checar se a rota de
+> origem tem histórico de fabricar linha (o problema que P-1.1 nomeia, ver
+> `PLANO.md`). Não corrigido de propósito; ver a seção "Cenário B — Produto
+> DSS" em `PLANO.md` para o detalhe e o estado exato.
 
 ## Contexto
 

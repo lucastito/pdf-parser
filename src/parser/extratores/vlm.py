@@ -45,11 +45,14 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
         *,
         instrucao: str | None = None,
         ordem_das_colunas: list[str] | None = None,
+        vocabulario: list[Any] | None = None,
         dpi: int = DPI_PADRAO,
         degrau_maximo: Degrau | None = None,
         raciocinar: bool = False,
         tokens_maximos: int | None = None,
         contexto: int | None = None,
+        contexto_automatico: bool = False,
+        nativo: int | None = None,
         semente: int | None = None,
         temperatura: float = 0.0,
     ) -> None:
@@ -58,6 +61,9 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
             caminho_pdf: o documento original. A renderização precisa do arquivo,
                 não do formato canônico — limitação real desta estratégia, e um
                 dos pontos em que ela é menos substituível que a determinística.
+            vocabulario: ver `ExtratorBaseadoEmModelo`. Enriquece o prompt com
+                descrição, unidade e opções válidas por campo, quando a
+                planilha de schema as declarar.
             dpi: resolução da imagem. **Registre-o junto do resultado**: é
                 variável do experimento, e duas execuções com DPI diferente não
                 são comparáveis.
@@ -68,6 +74,10 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
                 mais sensível: uma página renderizada consome ~2200 tokens só de
                 entrada, e o padrão do servidor (4096) deixa pouco para a
                 resposta. Foi a causa medida das respostas vazias (ADR-0018).
+            contexto_automatico: sem `contexto`, mede a entrada desta chamada
+                (imagem + prompt) e calcula o contexto a partir dela, em vez de
+                herdar o padrão do servidor. Ver `SaidaEmDegraus`.
+            nativo: teto de contexto do modelo, usado só com `contexto_automatico`.
             degrau_maximo: o degrau de saída mais livre permitido (SPEC §4.4).
                 Fixá-lo torna uma bateria de execuções comparável entre si; deixá-lo
                 aberto maximiza a chance de obter saída de um modelo pequeno.
@@ -86,6 +96,7 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
             campos,
             instrucao=instrucao or INSTRUCAO_VISUAL,
             ordem_das_colunas=ordem_das_colunas,
+            vocabulario=vocabulario,
         )
         self.caminho_pdf = caminho_pdf
         self.dpi = dpi
@@ -96,6 +107,8 @@ class ExtratorVLM(ExtratorBaseadoEmModelo):
             raciocinar=raciocinar,
             tokens_maximos=tokens_maximos,
             contexto=contexto,
+            contexto_automatico=contexto_automatico,
+            nativo=nativo,
             semente=semente,
             temperatura=temperatura,
         )

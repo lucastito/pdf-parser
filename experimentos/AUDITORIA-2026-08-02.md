@@ -13,6 +13,12 @@ resistiram à verificação. O registro fica para que a mesma busca não se repi
 > reprodutibilidade. Ela **antecipou** o achado da métrica descrito abaixo, e
 > levanta pontos que as cinco frentes daqui não cobriram. Os dois se somam; onde
 > divergirem, vale o que estiver verificado no código.
+>
+> **Este documento é histórico — não é atualizado.** Congelado no estado em que
+> foi escrito, do mesmo jeito que um ADR preserva hipótese refutada. **O estado
+> atual de cada achado (aberto, fechado, parcial), verificado no código, vive em
+> [`PLANO.md`](../PLANO.md)**, seção "P-1" e "Mapa completo dos P0 da auditoria
+> externa" — checado por último em 2026-08-12.
 
 ## O achado que precede todos os outros: a acurácia não penaliza invenção
 

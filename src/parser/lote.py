@@ -20,7 +20,6 @@ a alternativa é reconferir tudo.
 
 from __future__ import annotations
 
-import csv
 import json
 import time
 from dataclasses import asdict, dataclass, field
@@ -32,15 +31,28 @@ from parser.modelo import Registro
 __all__ = ["Falha", "Lote", "Pendencia", "ResultadoLote", "ingerir"]
 
 EXTENSOES_SUPORTADAS = {".pdf"}
-"""Formatos com adapter implementado.
+"""Formatos com adapter implementado."""
 
-Outros formatos são declaráveis no perfil e falham alto ao serem usados — ver
-`fontes/stub.py`. Ignorá-los silenciosamente aqui evita que um arquivo de texto
-solto na pasta do cliente vire falha ruidosa.
+EXTENSOES_DECLARAVEIS = {
+    ".xlsx",
+    ".csv",
+    ".json",
+    ".docx",
+    ".zip",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".tif",
+    ".tiff",
+}
+"""Formatos que o perfil pode declarar, sem adapter ainda (README) — devem
+**falhar alto**, nunca desaparecer em silêncio (`fontes/stub.py`). Diferente de
+uma extensão qualquer, solta na pasta do cliente: esta é o vocabulário de
+formato que o próprio projeto promete um dia suportar, e ignorá-la faria
+`arquivos_encontrados` mentir sobre o que a pasta continha.
 """
 
-CONFIANCA_MINIMA_DE_CALIBRACAO = 0.75
-"""Abaixo disto, o layout descoberto não é usado — recorre-se ao perfil informado."""
+EXTENSOES_RECONHECIDAS = EXTENSOES_SUPORTADAS | EXTENSOES_DECLARAVEIS
 
 
 @dataclass
@@ -121,13 +133,13 @@ class Lote:
 
         if self.caminho.is_file():
             return (
-                [self.caminho] if self.caminho.suffix.lower() in EXTENSOES_SUPORTADAS else []
+                [self.caminho] if self.caminho.suffix.lower() in EXTENSOES_RECONHECIDAS else []
             )
 
         return sorted(
             p
             for p in self.caminho.rglob("*")
-            if p.is_file() and p.suffix.lower() in EXTENSOES_SUPORTADAS
+            if p.is_file() and p.suffix.lower() in EXTENSOES_RECONHECIDAS
         )
 
 
@@ -138,6 +150,7 @@ def ingerir(
     perfil: Any = None,
     campos_esperados: list[str] | None = None,
     calibrar_por_arquivo: bool = True,
+    vocabulario: list[Any] | None = None,
 ) -> ResultadoLote:
     """Processa todos os documentos de uma pasta e consolida o resultado.
 
@@ -151,6 +164,9 @@ def ingerir(
         calibrar_por_arquivo: descobre o layout de cada documento. Desligar força o
             uso do perfil para todos — útil quando a pasta é homogênea e o perfil
             já está validado.
+        vocabulario: campos esperados pelo destino (`parser.vocabulario`), para
+            o roteador tentar achar valor por palavra-chave em página sem tabela
+            antes de escalar para o modelo. Omitido, esse nível não roda.
 
     A ordem de decisão por arquivo é: layout descoberto (se confiável) → perfil
     informado → falha registrada com diagnóstico. O cliente não garante que a pasta
@@ -170,7 +186,9 @@ def ingerir(
 
     for arquivo in arquivos:
         try:
-            registros, nota = _processar(arquivo, perfil, calibrar_por_arquivo)
+            registros, nota = _processar(
+                arquivo, perfil, calibrar_por_arquivo, vocabulario
+            )
             resultado.registros.extend(registros)
             resultado.processados += 1
             resultado.log.append(f"{arquivo.name}: {len(registros)} registro(s) — {nota}")
@@ -207,21 +225,35 @@ def _validar_saida(registros: list[Registro], perfil: Any) -> None:
 
 
 def _processar(
-    arquivo: Path, perfil: Any, calibrar_por_arquivo: bool
+    arquivo: Path,
+    perfil: Any,
+    calibrar_por_arquivo: bool,
+    vocabulario: list[Any] | None = None,
 ) -> tuple[list[Registro], str]:
-    """Extrai de um documento, escolhendo o layout mais adequado.
+    """Extrai de um documento, escolhendo a rota mais adequada por página.
 
-    Devolve os registros e uma nota sobre como o layout foi decidido — a nota vai
-    para o log, de modo que a origem de um valor suspeito seja rastreável.
+    Devolve os registros e uma nota sobre como as rotas foram decididas — a nota
+    vai para o log, de modo que a origem de um valor suspeito seja rastreável.
+
+    Levanta:
+        FormatoNaoSuportado: extensão declarável mas sem adapter (ver
+            `EXTENSOES_DECLARAVEIS`) — falha explícita, nunca lote silenciosamente
+            incompleto.
     """
-    from parser.extratores.posicional import ExtratorPosicional
+    if arquivo.suffix.lower() not in EXTENSOES_SUPORTADAS:
+        from parser.fontes.stub import FonteNaoImplementada
+
+        FonteNaoImplementada(arquivo.suffix.lower()).carregar(str(arquivo))
+
     from parser.fontes.pdf import FontePDF
 
-    layout, nota = _decidir_layout(arquivo, perfil, calibrar_por_arquivo)
     paginas = _paginas_do_perfil(perfil)
-
     documento = FontePDF(paginas=paginas).carregar(str(arquivo))
-    registros = ExtratorPosicional(layout).extrair(documento)
+
+    if calibrar_por_arquivo:
+        registros, nota = _processar_por_pagina(arquivo, documento, perfil, vocabulario)
+    else:
+        registros, nota = _processar_com_layout_do_perfil(documento, perfil)
 
     if not registros:
         raise ValueError("nenhum registro extraído")
@@ -235,6 +267,82 @@ def _processar(
     # os nomes canônicos, que só existem a partir daqui.
     registros = _converter_unidades(registros, perfil)
 
+    return registros, nota
+
+
+def _processar_com_layout_do_perfil(documento, perfil: Any) -> tuple[list[Registro], str]:
+    """Um único layout, declarado no perfil, para o documento inteiro.
+
+    É o comportamento anterior ao roteador por página, preservado como opção
+    explícita (`calibrar_por_arquivo=False`) para quando a pasta é homogênea e
+    o perfil já foi validado — não descobre nada, só aplica o que foi dito.
+    """
+    from parser.extratores.posicional import ExtratorPosicional
+
+    rotas = getattr(perfil, "rotas", None) if perfil is not None else None
+    rota = rotas.get("posicional") if rotas else None
+    if not rota or not rota.layout:
+        raise ValueError(
+            "não foi possível determinar o layout: calibrar_por_arquivo=False exige "
+            "um perfil com 'rotas.posicional.layout' declarado"
+        )
+    registros = ExtratorPosicional(_layout_de_dados(rota.layout)).extrair(documento)
+    return registros, "layout do perfil"
+
+
+def _processar_por_pagina(
+    arquivo: Path, documento, perfil: Any, vocabulario: list[Any] | None = None
+) -> tuple[list[Registro], str]:
+    """Decide a rota de cada página (`parser.planejador`) e monta o extrator
+    certo para cada uma (`parser.fabrica`) — nunca um único extrator fixo para
+    o documento inteiro.
+
+    Uma página cuja rota exige configuração ausente (nível 3 sem modelo
+    declarado, OCR sem layout disponível) não derruba o arquivo: entra como
+    pendência, e as demais páginas seguem sendo processadas.
+    """
+    from parser.fabrica import RotaNaoConfigurada, montar_extrator_para_decisao
+    from parser.planejador import planejar
+    from parser.portas import DocumentoCanonico
+
+    decisoes = planejar(str(arquivo), documento, vocabulario=vocabulario)
+    paginas_por_numero = {p.numero: p for p in documento.paginas}
+
+    registros: list[Registro] = []
+    contagem: dict[str, int] = {}
+    pendencias: list[str] = []
+
+    for decisao in decisoes:
+        contagem[decisao.rota] = contagem.get(decisao.rota, 0) + 1
+        if decisao.rota == "nenhuma":
+            continue
+
+        try:
+            extrator = montar_extrator_para_decisao(
+                decisao, arquivo, perfil, vocabulario=vocabulario
+            )
+        except RotaNaoConfigurada as erro:
+            pendencias.append(str(erro))
+            continue
+
+        documento_pagina = DocumentoCanonico(
+            identificador=documento.identificador,
+            paginas=[paginas_por_numero[decisao.pagina]],
+        )
+        registros.extend(extrator.extrair(documento_pagina))
+
+    # Uma página com imagem embutida gera duas decisões (principal + visão
+    # complementar) — contar por decisão, não por página, denunciaria uma
+    # "página fantasma" que não existe no documento.
+    paginas_unicas = len({d.pagina for d in decisoes})
+    resumo = ", ".join(f"{rota}×{n}" for rota, n in sorted(contagem.items()))
+    nota = (
+        f"{paginas_unicas} página(s), {len(decisoes)} decisão(ões): {resumo}"
+        if decisoes
+        else "documento sem páginas"
+    )
+    if pendencias:
+        nota += f" — {len(pendencias)} pendência(s) [{pendencias[0]}]"
     return registros, nota
 
 
@@ -293,31 +401,6 @@ def _aplicar_mapeamento(registros: list[Registro], perfil: Any) -> list[Registro
     return Mapeamento(perfil.mapeamento).aplicar_todos(registros)
 
 
-def _decidir_layout(arquivo: Path, perfil: Any, calibrar_por_arquivo: bool):
-    """Layout descoberto, se confiável; senão o do perfil."""
-    if calibrar_por_arquivo:
-        try:
-            from parser.calibracao import calibrar
-
-            candidato = calibrar(str(arquivo))
-            if candidato.confianca >= CONFIANCA_MINIMA_DE_CALIBRACAO:
-                return _layout_de_dados(candidato.layout), (
-                    f"layout descoberto (confiança {candidato.confianca:.0%})"
-                )
-        except Exception:
-            pass  # cai no perfil; a razão aparece se o perfil também falhar
-
-    if perfil is not None:
-        rota = perfil.rotas.get("posicional") if hasattr(perfil, "rotas") else None
-        if rota and rota.layout:
-            return _layout_de_dados(rota.layout), "layout do perfil"
-
-    raise ValueError(
-        "não foi possível determinar o layout: a calibração não teve confiança "
-        "suficiente e nenhum perfil com layout foi informado"
-    )
-
-
 def _layout_de_dados(dados: dict):
     from parser.extratores.posicional import LayoutTabela
 
@@ -349,7 +432,20 @@ def _classificar(arquivo: Path, erro: Exception) -> Falha:
     Uma falha sem ação recomendada é só reclamação: quem opera o sistema precisa
     saber o que fazer, não apenas que algo deu errado.
     """
+    from parser.portas import FormatoNaoSuportado
+
     motivo = f"{type(erro).__name__}: {erro}"
+
+    if isinstance(erro, FormatoNaoSuportado):
+        return Falha(
+            arquivo=str(arquivo),
+            motivo=motivo,
+            acao=(
+                f"Formato {arquivo.suffix.lower()!r} ainda não tem adapter de "
+                "leitura. Implemente uma FonteDocumento para ele, ou remova o "
+                "arquivo da pasta de entrada."
+            ),
+        )
 
     try:
         from parser.diagnostico import Severidade, diagnosticar
@@ -404,34 +500,25 @@ def _levantar_pendencias(
 
 
 def _gravar(resultado: ResultadoLote, saida: Path) -> None:
-    """Grava CSV, log e erros.
+    """Grava CSV, JSON, log e erros.
 
-    Três arquivos porque servem a três leitores: o CSV vai para o sistema de
-    destino, o log para quem acompanha a execução, e os erros para quem precisa
-    corrigir a entrada.
+    Cinco arquivos porque servem a leitores diferentes: o CSV é o valor
+    achatado, para quem só quer o dado final; o JSON preserva origem,
+    confiança e evidência de cada campo — a auditoria completa, que o CSV
+    não carrega. Nenhum dos dois é "o formato de saída" único do projeto: um
+    cenário de uso corporativo, por exemplo, não precisa preencher uma
+    planilha de vocabulário — monta uma resposta a outro sistema a partir do
+    que foi extraído, e é o
+    JSON, não o CSV, que carrega proveniência suficiente para isso. Os dois
+    usam as portas `Destino` já existentes, em vez de reimplementar a
+    convenção de gravação aqui; duas cópias da mesma regra é o que diverge
+    sem que nada avise. O log e os erros seguem os mesmos de sempre.
     """
-    saida.parent.mkdir(parents=True, exist_ok=True)
+    from parser.destinos.csv_ import DestinoCSV
+    from parser.destinos.json_ import DestinoJSON
 
-    colunas: list[str] = []
-    for registro in resultado.registros:
-        for nome in registro.campos:
-            if nome not in colunas:
-                colunas.append(nome)
-
-    with saida.open("w", encoding="utf-8", newline="") as arquivo:
-        escritor = csv.DictWriter(arquivo, fieldnames=["_arquivo", *colunas])
-        escritor.writeheader()
-        for registro in resultado.registros:
-            linha = {"_arquivo": registro.fonte}
-            for nome in colunas:
-                campo = registro.campos.get(nome)
-                if campo is None or not campo.preenchido:
-                    linha[nome] = ""
-                elif campo.sentinela is not None:
-                    linha[nome] = campo.sentinela.value
-                else:
-                    linha[nome] = "" if campo.valor is None else str(campo.valor)
-            escritor.writerow(linha)
+    DestinoCSV(saida, incluir_fonte=True).gravar(resultado.registros)
+    DestinoJSON(saida.with_suffix(".json")).gravar(resultado.registros)
 
     saida.with_suffix(".log").write_text(
         "\n".join([resultado.resumo(), "", "Por arquivo:", *resultado.log]),

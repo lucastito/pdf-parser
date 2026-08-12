@@ -32,6 +32,7 @@ from parser.modelo import Registro
 __all__ = [
     "Achado",
     "Severidade",
+    "caracterizar_pagina",
     "diagnosticar",
     "relatorio",
     "validar_registros",
@@ -88,9 +89,181 @@ def diagnosticar(caminho: str | Path) -> list[Achado]:
         achados += _checar_camada_de_texto(documento)
         achados += _checar_orientacao_do_texto(documento)
         achados += _checar_fontes(documento)
+        achados += _checar_imagem_embutida(documento)
         return achados
     finally:
         documento.close()
+
+
+def caracterizar_pagina(documento, numero: int) -> list[Achado]:
+    """Os mesmos achados de `diagnosticar`, restritos a **uma** página.
+
+    Existe para quem precisa decidir por página (o roteador de extração,
+    `parser.planejador`) sem duplicar a lógica de detecção. `documento` é um
+    `fitz.Document` já aberto — quem chama isto em laço sobre várias páginas do
+    mesmo arquivo deve abrir uma vez só e reaproveitar, não reabrir por página.
+
+    Não inclui `_checar_fontes`: mapa de caracteres é propriedade do dicionário
+    de fontes do PDF, não de uma página isolada.
+    """
+    achados: list[Achado] = []
+    if _pagina_rotacionada(documento, numero):
+        achados.append(_achado_rotacao(paginas=[numero], total=documento.page_count))
+    if not _pagina_tem_texto(documento, numero):
+        achados.append(
+            Achado(
+                codigo="sem-camada-de-texto",
+                severidade=Severidade.BLOQUEIA,
+                detalhe=f"página {numero} não tem texto extraível",
+                acao=(
+                    "Documento digitalizado: use a rota por reconhecimento óptico. "
+                    "As rotas que dependem da camada de texto não têm o que ler."
+                ),
+            )
+        )
+    verticais, horizontais = _orientacao_da_pagina(documento, numero)
+    total_linhas = verticais + horizontais
+    if total_linhas and verticais / total_linhas >= 0.30:
+        achados.append(
+            Achado(
+                codigo="texto-vertical",
+                severidade=Severidade.ALERTA,
+                detalhe=f"página {numero}: {verticais} de {total_linhas} linhas verticais",
+                acao=(
+                    "Provável tabela rotacionada, em que cada faixa horizontal traz um "
+                    "atributo de todos os itens em vez de todos os atributos de um item. "
+                    "Alinhar por posição, não por cabeçalho: o cabeçalho detectado será "
+                    "lixo, mas as linhas de dados costumam estar íntegras."
+                ),
+            )
+        )
+    if _pagina_tem_imagem(documento, numero):
+        achados.append(_achado_imagem_embutida(numero))
+    return achados
+
+
+def _pagina_rotacionada(documento, numero: int) -> bool:
+    return bool(documento[numero - 1].rotation)
+
+
+def _pagina_tem_texto(documento, numero: int) -> bool:
+    return bool(documento[numero - 1].get_text("words"))
+
+
+def _orientacao_da_pagina(documento, numero: int) -> tuple[int, int]:
+    """Linhas (verticais, horizontais) da página, por direção do texto."""
+    verticais = horizontais = 0
+    for bloco in documento[numero - 1].get_text("dict").get("blocks", []):
+        for linha in bloco.get("lines", []):
+            direcao = linha.get("dir", (1, 0))
+            if abs(direcao[0]) > 0.9:
+                horizontais += 1
+            else:
+                verticais += 1
+    return verticais, horizontais
+
+
+AREA_MINIMA_DE_IMAGEM_RELEVANTE = 0.02
+"""Fração mínima da área da página que uma imagem precisa ocupar para contar
+como achado.
+
+Sem este piso, `imagem-embutida` disparava em **toda** página de dois
+documentos reais de um cenário corporativo usados para testar isto — o
+"conteúdo visual" era
+sempre o mesmo logotipo de cabeçalho, repetido. Medido nos dois: o logotipo
+ocupa entre 0,1% e 0,6% da página, sempre na mesma razão página após página;
+o conteúdo real (diagrama, gráfico, mapa) começa a partir de ~2%, com margem
+folgada entre as duas faixas — nenhuma imagem caiu no meio.
+
+Ponto de partida declarado sobre **dois** documentos só, não uma calibração.
+O risco fica registrado, não escondido: uma imagem pequena mas informativa
+(um ícone com valor, por exemplo) ficaria de fora. Entre esse risco e
+disparar visão computacional (custo medido de dezenas de minutos por página)
+em toda página de todo documento por causa de um logotipo, o piso é a
+escolha melhor sustentada pelos dois documentos que existem — revisar
+quando houver mais variedade."""
+
+
+def _pagina_tem_imagem(documento, numero: int) -> bool:
+    """Imagem grande o bastante para valer uma leitura por visão — não
+    qualquer imagem embutida (ver `AREA_MINIMA_DE_IMAGEM_RELEVANTE`)."""
+    pagina = documento[numero - 1]
+    area_pagina = pagina.rect.width * pagina.rect.height
+    if area_pagina <= 0:
+        return False
+    for info in pagina.get_image_info():
+        bbox = info["bbox"]
+        area = max(0.0, bbox[2] - bbox[0]) * max(0.0, bbox[3] - bbox[1])
+        if area / area_pagina >= AREA_MINIMA_DE_IMAGEM_RELEVANTE:
+            return True
+    return False
+
+
+def _achado_imagem_embutida(numero: int) -> Achado:
+    return Achado(
+        codigo="imagem-embutida",
+        severidade=Severidade.NOTA,
+        detalhe=f"página {numero} contém ao menos uma imagem embutida",
+        acao=(
+            "Conteúdo visual que a extração de texto não alcança. Se a página "
+            "também tiver texto ou tabela reconhecida por outra rota, considere "
+            "uma leitura complementar por visão (VLM) — texto e imagem podem "
+            "trazer informação diferente na mesma página, e uma rota não "
+            "substitui a outra aqui."
+        ),
+    )
+
+
+def _checar_imagem_embutida(documento) -> list[Achado]:
+    """Imagem embutida é conteúdo que nenhuma rota de texto alcança.
+
+    ADR-0021 já cataloga esta característica como "pronta" na taxonomia de
+    estrutura — mas o código para detectá-la nunca foi escrito. Sem ele, uma
+    página com tabela boa e uma figura ao lado tem a figura simplesmente
+    nunca olhada, e isso não aparece em lugar nenhum do diagnóstico.
+    """
+    paginas = [
+        i + 1 for i in range(documento.page_count) if _pagina_tem_imagem(documento, i + 1)
+    ]
+    if not paginas:
+        return []
+
+    amostra = ", ".join(str(p) for p in paginas[:5])
+    reticencia = "…" if len(paginas) > 5 else ""
+    return [
+        Achado(
+            codigo="imagem-embutida",
+            severidade=Severidade.NOTA,
+            detalhe=(
+                f"{len(paginas)} de {documento.page_count} páginas têm imagem "
+                f"embutida (páginas {amostra}{reticencia})"
+            ),
+            acao=(
+                "Conteúdo visual que a extração de texto não alcança. Considere "
+                "uma leitura complementar por visão (VLM) nessas páginas, mesmo "
+                "quando o texto já foi extraído por outra rota."
+            ),
+        )
+    ]
+
+
+def _achado_rotacao(*, paginas: list[int], total: int) -> Achado:
+    amostra = ", ".join(str(p) for p in paginas[:5])
+    reticencia = "…" if len(paginas) > 5 else ""
+    return Achado(
+        codigo="pagina-rotacionada",
+        severidade=Severidade.BLOQUEIA,
+        detalhe=(
+            f"{len(paginas)} de {total} páginas declaram rotação "
+            f"(páginas {amostra}{reticencia})"
+        ),
+        acao=(
+            "Desrotacione antes de detectar tabela: com a rotação ativa, os "
+            "detectores encontram zero tabelas. Se renderizar para imagem, "
+            "converta as coordenadas de volta ao espaço não rotacionado — a "
+            "renderização aplica a rotação, a extração de texto não."
+        ),
+    )
 
 
 def _checar_rotacao(documento) -> list[Achado]:
@@ -101,34 +274,19 @@ def _checar_rotacao(documento) -> list[Achado]:
     renderização aplica a rotação enquanto a extração de texto não — os dois
     sistemas de coordenadas divergem em silêncio.
     """
-    rotacionadas = [i + 1 for i in range(documento.page_count) if documento[i].rotation]
+    rotacionadas = [
+        i + 1 for i in range(documento.page_count) if _pagina_rotacionada(documento, i + 1)
+    ]
     if not rotacionadas:
         return []
 
-    amostra = ", ".join(str(p) for p in rotacionadas[:5])
-    reticencia = "…" if len(rotacionadas) > 5 else ""
-    return [
-        Achado(
-            codigo="pagina-rotacionada",
-            severidade=Severidade.BLOQUEIA,
-            detalhe=(
-                f"{len(rotacionadas)} de {documento.page_count} páginas declaram rotação "
-                f"(páginas {amostra}{reticencia})"
-            ),
-            acao=(
-                "Desrotacione antes de detectar tabela: com a rotação ativa, os "
-                "detectores encontram zero tabelas. Se renderizar para imagem, "
-                "converta as coordenadas de volta ao espaço não rotacionado — a "
-                "renderização aplica a rotação, a extração de texto não."
-            ),
-        )
-    ]
+    return [_achado_rotacao(paginas=rotacionadas, total=documento.page_count)]
 
 
 def _checar_camada_de_texto(documento) -> list[Achado]:
     """Sem texto nativo, só a rota por reconhecimento óptico é possível."""
     amostra = range(min(10, documento.page_count))
-    com_texto = sum(1 for i in amostra if documento[i].get_text("words"))
+    com_texto = sum(1 for i in amostra if _pagina_tem_texto(documento, i + 1))
 
     if com_texto == 0:
         return [
@@ -162,13 +320,9 @@ def _checar_orientacao_do_texto(documento) -> list[Achado]:
     pressuposto de que uma linha corresponde a um registro."""
     verticais = horizontais = 0
     for i in range(min(5, documento.page_count)):
-        for bloco in documento[i].get_text("dict").get("blocks", []):
-            for linha in bloco.get("lines", []):
-                direcao = linha.get("dir", (1, 0))
-                if abs(direcao[0]) > 0.9:
-                    horizontais += 1
-                else:
-                    verticais += 1
+        v, h = _orientacao_da_pagina(documento, i + 1)
+        verticais += v
+        horizontais += h
 
     total = verticais + horizontais
     if not total or verticais / total < 0.30:

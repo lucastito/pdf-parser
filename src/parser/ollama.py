@@ -161,6 +161,7 @@ class ExtratorBaseadoEmModelo:
         *,
         instrucao: str | None = None,
         ordem_das_colunas: list[str] | None = None,
+        vocabulario: list[Any] | None = None,
     ) -> None:
         """
         Args:
@@ -176,11 +177,18 @@ class ExtratorBaseadoEmModelo:
 
                 A diferença é de natureza, não de ênfase: a regra pede que o
                 modelo *infira* o alinhamento; a sequência o *entrega*.
+            vocabulario: os `CampoEsperado` (`parser.vocabulario`) que deram
+                origem a `campos`, quando houver. Sem ele, o prompt lista só o
+                nome do campo — com ele, acrescenta descrição, unidade e as
+                opções válidas, quando a planilha de schema as declarar. Campo
+                de `campos` sem entrada correspondente no vocabulário aparece
+                só pelo nome, do mesmo jeito que hoje.
         """
         self.cliente = cliente
         self.campos = campos
         self.instrucao = instrucao or INSTRUCAO_PADRAO
         self.ordem_das_colunas = ordem_das_colunas or []
+        self._vocabulario_por_nome = {c.nome: c for c in (vocabulario or [])}
 
     def extrair(self, documento: DocumentoCanonico) -> list[Registro]:
         registros: list[Registro] = []
@@ -208,8 +216,42 @@ class ExtratorBaseadoEmModelo:
                 f"{colunas}\n\n"
                 "Cada linha traz um valor para **cada** coluna acima, na sequência."
             )
-        partes.append(f"Campos: {', '.join(self.campos)}")
+        if self._vocabulario_por_nome:
+            partes.append(self._descricao_dos_campos())
+        else:
+            partes.append(f"Campos: {', '.join(self.campos)}")
         return "\n\n".join(partes)
+
+    def _descricao_dos_campos(self) -> str:
+        """Uma linha por campo, com o que o vocabulário souber sobre ele.
+
+        Existe para que o modelo saiba não só o nome do campo, mas o que ele
+        significa e quais respostas são válidas — sem isso, um campo com
+        lista suspensa no schema de destino (ex.: "Yes"/"No") tem a mesma
+        chance de vir como "sim", "S" ou qualquer outra variante que o
+        modelo escolher, e nenhuma bateria a menos rígida do que a exigida
+        pelo destino final.
+        """
+        linhas = ["Campos a extrair, com o que se sabe sobre cada um:"]
+        for nome in self.campos:
+            campo = self._vocabulario_por_nome.get(nome)
+            if campo is None:
+                linhas.append(f"- {nome}")
+                continue
+            partes_do_campo = [f"- {nome}"]
+            if campo.descricao:
+                partes_do_campo.append(f": {campo.descricao}")
+            if campo.unidade:
+                partes_do_campo.append(f" (unidade: {campo.unidade})")
+            if campo.opcoes:
+                partes_do_campo.append(
+                    f" — valores aceitos: {', '.join(campo.opcoes)}"
+                )
+            if campo.faixa:
+                minimo, maximo = campo.faixa
+                partes_do_campo.append(f" — faixa válida: {minimo} a {maximo}")
+            linhas.append("".join(partes_do_campo))
+        return "\n".join(linhas)
 
     def _schema(self) -> dict:
         return {
@@ -289,20 +331,30 @@ class ExtratorModelo(ExtratorBaseadoEmModelo):
         *,
         instrucao: str | None = None,
         ordem_das_colunas: list[str] | None = None,
+        vocabulario: list[Any] | None = None,
         degrau_maximo: Any = None,
         raciocinar: bool = False,
         tokens_maximos: int | None = None,
         contexto: int | None = None,
+        contexto_automatico: bool = False,
+        nativo: int | None = None,
         semente: int | None = None,
         temperatura: float = 0.0,
     ) -> None:
         """
         Args:
+            vocabulario: ver `ExtratorBaseadoEmModelo`. Enriquece o prompt;
+                não muda o schema pedido ao servidor — o conjunto de campos
+                continua sendo `campos`.
             contexto: teto de entrada **mais** saída. Aqui a entrada é o texto já
                 extraído, bem menor que uma imagem — medido, ~1800 tokens contra
                 ~2200 —, e por isso esta rota raramente esbarra no padrão do
                 servidor. Continua declarável: página densa ou modelo com
                 contexto menor mudam a conta (ADR-0018).
+            contexto_automatico: sem `contexto`, mede a entrada de cada chamada
+                e calcula o contexto a partir dela (`parser.contexto`), em vez
+                de herdar o padrão do servidor. Ver `SaidaEmDegraus`.
+            nativo: teto de contexto do modelo, usado só com `contexto_automatico`.
             semente: fixa a amostragem. Sem ela a geração é irrepetível, e a
                 diferença entre máquinas vira indistinguível de ruído (ADR-0020).
             temperatura: zero por padrão — extração não tem criatividade a
@@ -311,7 +363,11 @@ class ExtratorModelo(ExtratorBaseadoEmModelo):
         from parser.degraus import SaidaEmDegraus
 
         super().__init__(
-            cliente, campos, instrucao=instrucao, ordem_das_colunas=ordem_das_colunas
+            cliente,
+            campos,
+            instrucao=instrucao,
+            ordem_das_colunas=ordem_das_colunas,
+            vocabulario=vocabulario,
         )
         self.saida = SaidaEmDegraus(
             cliente,
@@ -320,6 +376,8 @@ class ExtratorModelo(ExtratorBaseadoEmModelo):
             raciocinar=raciocinar,
             tokens_maximos=tokens_maximos,
             contexto=contexto,
+            contexto_automatico=contexto_automatico,
+            nativo=nativo,
             semente=semente,
             temperatura=temperatura,
         )

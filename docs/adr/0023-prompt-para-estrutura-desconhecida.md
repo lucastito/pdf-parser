@@ -1,6 +1,11 @@
 # ADR-0023 — Prompt para documento de estrutura desconhecida
 
-**Status:** proposto · **Data:** 2026-08-01
+**Status:** aceito · **Data:** 2026-08-01 · **Implementado (Cenário B):** 2026-08-11/12
+
+> Via ADR-0025 (`parser.planejador` descobre a ordem de colunas por
+> geometria e `parser.fabrica` a aplica ao prompt, com precedência sobre
+> qualquer `campos_na_ordem` declarado no perfil). O Cenário A não usa este
+> caminho ainda — continua digitando a ordem à mão no perfil.
 
 ## Contexto
 

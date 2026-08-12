@@ -10,13 +10,35 @@ arquivo de configuração. Esta camada traduz entre os dois.
 
 from __future__ import annotations
 
-from typing import Callable
+from dataclasses import replace
+from pathlib import Path
+from typing import TYPE_CHECKING, Callable
 
 from parser.configuracao import ConfiguracaoInvalida, Perfil, Rota, carregar_prompt
 from parser.extratores.posicional import ExtratorPosicional, LayoutTabela
-from parser.portas import Extrator
+from parser.portas import DocumentoCanonico, Extrator
 
-__all__ = ["ROTAS", "montar_extrator", "montar_todas"]
+if TYPE_CHECKING:
+    from parser.planejador import DecisaoDeRota
+    from parser.vocabulario import CampoEsperado
+
+__all__ = [
+    "ROTAS",
+    "RotaNaoConfigurada",
+    "montar_extrator",
+    "montar_extrator_para_decisao",
+    "montar_todas",
+]
+
+
+class RotaNaoConfigurada(Exception):
+    """A rota que o roteador decidiu (`parser.planejador`) exige configuração
+    que não foi informada — por exemplo, nível 3 sem nenhum modelo declarado.
+
+    Diferente de `ConfiguracaoInvalida`: aqui a ausência é esperada (nem todo
+    lote tem modelo configurado) e quem chama trata como pendência para
+    revisão humana, não como erro de operador.
+    """
 
 
 def _posicional(perfil: Perfil, rota: Rota) -> Extrator:
@@ -99,39 +121,55 @@ def _degrau_maximo(rota: Rota):
         ) from erro
 
 
-def _llm(perfil: Perfil, rota: Rota) -> Extrator:
+def _llm(
+    perfil: Perfil, rota: Rota, *, vocabulario: list[CampoEsperado] | None = None
+) -> Extrator:
     from parser.ollama import ExtratorModelo
 
+    contexto = rota.extras.get("contexto")
     return ExtratorModelo(
         _cliente(rota),
-        _campos(rota),
+        _campos(rota, vocabulario),
         instrucao=_instrucao(rota),
+        vocabulario=vocabulario,
         # A ordem dos cabeçalhos corrige o deslocamento de coluna, e o perfil
         # já a declarava para as rotas determinísticas — faltava chegar aqui.
         ordem_das_colunas=rota.campos_na_ordem or perfil.campos_na_ordem or None,
         degrau_maximo=_degrau_maximo(rota),
         raciocinar=bool(rota.extras.get("raciocinar", False)),
         tokens_maximos=rota.extras.get("tokens_maximos"),
-        contexto=rota.extras.get("contexto"),
+        # Sem 'contexto' declarado no perfil, mede a entrada de cada chamada e
+        # calcula o teto a partir dela (ADR-0018) — nunca herda o padrão do
+        # servidor. Com 'contexto' declarado, vale ele, sem medição: é o que
+        # torna uma bateria de experimento comparável entre máquinas.
+        contexto=contexto,
+        contexto_automatico=contexto is None,
+        nativo=rota.extras.get("nativo"),
         semente=rota.extras.get("semente"),
         temperatura=float(rota.extras.get("temperatura", 0.0)),
     )
 
 
-def _vlm(perfil: Perfil, rota: Rota) -> Extrator:
+def _vlm(
+    perfil: Perfil, rota: Rota, *, vocabulario: list[CampoEsperado] | None = None
+) -> Extrator:
     from parser.extratores.vlm import ExtratorVLM
 
+    contexto = rota.extras.get("contexto")
     return ExtratorVLM(
         _cliente(rota),
-        _campos(rota),
+        _campos(rota, vocabulario),
         _documento(perfil),
         instrucao=_instrucao(rota),
+        vocabulario=vocabulario,
         ordem_das_colunas=rota.campos_na_ordem or perfil.campos_na_ordem or None,
         dpi=rota.dpi,
         degrau_maximo=_degrau_maximo(rota),
         raciocinar=bool(rota.extras.get("raciocinar", False)),
         tokens_maximos=rota.extras.get("tokens_maximos"),
-        contexto=rota.extras.get("contexto"),
+        contexto=contexto,
+        contexto_automatico=contexto is None,
+        nativo=rota.extras.get("nativo"),
         semente=rota.extras.get("semente"),
         temperatura=float(rota.extras.get("temperatura", 0.0)),
     )
@@ -180,13 +218,159 @@ def montar_todas(perfil: Perfil, *, incluir_modelos: bool = True) -> dict[str, E
     """
     montadas: dict[str, Extrator] = {}
     for nome in perfil.rotas:
-        if not incluir_modelos and nome in ("llm", "vlm"):
+        # Compara pela função de montagem, não pelo nome: "vlm-menor" e
+        # "llm-menor" também usam modelo (ROTAS.get() as mapeia para a mesma
+        # `_llm`/`_vlm`), e um filtro por string exata os deixava passar —
+        # quem pedisse `--sem-modelos` ainda carregava um modelo sem aviso.
+        if not incluir_modelos and ROTAS.get(nome) in (_llm, _vlm):
             continue
         try:
             montadas[nome] = montar_extrator(perfil, nome)
         except Exception as erro:  # noqa: BLE001 — a falha é dado, não interrupção
             print(f"  rota {nome!r} não montou: {type(erro).__name__}: {erro}")
     return montadas
+
+
+def montar_extrator_para_decisao(
+    decisao: DecisaoDeRota,
+    caminho: str | Path,
+    perfil: Perfil | None,
+    *,
+    vocabulario: list | None = None,
+) -> Extrator:
+    """Monta o extrator para uma página, a partir do que o roteador decidiu.
+
+    Ao contrário de `montar_extrator`, o layout e a ordem de colunas vêm da
+    própria decisão — descobertos por `parser.planejador`, nunca digitados no
+    perfil. O perfil só entra para as rotas de modelo, e só pelo que é
+    configuração legítima de negócio (qual modelo chamar, com que prompt) —
+    nunca por como o documento está estruturado.
+
+    Args:
+        vocabulario: os mesmos campos esperados que o roteador usou para
+            decidir `rota="palavra_chave"` — precisa ser o mesmo, para que a
+            extração real reproduza exatamente o que a decisão encontrou.
+
+    Levanta:
+        RotaNaoConfigurada: a rota decidida exige configuração ausente — nível
+            3 (`llm`/`vlm`) sem essa rota declarada no perfil, ou
+            `palavra_chave` sem o vocabulário que a decidiu. OCR não levanta
+            isto: sem layout declarado, autocalibra por página, e devolve
+            resultado vazio para a página em que isso falhar, em vez de erro.
+    """
+    if decisao.rota == "posicional":
+        return ExtratorPosicional(_layout(decisao.layout))
+
+    if decisao.rota == "consolidado":
+        if decisao.registros is None:
+            raise ConfiguracaoInvalida(
+                f"página {decisao.pagina}: decisão 'consolidado' sem registros anexados"
+            )
+        return _ExtratorPreComputado(decisao.registros)
+
+    if decisao.rota == "palavra_chave":
+        from parser.extratores.palavra_chave import ExtratorPorPalavraChave
+
+        if not vocabulario:
+            raise RotaNaoConfigurada(
+                f"página {decisao.pagina}: rota 'palavra_chave' decidida, mas "
+                "nenhum vocabulário foi informado para montar o extrator"
+            )
+        return ExtratorPorPalavraChave(vocabulario)
+
+    if decisao.rota == "pdfplumber":
+        from parser.extratores.pdfplumber_ import ExtratorPdfplumber
+
+        return ExtratorPdfplumber(
+            str(caminho),
+            paginas=range(decisao.pagina - 1, decisao.pagina),
+            campos=decisao.ordem_das_colunas,
+        )
+
+    if decisao.rota == "camelot":
+        from parser.extratores.camelot_ import ExtratorCamelot
+
+        return ExtratorCamelot(
+            str(caminho),
+            paginas=range(decisao.pagina - 1, decisao.pagina),
+            campos=decisao.ordem_das_colunas,
+        )
+
+    if decisao.rota == "pymupdf":
+        from parser.extratores.pymupdf_ import ExtratorPymupdf
+
+        return ExtratorPymupdf(
+            str(caminho), paginas=range(decisao.pagina - 1, decisao.pagina)
+        )
+
+    if decisao.rota == "ocr":
+        from parser.extratores.ocr import ExtratorOCR
+
+        # Sem layout declarado no perfil, `ExtratorOCR` autocalibra por página
+        # a partir das próprias palavras que o OCR reconhecer — layout do
+        # perfil, quando houver, continua valendo como alternativa (útil
+        # quando o ruído do OCR degrada a autocalibração num documento já
+        # conhecido).
+        layout = None
+        posicional = perfil.rotas.get("posicional") if perfil is not None else None
+        if posicional and posicional.layout:
+            layout = _layout(posicional.layout)
+
+        return ExtratorOCR(
+            str(caminho), layout=layout, paginas=range(decisao.pagina - 1, decisao.pagina)
+        )
+
+    if decisao.rota in ("llm", "vlm"):
+        if perfil is None:
+            raise RotaNaoConfigurada(
+                f"página {decisao.pagina}: rota {decisao.rota!r} necessária, mas "
+                "nenhum perfil com configuração de modelo foi informado"
+            )
+        try:
+            rota = perfil.rota(decisao.rota)
+        except ConfiguracaoInvalida as erro:
+            raise RotaNaoConfigurada(
+                f"página {decisao.pagina}: rota {decisao.rota!r} necessária, mas o "
+                f"perfil não a declara ({erro})"
+            ) from erro
+
+        # A ordem de colunas descoberta pelo roteador tem precedência sobre a
+        # declarada no perfil — é o que ADR-0023 pede: o prompt reflete o que
+        # foi detectado neste documento, não o que alguém digitou uma vez.
+        if decisao.ordem_das_colunas:
+            rota = replace(rota, campos_na_ordem=decisao.ordem_das_colunas)
+
+        montar = _llm if decisao.rota == "llm" else _vlm
+        return montar(perfil, rota, vocabulario=vocabulario)
+
+    raise ConfiguracaoInvalida(f"decisão de rota {decisao.rota!r} não sabe montar extrator")
+
+
+class _ExtratorPreComputado:
+    """`Extrator` cujo resultado já foi calculado no planejamento.
+
+    Usado só pela rota `"consolidado"`: o dado real é a votação célula a
+    célula que `parser.planejador` já executou para decidir a rota — rodar
+    de novo as mesmas ferramentas determinísticas aqui duplicaria o trabalho
+    sem nenhum ganho, porque a votação é determinística.
+
+    `fonte` não vem gravado no registro pré-computado — carrega o
+    identificador de quando a decisão foi tomada, que é um valor de
+    trabalho interno do planejador, não o documento real. É reestampado a
+    partir de `documento` a cada chamada, exatamente como qualquer outro
+    extrator faz.
+    """
+
+    def __init__(self, registros: list[dict]) -> None:
+        self._registros = registros
+
+    def extrair(self, documento: DocumentoCanonico) -> list:
+        from parser.modelo import Registro
+
+        return [
+            Registro.model_validate({**r, "fonte": documento.identificador})
+            for r in self._registros
+        ]
 
 
 def _documento(perfil: Perfil) -> str:
@@ -197,13 +381,24 @@ def _documento(perfil: Perfil) -> str:
     return perfil.documento
 
 
-def _campos(rota: Rota) -> list[str]:
+def _campos(rota: Rota, vocabulario: list[CampoEsperado] | None = None) -> list[str]:
+    """Os nomes de campo que restringem a saída do modelo.
+
+    `extras["campos"]` declarado no perfil tem precedência — é a forma
+    explícita, e continua valendo mesmo com vocabulário informado, para quem
+    quiser restringir a um subconjunto. Sem ele, deriva do vocabulário: é o
+    que evita declarar a mesma lista de campos duas vezes, uma para a
+    palavra-chave e outra para o modelo (`parser.vocabulario`).
+    """
     campos = rota.extras.get("campos")
-    if not campos:
-        raise ConfiguracaoInvalida(
-            f"rota {rota.nome!r} exige 'campos' — a lista que restringe a saída do modelo"
-        )
-    return campos
+    if campos:
+        return campos
+    if vocabulario:
+        return [c.nome for c in vocabulario]
+    raise ConfiguracaoInvalida(
+        f"rota {rota.nome!r} exige 'campos' — a lista que restringe a saída do modelo "
+        "(ou um vocabulário declarado, que a supre automaticamente)"
+    )
 
 
 def _cliente(rota: Rota):

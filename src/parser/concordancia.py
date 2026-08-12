@@ -19,6 +19,7 @@ estratégias divergem são os mais informativos.
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass, field
 from itertools import combinations
 from typing import Any
@@ -64,6 +65,18 @@ class ResultadoConcordancia:
     por_par: dict[str, float] = field(default_factory=dict)
     por_campo: dict[str, float] = field(default_factory=dict)
     divergencias: list[Divergencia] = field(default_factory=list)
+    itens_exclusivos: dict[str, int] = field(default_factory=dict)
+    """Quantos itens de cada estratégia **não** entraram em `itens_comuns`.
+
+    Existe porque a interseção, sozinha, é cega a fabricação: uma estratégia
+    que inventa linhas extras nunca teve essas linhas comparadas contra
+    nada — elas caem fora da conta antes de qualquer campo ser olhado, e a
+    taxa de concordância sai perfeita mesmo com a rota dobrando o número de
+    itens da página (achado da auditoria de 2026-08-02, `concordancia.py:198`).
+    Isto não decide sozinho que a diferença é invenção — sem gabarito, item
+    exclusivo também pode ser cobertura genuína que as outras erraram —, mas
+    deixa de ser invisível.
+    """
 
     @property
     def taxa(self) -> float:
@@ -92,6 +105,16 @@ class ResultadoConcordancia:
             f"concordância geral     : {self.taxa:.1%} "
             f"({self.concordantes}/{self.comparacoes})",
         ]
+        exclusivos = {n: q for n, q in self.itens_exclusivos.items() if q}
+        if exclusivos:
+            linhas.append(
+                "\nitens fora da interseção (não entraram na concordância acima):"
+            )
+            for nome, quantos in sorted(exclusivos.items(), key=lambda x: -x[1]):
+                linhas.append(
+                    f"  {nome:20s} {quantos} — sem gabarito, pode ser cobertura "
+                    "genuína ou item fabricado; investigue antes de confiar"
+                )
         if self.por_par:
             linhas.append("\nconcordância por par:")
             for par, taxa in sorted(self.por_par.items(), key=lambda x: -x[1]):
@@ -161,6 +184,43 @@ def _valor(campo: dict) -> Any:
     return campo.get("valor")
 
 
+def _chave_de_item(identificador: str) -> str:
+    """Forma normalizada usada **só para casar** o mesmo item entre estratégias.
+
+    Medido sobre saídas reais: apenas 81 de ~283 itens apareciam nas quatro
+    rotas de um mesmo documento. A causa dominante não é acento — é **espaço
+    espúrio no meio da palavra**, que um extrator de tabela insere ao atravessar
+    a quebra de coluna num cabeçalho rotacionado: `Arroz, integra l` e
+    `Arroz, integral` são o mesmo item, e viravam dois itens de um voto cada.
+
+    Remover **todo** espaço é agressivo de propósito, e seguro aqui porque o
+    identificador costuma carregar o número do item: `100 Brocolis, cozido` e
+    `101 Brocolis, cru` continuam distintos. Fosse só o nome, colapsaria
+    demais — misturar itens diferentes é pior que não alinhar.
+
+    Compartilhado com `parser.consolidacao`, que decide a partir da mesma
+    normalização — as duas contam o mesmo item da mesma forma, ou a
+    concordância medida aqui e a votação decidida lá divergiriam sem motivo.
+    """
+    sem_acento = unicodedata.normalize("NFKD", identificador)
+    sem_acento = "".join(c for c in sem_acento if not unicodedata.combining(c))
+    return "".join(sem_acento.split()).casefold()
+
+
+def _mais_legivel(a: str, b: str) -> str:
+    """Entre duas grafias do mesmo item, a que aparece nos relatórios.
+
+    Critério: menos espaços vence — `Arroz, integral` sobre `Arroz, integra l`.
+    Empatando, a que tem acento, forma correta em português. A chave
+    normalizada serve para casar; ninguém quer lê-la.
+    """
+    if a.count(" ") != b.count(" "):
+        return a if a.count(" ") < b.count(" ") else b
+    acentos = sum(1 for c in unicodedata.normalize("NFKD", a) if unicodedata.combining(c))
+    outros = sum(1 for c in unicodedata.normalize("NFKD", b) if unicodedata.combining(c))
+    return a if acentos >= outros else b
+
+
 def _indexar(dados: list[dict], chave_item: str) -> dict[str, dict[str, Any]]:
     """Indexa registros pelo identificador, com os valores achatados."""
     indice = {}
@@ -184,11 +244,31 @@ def comparar_estrategias(
         saidas: estratégia → lista de registros serializados.
         chave_item: campo que identifica o item, para alinhar as saídas.
 
-    Só itens presentes em **todas** as estratégias entram: comparar item ausente
-    numa delas mediria cobertura, não concordância, e as duas coisas já são
-    medidas separadamente.
+    Só itens presentes em **todas** as estratégias entram na conta de
+    concordância por campo: comparar item ausente numa delas mediria cobertura,
+    não concordância, e as duas coisas já são medidas separadamente. Itens que
+    ficam de fora são contados em `itens_exclusivos` — nunca descartados em
+    silêncio.
     """
-    indices = {nome: _indexar(dados, chave_item) for nome, dados in saidas.items()}
+    brutos = {nome: _indexar(dados, chave_item) for nome, dados in saidas.items()}
+
+    # Reindexa pela forma normalizada, guardando à parte a grafia mais legível
+    # para exibir. Sem isto, "Arroz, integra l" e "Arroz, integral" contam como
+    # dois itens de um voto cada e nenhum dos dois entra na interseção — o
+    # item deixa de ser "comum" por causa de um espaço espúrio, não por ter
+    # sido lido só por uma rota (mesma normalização de `parser.consolidacao`).
+    indices: dict[str, dict[str, dict[str, Any]]] = {}
+    rotulos: dict[str, str] = {}
+    for nome, indice in brutos.items():
+        indices[nome] = {}
+        for identificador, campos_lidos in indice.items():
+            chave = _chave_de_item(identificador)
+            indices[nome][chave] = campos_lidos
+            anterior = rotulos.get(chave)
+            rotulos[chave] = (
+                identificador if anterior is None else _mais_legivel(anterior, identificador)
+            )
+
     estrategias = [n for n, i in indices.items() if i]
 
     resultado = ResultadoConcordancia(estrategias=estrategias)
@@ -197,19 +277,22 @@ def comparar_estrategias(
 
     comuns = set.intersection(*(set(indices[n]) for n in estrategias))
     resultado.itens_comuns = len(comuns)
+    resultado.itens_exclusivos = {
+        nome: len(set(indices[nome]) - comuns) for nome in estrategias
+    }
     if not comuns:
         return resultado
 
     acertos_par: dict[str, list[int]] = {}
     acertos_campo: dict[str, list[int]] = {}
 
-    for item in sorted(comuns):
+    for chave in sorted(comuns):
         campos = set()
         for nome in estrategias:
-            campos |= set(indices[nome][item])
+            campos |= set(indices[nome][chave])
 
         for campo in sorted(campos):
-            valores = {n: indices[n][item].get(campo) for n in estrategias}
+            valores = {n: indices[n][chave].get(campo) for n in estrategias}
             # Campo ausente em todas não informa nada sobre concordância.
             if all(v is None for v in valores.values()):
                 continue
@@ -228,7 +311,7 @@ def comparar_estrategias(
 
             if houve_divergencia:
                 resultado.divergencias.append(
-                    Divergencia(item=item, campo=campo, valores=valores)
+                    Divergencia(item=rotulos[chave], campo=campo, valores=valores)
                 )
 
     resultado.por_par = {par: sum(v) / len(v) for par, v in acertos_par.items() if v}

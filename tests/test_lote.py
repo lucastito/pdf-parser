@@ -62,6 +62,36 @@ class TestDescobertaDeArquivos:
         assert len(Lote(pasta_com_pdfs).arquivos()) == 4
 
 
+class TestFormatoDeclaravelNaoImplementado:
+    """XLSX, DOCX, imagem etc. são declaráveis no perfil e falham alto — nunca
+    desaparecem em silêncio, como um arquivo qualquer solto na pasta (README).
+    """
+
+    def test_xlsx_e_contado_e_falha_explicito(self, tmp_path):
+        pasta = tmp_path / "entrada"
+        pasta.mkdir()
+        (pasta / "planilha.xlsx").write_bytes(b"nao importa o conteudo")
+
+        resultado = ingerir(pasta)
+
+        assert resultado.arquivos_encontrados == 1
+        assert len(resultado.falhas) == 1
+        assert "xlsx" in resultado.falhas[0].motivo.lower()
+
+    def test_extensao_desconhecida_continua_ignorada(self, tmp_path):
+        """Diferente do xlsx: `.txt` não é vocabulário do projeto — some da
+        contagem, como antes, para não virar falha ruidosa por um arquivo
+        qualquer solto na pasta do cliente."""
+        pasta = tmp_path / "entrada"
+        pasta.mkdir()
+        (pasta / "leiame.txt").write_text("nada", encoding="utf-8")
+
+        resultado = ingerir(pasta)
+
+        assert resultado.arquivos_encontrados == 0
+        assert not resultado.falhas
+
+
 class TestResiliencia:
     """Um arquivo problemático não pode custar o lote inteiro."""
 
@@ -353,6 +383,105 @@ class TestUnidadeEEsquemaNoLote:
             c.origem for r in resultado.registros for c in r.campos.values() if c.preenchido
         }
         assert Origem.DERIVADO not in origens, "converteu sem regra declarada"
+
+
+class TestRoteamentoPorPagina:
+    """`calibrar_por_arquivo=True` (o padrão) decide a rota por página, sem
+    layout nem ordem de colunas declarados no perfil — é o que permite ao
+    lote aceitar um documento que ele nunca viu."""
+
+    def test_tabela_reconhecivel_por_geometria_produz_registros_sem_perfil(
+        self, tmp_path, pdf_tabela_calibravel
+    ):
+        import shutil
+
+        pasta = tmp_path / "entrada"
+        pasta.mkdir()
+        shutil.copy(pdf_tabela_calibravel, pasta / "doc.pdf")
+
+        resultado = ingerir(pasta)
+
+        assert resultado.processados == 1
+        assert resultado.registros
+        assert any("posicional" in linha for linha in resultado.log)
+
+    def test_pagina_sem_estrutura_reconhecida_nao_trava_as_demais(
+        self, tmp_path, pdf_tabela_calibravel, pdf_tabela_sem_unidade_reconhecivel
+    ):
+        """Sem perfil, uma tabela que a geometria não reconhece precisaria de
+        modelo (nível 3) — que não está configurado. Isso é pendência para
+        aquele arquivo, não um motivo para os outros pararem."""
+        import shutil
+
+        pasta = tmp_path / "entrada"
+        pasta.mkdir()
+        shutil.copy(pdf_tabela_calibravel, pasta / "reconhecivel.pdf")
+        shutil.copy(pdf_tabela_sem_unidade_reconhecivel, pasta / "nao-reconhecivel.pdf")
+
+        resultado = ingerir(pasta)
+
+        assert resultado.processados == 1
+        assert len(resultado.falhas) == 1
+        assert "nao-reconhecivel" in resultado.falhas[0].arquivo
+
+
+class TestVocabularioNoLote:
+    """Nível 2b de ponta a ponta: página sem tabela, com vocabulário
+    declarado, produz registro sem precisar de modelo algum."""
+
+    @pytest.fixture
+    def pdf_contexto_com_valor(self, tmp_path):
+        import fitz
+
+        caminho = tmp_path / "contexto-com-valor.pdf"
+        documento = fitz.open()
+        pagina = documento.new_page()
+        texto = (
+            "Este relatorio descreve o contexto geral do projeto e resume as "
+            "condicoes observadas em campo. Water Depth: 1850 m. Nenhuma "
+            "tabela de valores aparece nesta pagina em particular."
+        )
+        for i, palavra in enumerate(texto.split()):
+            pagina.insert_text((72 + (i % 8) * 60, 100 + (i // 8) * 20), palavra)
+        documento.save(caminho)
+        documento.close()
+        return caminho
+
+    def test_acha_valor_sem_tabela_e_sem_perfil_de_modelo(
+        self, tmp_path, pdf_contexto_com_valor
+    ):
+        import shutil
+
+        from parser.vocabulario import CampoEsperado
+
+        pasta = tmp_path / "entrada"
+        pasta.mkdir()
+        shutil.copy(pdf_contexto_com_valor, pasta / "doc.pdf")
+        vocabulario = [CampoEsperado(nome="profundidade", sinonimos=("Water Depth",))]
+
+        resultado = ingerir(pasta, vocabulario=vocabulario)
+
+        assert resultado.processados == 1
+        assert resultado.registros
+        assert resultado.registros[0].campos["profundidade"].valor == 1850.0
+        assert any("palavra_chave" in linha for linha in resultado.log)
+
+    def test_sem_vocabulario_a_mesma_pagina_vira_pendencia_de_llm(
+        self, tmp_path, pdf_contexto_com_valor
+    ):
+        """Sem vocabulário, o nível 2b não roda — a página escala pro modelo,
+        que sem perfil configurado vira pendência. Mesma página, resultado
+        bem diferente: é o vocabulário que faz a diferença, não o documento."""
+        import shutil
+
+        pasta = tmp_path / "entrada"
+        pasta.mkdir()
+        shutil.copy(pdf_contexto_com_valor, pasta / "doc.pdf")
+
+        resultado = ingerir(pasta)
+
+        assert resultado.processados == 0
+        assert len(resultado.falhas) == 1
 
 
 class TestFalhaDeConfiguracaoNaoEEngolida:

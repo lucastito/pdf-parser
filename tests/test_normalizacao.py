@@ -44,6 +44,20 @@ class TestDecimalComVirgula:
         valor, _ = parse_numero("1.405,5")
         assert valor == pytest.approx(1405.5)
 
+    def test_varios_pontos_de_milhar_sem_decimal_algum(self):
+        """Coordenada UTM real, citada em prosa num PDF de um cenário
+        corporativo: dois pontos, nenhuma vírgula. `float()` cru rejeita a
+        string inteira — a leitura correta é que os dois pontos são milhar,
+        não que o segundo é decimal.
+        """
+        valor, sentinela = parse_numero("112.797.661")
+        assert valor == pytest.approx(112797661.0)
+        assert sentinela is None
+
+    def test_varias_virgulas_de_milhar_sem_decimal_algum(self):
+        valor, _ = parse_numero("112,797,661")
+        assert valor == pytest.approx(112797661.0)
+
 
 class TestSentinelas:
     @pytest.mark.parametrize(
@@ -86,6 +100,18 @@ class TestValoresNaoReconhecidos:
     def test_mensagem_de_erro_cita_o_valor(self):
         with pytest.raises(ValorNaoReconhecido, match="xyz"):
             parse_numero("xyz")
+
+    def test_nunca_deixa_escapar_valueerror_bruto(self):
+        """O contrato é levantar só `ValorNaoReconhecido` — um `ValueError`
+        cru derrubaria o registro (ou o arquivo) inteiro por um valor
+        isolado, quando o comportamento correto é tratá-lo como não
+        reconhecido, igual a qualquer outro texto que não é número."""
+        try:
+            parse_numero("1.2.3.4")
+        except ValorNaoReconhecido:
+            pass  # comportamento esperado
+        except ValueError:
+            pytest.fail("escapou um ValueError que não é ValorNaoReconhecido")
 
 
 class TestNormalizacaoDeTexto:

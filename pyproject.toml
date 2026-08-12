@@ -8,6 +8,12 @@ dependencies = [
     "pymupdf>=1.24",
     "pint>=0.24",
     "pandera>=0.20",
+    # Usadas por src/parser/extratores/ e roteamento por página, sem estar
+    # declaradas até aqui — funcionava por arrasto de outra instalação.
+    "pdfplumber>=0.11",
+    "camelot-py[cv]>=0.11",
+    "pytesseract>=0.3",
+    "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]
@@ -21,6 +27,15 @@ dev = [
     # quebraria num clone limpo, que é onde ninguém está olhando.
     "pyyaml>=6.0",
 ]
+# Só o Cenário A (experimento multimáquina) usa isto — `procedencia.py` e
+# `medicao.py` leem processo e hardware para a trava de execução concorrente
+# entre máquinas emprestadas. Cenário B roda num servidor só e não importa
+# nenhum dos dois módulos. Extra separado em vez de `dependencies`: instalar
+# o mínimo pra produção não deveria puxar uma dependência que produção nunca
+# importa.
+experimento = [
+    "psutil>=5.9",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -33,6 +48,9 @@ where = ["src"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
+markers = [
+    "experimento_a: só faz sentido no cenário de pesquisa (A) — trava de execução concorrente entre máquinas de experimento, alocação de modelo por máquina emprestada. Não roda em produção (B), que opera num servidor só. Rodar tudo, exceto isto: `pytest -m \"not experimento_a\"`.",
+]
 
 [tool.black]
 line-length = 95

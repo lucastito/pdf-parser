@@ -54,6 +54,62 @@ def _saida(transporte, **kwargs) -> SaidaEmDegraus:
     return SaidaEmDegraus(cliente, CAMPOS, **kwargs)
 
 
+class TestContextoAutomatico:
+    """Sem `contexto` declarado no perfil, o valor não pode vir do padrão do
+    servidor (ADR-0018) — mede a entrada desta chamada e calcula a partir
+    dela. Quem constrói a classe direto e não pede isto mantém o
+    comportamento de sempre: nenhuma sondagem, nenhum `num_ctx` enviado."""
+
+    def test_sem_pedir_automatico_nao_sonda(self):
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+        _saida(transporte).obter("prompt")
+        assert len(transporte.chamadas) == 1
+        assert "num_ctx" not in transporte.chamadas[0]["options"]
+
+    def test_contexto_automatico_sonda_antes_da_chamada_real(self):
+        sondagem = {"response": "", "prompt_eval_count": 500}
+        real = {"response": json.dumps(ITENS), "prompt_eval_count": 500, "eval_count": 50}
+        transporte = TransporteRoteirizado(sondagem, real)
+
+        resultado = _saida(transporte, contexto_automatico=True).obter("prompt")
+
+        assert len(transporte.chamadas) == 2
+        assert transporte.chamadas[0]["options"] == {"num_predict": 1}
+        assert transporte.chamadas[1]["options"]["num_ctx"] == 4660  # (500+2607)*1.5
+        assert resultado.dados == ITENS
+
+    def test_contexto_declarado_tem_precedencia_e_nao_sonda(self):
+        """Bateria de experimento precisa do mesmo número entre chamadas —
+        sondar a cada vez tornaria a comparação instável (ADR-0013/0020)."""
+        transporte = TransporteRoteirizado({"response": json.dumps(ITENS)})
+
+        _saida(transporte, contexto=8192, contexto_automatico=True).obter("prompt")
+
+        assert len(transporte.chamadas) == 1
+        assert transporte.chamadas[0]["options"]["num_ctx"] == 8192
+
+    def test_contexto_usado_fica_registrado_no_uso(self):
+        """O número de fato enviado precisa ficar auditável, igual aos demais
+        contadores — nunca só no perfil, que pode dizer outra coisa."""
+        sondagem = {"response": "", "prompt_eval_count": 500}
+        real = {"response": json.dumps(ITENS), "prompt_eval_count": 500, "eval_count": 50}
+        transporte = TransporteRoteirizado(sondagem, real)
+        saida = _saida(transporte, contexto_automatico=True)
+
+        saida.obter("prompt")
+
+        assert saida._ultimo_uso.contexto_usado == 4660
+
+    def test_nativo_limita_o_contexto_automatico(self):
+        sondagem = {"response": "", "prompt_eval_count": 500}
+        real = {"response": json.dumps(ITENS), "prompt_eval_count": 500, "eval_count": 50}
+        transporte = TransporteRoteirizado(sondagem, real)
+
+        _saida(transporte, contexto_automatico=True, nativo=2000).obter("prompt")
+
+        assert transporte.chamadas[1]["options"]["num_ctx"] == 2000
+
+
 class TestPrimeiroDegrau:
     """Quando o esquema funciona, não se desce — descer custaria validação a mais."""
 

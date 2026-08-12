@@ -3,6 +3,14 @@
 > Especificação **antes** do código (SDD). Testes antes da implementação (TDD).
 > Esta spec descreve a **fatia 1**; o que está fora dela é marcado como *(fora da fatia 1)*.
 > Requisitos numerados em [REQUISITOS.md](REQUISITOS.md). Decisões em [docs/adr/](docs/adr/).
+>
+> **O que veio depois da fatia 1 não está descrito aqui, de propósito** — esta
+> spec não foi reescrita a cada evolução. Consolidação por campo (ADR-0017),
+> taxonomia de características (ADR-0021), política de prompt (ADR-0022),
+> prompt montado do diagnóstico (ADR-0023), reconhecimento em três níveis de
+> custo (ADR-0024) e o roteador de extração por página (ADR-0025, em produção
+> no Cenário B) vivem nos próprios ADRs e em [PLANO.md](PLANO.md) — que é o
+> ponto de retomada atualizado, este arquivo não é.
 
 ## 1. Problema
 

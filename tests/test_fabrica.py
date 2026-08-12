@@ -14,7 +14,14 @@ Nada aqui contacta servidor nem lê documento: montar é só construir o objeto.
 import pytest
 
 from parser.configuracao import ConfiguracaoInvalida, Perfil, Rota
-from parser.fabrica import ROTAS, montar_extrator, montar_todas
+from parser.fabrica import (
+    ROTAS,
+    RotaNaoConfigurada,
+    montar_extrator,
+    montar_extrator_para_decisao,
+    montar_todas,
+)
+from parser.planejador import DecisaoDeRota
 from parser.portas import Extrator
 
 
@@ -121,6 +128,90 @@ class TestRotasDeModelo:
         assert "documento" in str(erro.value)
 
 
+class TestMontarExtratorParaDecisao:
+    """A ponte entre o roteador (`parser.planejador`) e os extratores.
+
+    Diferente de `montar_extrator`, o layout/ordem de colunas vêm da decisão —
+    nunca do perfil. O perfil só entra para dizer *qual modelo* chamar, que é
+    configuração de negócio, não leitura do documento.
+    """
+
+    def test_posicional_usa_o_layout_da_decisao_sem_perfil(self):
+        decisao = DecisaoDeRota(
+            pagina=1, rota="posicional", nivel=2, motivo="teste", layout=LAYOUT
+        )
+        assert isinstance(montar_extrator_para_decisao(decisao, "doc.pdf", None), Extrator)
+
+    def test_ocr_usa_layout_declarado_no_perfil_como_alternativa(self):
+        decisao = DecisaoDeRota(pagina=3, rota="ocr", nivel=1, motivo="sem texto")
+        perfil = _perfil(posicional=Rota(nome="posicional", layout=LAYOUT))
+        assert isinstance(
+            montar_extrator_para_decisao(decisao, "doc.pdf", perfil), Extrator
+        )
+
+    def test_ocr_sem_layout_no_perfil_ainda_monta_extrator(self):
+        """Sem layout declarado, `ExtratorOCR` autocalibra por página — não é
+        mais pendência de configuração, é comportamento padrão."""
+        decisao = DecisaoDeRota(pagina=3, rota="ocr", nivel=1, motivo="sem texto")
+        extrator = montar_extrator_para_decisao(decisao, "doc.pdf", None)
+        assert isinstance(extrator, Extrator)
+        assert extrator.layout is None
+
+    def test_llm_sem_perfil_vira_pendencia_explicita(self):
+        decisao = DecisaoDeRota(pagina=5, rota="llm", nivel=3, motivo="geometria falhou")
+        with pytest.raises(RotaNaoConfigurada):
+            montar_extrator_para_decisao(decisao, "doc.pdf", None)
+
+    def test_palavra_chave_monta_com_o_vocabulario_informado(self):
+        from parser.vocabulario import CampoEsperado
+
+        decisao = DecisaoDeRota(
+            pagina=2, rota="palavra_chave", nivel=2, motivo="achou 1 campo"
+        )
+        vocabulario = [CampoEsperado(nome="x")]
+
+        extrator = montar_extrator_para_decisao(
+            decisao, "doc.pdf", None, vocabulario=vocabulario
+        )
+
+        assert isinstance(extrator, Extrator)
+        assert extrator.campos == vocabulario
+
+    def test_palavra_chave_sem_vocabulario_vira_pendencia_explicita(self):
+        decisao = DecisaoDeRota(
+            pagina=2, rota="palavra_chave", nivel=2, motivo="achou 1 campo"
+        )
+        with pytest.raises(RotaNaoConfigurada):
+            montar_extrator_para_decisao(decisao, "doc.pdf", None)
+
+    def test_llm_sem_rota_declarada_no_perfil_vira_pendencia_explicita(self):
+        decisao = DecisaoDeRota(pagina=5, rota="llm", nivel=3, motivo="geometria falhou")
+        with pytest.raises(RotaNaoConfigurada):
+            montar_extrator_para_decisao(decisao, "doc.pdf", _perfil())
+
+    def test_llm_usa_a_ordem_de_colunas_descoberta_pelo_roteador(self):
+        """ADR-0023: a ordem vem do que foi detectado neste documento, não do
+        que alguém digitou uma vez no perfil — mesmo quando o perfil declara
+        uma ordem diferente."""
+        decisao = DecisaoDeRota(
+            pagina=5,
+            rota="llm",
+            nivel=3,
+            motivo="geometria falhou",
+            ordem_das_colunas=["Descoberto A", "Descoberto B"],
+        )
+        perfil = _perfil(
+            llm=Rota(
+                nome="llm",
+                modelo="m:4b",
+                extras={"campos": ["a", "b"]},
+                campos_na_ordem=["Digitado A", "Digitado B"],
+            )
+        )
+        extrator = montar_extrator_para_decisao(decisao, "doc.pdf", perfil)
+        assert extrator.ordem_das_colunas == ["Descoberto A", "Descoberto B"]
+
+
 class TestMontarTodas:
     def test_monta_as_rotas_declaradas(self):
         perfil = _perfil(
@@ -133,6 +224,19 @@ class TestMontarTodas:
         perfil = _perfil(
             posicional=Rota(nome="posicional", layout=LAYOUT),
             vlm=Rota(nome="vlm", modelo="m:4b", extras={"campos": ["a"]}),
+        )
+        assert set(montar_todas(perfil, incluir_modelos=False)) == {"posicional"}
+
+    def test_exclui_tambem_as_variantes_menores_de_modelo(self):
+        """`vlm-menor`/`llm-menor` também usam modelo — um filtro por nome
+        exato as deixava passar, e quem pedisse `--sem-modelos` carregava um
+        modelo do mesmo jeito, sem aviso."""
+        perfil = _perfil(
+            posicional=Rota(nome="posicional", layout=LAYOUT),
+            **{
+                "vlm-menor": Rota(nome="vlm-menor", modelo="m:1b", extras={"campos": ["a"]}),
+                "llm-menor": Rota(nome="llm-menor", modelo="m:1b", extras={"campos": ["a"]}),
+            },
         )
         assert set(montar_todas(perfil, incluir_modelos=False)) == {"posicional"}
 

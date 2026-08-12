@@ -4,6 +4,15 @@
 **Escopo:** código-fonte, testes, documentação, ADRs, scripts, configurações e artefatos experimentais presentes no repositório.  
 **Objetivo avaliado:** construir um parser híbrido — determinístico, OCR, LLM e VLM — capaz de extrair dados de PDFs heterogêneos e, paralelamente, produzir um benchmark publicável sobre modelos, rotas e restrições de hardware.
 
+> **Documento irmão:** [`experimentos/AUDITORIA-2026-08-02.md`](experimentos/AUDITORIA-2026-08-02.md)
+> é uma auditoria interna, do mesmo dia, em cinco frentes específicas do
+> repositório — os dois se somam.
+>
+> **Este documento é histórico — não é atualizado.** Congelado no estado em que
+> foi escrito. **O estado atual de cada achado P0 (aberto, fechado, parcial),
+> verificado no código, vive em [`PLANO.md`](PLANO.md)**, seção "Mapa completo
+> dos P0 da auditoria externa" — checado por último em 2026-08-12.
+
 ## 1. Parecer executivo
 
 O projeto tem uma fundação de engenharia acima da média para um trabalho ainda experimental. Há uma preocupação real com proveniência, distinção entre ausência e erro, unidades, validação, rotas substituíveis, registro de decisões e preservação de resultados negativos. A documentação não tenta esconder hipóteses refutadas, o que é excelente prática científica.

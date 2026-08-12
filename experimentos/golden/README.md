@@ -13,7 +13,7 @@ o documento original é o que dá sentido a todas as métricas.
 | Arquivo | Estado |
 |---|---|
 | `taco-para-conferir.csv` | **proposta**, ainda não conferida |
-| `taco.csv` | gabarito conferido (criar após a revisão) |
+| `taco.csv` | **gabarito conferido, já existe** — é o arquivo real contra o qual a matriz de avaliação compara todos os extratores hoje |
 
 ## Como conferir
 
@@ -61,3 +61,14 @@ NEPA/UNICAMP, 4ª edição ampliada e revisada, Campinas, 2011.
 A obra permite reprodução total ou parcial desde que citada a fonte — daí a
 inclusão destes dados aqui. Fontes cuja licença proíba redistribuição não entram
 neste diretório, mesmo quando disponíveis localmente.
+
+## Limite declarado, não corrigido (auditoria externa, 2026-08-02)
+
+`taco.csv` foi conferido por **uma pessoa só**, sem segundo anotador
+independente, sem cegamento e sem adjudicação de divergência — a
+`AUDITORIA_TECNICA_CIENTIFICA.md` (P0.3) aponta isso como risco real: um erro
+sistemático da própria pessoa que revisou sobrevive à conferência. O
+`holdout.csv` também deixou de ser um teste final independente no sentido
+estrito, porque já revelou bugs que foram corrigidos em resposta (P0.2) — ele
+funciona como conjunto de desenvolvimento avançado, não como holdout
+intocado. Ver `PLANO.md`, seção de pendências da auditoria externa.

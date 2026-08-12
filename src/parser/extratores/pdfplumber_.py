@@ -25,36 +25,29 @@ import os
 import tempfile
 from pathlib import Path
 
-from parser.extratores._tabular import registros_por_posicao
+from parser.extratores._tabular import registros_de_matriz, registros_por_posicao
 from parser.modelo import Registro
 from parser.portas import DocumentoCanonico
 
-__all__ = ["CAMPOS_NA_ORDEM", "ExtratorPdfplumber"]
+__all__ = ["ExtratorPdfplumber"]
 
 AJUSTES = {
     "vertical_strategy": "text",
     "horizontal_strategy": "text",
 }
 
-CAMPOS_NA_ORDEM = [
-    "Umidade (%)",
-    "Energia (kcal)",
-    "Energia (kJ)",
-    "Proteína (g)",
-    "Lipídeos (g)",
-    "Colesterol (mg)",
-    "Carboidrato (g)",
-    "Fibra Alimentar (g)",
-]
-"""Ordem em que os valores aparecem em cada linha do documento-caso.
-
-É configuração do documento, não do algoritmo: outro documento entra trocando esta
-lista. Vem da leitura do cabeçalho impresso, verificada contra o gabarito.
-"""
-
 
 class ExtratorPdfplumber:
-    """Usa a detecção de tabela do pdfplumber, sobre a página desrotacionada."""
+    """Usa a detecção de tabela do pdfplumber, sobre a página desrotacionada.
+
+    Não assume estrutura de documento nenhuma: `campos` — a ordem dos valores
+    numa linha — vem de fora (calibração geométrica, ou perfil explícito).
+    Sem `campos`, a tabela é montada pelo **cabeçalho que o pdfplumber
+    detectou**, não por uma ordem inventada aqui. Um extrator com fallback
+    próprio de nomes de campo produziria dado plausível e errado em qualquer
+    documento diferente daquele que o fallback tinha em mente — exatamente o
+    modo de falha que este projeto existe para evitar.
+    """
 
     def __init__(
         self,
@@ -66,7 +59,7 @@ class ExtratorPdfplumber:
     ) -> None:
         self.caminho_pdf = caminho_pdf
         self.paginas = paginas
-        self.campos = campos or CAMPOS_NA_ORDEM
+        self.campos = campos
         self.desrotacionar = desrotacionar
 
     def extrair(self, documento: DocumentoCanonico) -> list[Registro]:
@@ -83,15 +76,26 @@ class ExtratorPdfplumber:
                 for indice, pagina in enumerate(pdf.pages):
                     numero = mapa.get(indice, indice + 1)
                     for matriz in pagina.extract_tables(AJUSTES) or []:
-                        registros.extend(
-                            registros_por_posicao(
-                                matriz, numero, documento.identificador, self.campos
-                            )
-                        )
+                        registros.extend(self._materializar(matriz, numero, documento))
         finally:
             if caminho != str(arquivo):
                 Path(caminho).unlink(missing_ok=True)
         return registros
+
+    def _materializar(
+        self, matriz: list[list[str | None]], numero: int, documento: DocumentoCanonico
+    ) -> list[Registro]:
+        """Escolhe como ler a matriz — nunca à revelia de quem chamou.
+
+        Com `campos` conhecido (ordem descoberta ou declarada), alinha por
+        posição: serve à tabela cujo cabeçalho vem rotacionado ou partido, caso
+        em que o cabeçalho é lixo mas as linhas de dado estão íntegras. Sem
+        `campos`, a única informação disponível é a que o próprio pdfplumber
+        detectou — a primeira linha da matriz — e é dela que os nomes saem.
+        """
+        if self.campos:
+            return registros_por_posicao(matriz, numero, documento.identificador, self.campos)
+        return registros_de_matriz(matriz, numero, documento.identificador)
 
     def _preparar(self, arquivo: Path) -> tuple[str, dict[int, int]]:
         """Devolve o caminho a ler e o mapa índice→página original.

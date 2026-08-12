@@ -36,6 +36,23 @@ alinhamento de colunas quebra, e o número de campos não localizados salta de 3
 para 142. Otimizar só o reconhecimento pioraria o resultado final.
 """
 
+
+def _layout_de_candidato(dados: dict) -> LayoutTabela:
+    """Converte o dict de `Candidato.layout` (`parser.calibracao`) na forma
+    que `ExtratorPosicional` espera — mesma conversão que `fabrica._layout`
+    faz para o layout declarado no perfil; aqui a origem é a autocalibração."""
+    return LayoutTabela(
+        x_rotulos=tuple(dados["x_rotulos"]),
+        x_unidades=tuple(dados["x_unidades"]),
+        x_valores_min=dados["x_valores_min"],
+        y_identificadores_min=dados["y_identificadores_min"],
+        tolerancia_y=dados.get("tolerancia_y", 6.0),
+        tolerancia_x=dados.get("tolerancia_x", 6.0),
+        y_rotulo_max=dados.get("y_rotulo_max"),
+        distancia_rotulo_max=dados.get("distancia_rotulo_max", 40.0),
+    )
+
+
 CAMINHOS_CONHECIDOS = (
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
     r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
@@ -111,11 +128,30 @@ class ExtratorOCR:
 
         canonico = DocumentoCanonico(identificador=documento.identificador, paginas=paginas)
 
-        if self.layout is None:
-            # Sem layout não há como reconstruir a tabela; devolver o texto solto
-            # seria inventar estrutura.
-            return []
-        return ExtratorPosicional(self.layout).extrair(canonico)
+        if self.layout is not None:
+            return ExtratorPosicional(self.layout).extrair(canonico)
+
+        # Sem layout declarado, autocalibra por página a partir das próprias
+        # palavras que o OCR já reconheceu — a heurística de geometria não
+        # sabe (nem precisa saber) que essas palavras vieram de OCR, não da
+        # camada de texto nativa. Página cuja calibração falhar não trava as
+        # demais: devolve o que as outras páginas renderam, e mais nada —
+        # layout inventado grava lixo, que é o modo de falha que este projeto
+        # existe para evitar.
+        from parser.calibracao import CalibracaoFalhou, calibrar_palavras
+
+        registros: list[Registro] = []
+        for pagina in canonico.paginas:
+            try:
+                candidato = calibrar_palavras(pagina.palavras)
+            except CalibracaoFalhou:
+                continue
+            documento_pagina = DocumentoCanonico(
+                identificador=canonico.identificador, paginas=[pagina]
+            )
+            layout = _layout_de_candidato(candidato.layout)
+            registros.extend(ExtratorPosicional(layout).extrair(documento_pagina))
+        return registros
 
     def _rotacao(self, pagina: int) -> int:
         """Rotação que a página declara no documento.

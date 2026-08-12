@@ -30,8 +30,16 @@ __all__ = ["DestinoCSV"]
 
 
 class DestinoCSV:
-    def __init__(self, caminho: str | Path) -> None:
+    def __init__(self, caminho: str | Path, *, incluir_fonte: bool = False) -> None:
+        """
+        Args:
+            incluir_fonte: acrescenta a coluna `_arquivo`, com `Registro.fonte`.
+                Desligado por padrão — o formato original do destino é só os
+                campos do registro; quem grava um lote de vários documentos e
+                precisa rastrear a origem de cada linha liga isto.
+        """
         self.caminho = Path(caminho)
+        self.incluir_fonte = incluir_fonte
 
     def gravar(self, registros: list[Registro]) -> None:
         self.caminho.parent.mkdir(parents=True, exist_ok=True)
@@ -51,11 +59,15 @@ class DestinoCSV:
                 if nome not in colunas:
                     colunas.append(nome)
 
+        campos_saida = ["_arquivo", *colunas] if self.incluir_fonte else colunas
+
         with self.caminho.open("w", encoding="utf-8", newline="") as arquivo:
-            escritor = csv.DictWriter(arquivo, fieldnames=colunas)
+            escritor = csv.DictWriter(arquivo, fieldnames=campos_saida)
             escritor.writeheader()
             for registro in registros:
-                escritor.writerow({nome: _celula(registro, nome) for nome in colunas})
+                linha = {"_arquivo": registro.fonte} if self.incluir_fonte else {}
+                linha.update({nome: _celula(registro, nome) for nome in colunas})
+                escritor.writerow(linha)
 
 
 def _celula(registro: Registro, nome: str) -> str:

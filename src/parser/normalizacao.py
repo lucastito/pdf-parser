@@ -66,7 +66,15 @@ def parse_numero(bruto: str) -> tuple[float | None, Sentinela | None]:
     if not _NUMERO.match(texto):
         raise ValorNaoReconhecido(f"não é número nem sentinela: {bruto!r}")
 
-    return _para_float(texto), None
+    try:
+        return _para_float(texto), None
+    except ValueError as erro:
+        # O contrato desta função é levantar só `ValorNaoReconhecido` — um
+        # `ValueError` bruto escapando derruba o registro (ou o arquivo)
+        # inteiro por causa de um valor isolado, quando o comportamento
+        # correto é tratá-lo como campo não reconhecido, igual a qualquer
+        # outro texto que não é número.
+        raise ValorNaoReconhecido(f"não é número nem sentinela: {bruto!r}") from erro
 
 
 def _para_float(texto: str) -> float:
@@ -86,10 +94,21 @@ def _para_float(texto: str) -> float:
     else:
         decimal, milhar = ".", ","
 
+    posicao = max(ultima_virgula, ultimo_ponto)
+
+    # O separador "decimal" aparece mais de uma vez, e o outro nenhuma: um
+    # número real só tem **um** ponto decimal, então repetição do mesmo
+    # símbolo só pode ser milhar. Sem este caso, "112.797.661" (dois pontos,
+    # nenhuma vírgula) caía direto no `float()` final sem separador algum
+    # removido — `float("112.797.661")` — e explodia com `ValueError` bruto
+    # em vez de `ValorNaoReconhecido`. Achado ao rodar sobre PDF real de um
+    # cenário corporativo, com coordenada UTM citada em prosa.
+    if texto.count(decimal) > 1 and texto.count(milhar) == 0:
+        return float(texto.replace(decimal, ""))
+
     # Um separador único com exatamente 3 dígitos à direita é ambíguo
     # ("1.405" pode ser mil e quatrocentos e cinco ou 1,405). Neste corpus,
     # milhar é a leitura correta.
-    posicao = max(ultima_virgula, ultimo_ponto)
     if texto.count(decimal) == 1 and texto.count(milhar) == 0:
         if len(texto) - posicao - 1 == 3:
             return float(texto.replace(decimal, ""))

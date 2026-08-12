@@ -15,6 +15,7 @@ import pytest
 from parser.diagnostico import (
     Achado,
     Severidade,
+    caracterizar_pagina,
     diagnosticar,
     validar_registros,
 )
@@ -77,6 +78,128 @@ class TestRotacaoDetectada:
     def test_pagina_sem_rotacao_nao_gera_achado(self, pdf_exemplo):
         codigos = {a.codigo for a in diagnosticar(str(pdf_exemplo))}
         assert "pagina-rotacionada" not in codigos
+
+
+class TestCaracterizarPagina:
+    """Os mesmos achados de `diagnosticar`, mas isolados por página — é o que o
+    roteador de extração (`parser.planejador`) precisa para decidir página a
+    página, em vez de por documento inteiro."""
+
+    def test_so_a_pagina_rotacionada_recebe_o_achado(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        normal = documento.new_page()
+        normal.insert_text((72, 72), "texto")
+        rotacionada = documento.new_page()
+        rotacionada.insert_text((72, 72), "texto")
+        rotacionada.set_rotation(90)
+        caminho = tmp_path / "mista.pdf"
+        documento.save(str(caminho))
+        documento.close()
+
+        aberto = fitz.open(caminho)
+        try:
+            assert "pagina-rotacionada" not in {
+                a.codigo for a in caracterizar_pagina(aberto, 1)
+            }
+            assert "pagina-rotacionada" in {a.codigo for a in caracterizar_pagina(aberto, 2)}
+        finally:
+            aberto.close()
+
+    def test_so_a_pagina_sem_texto_recebe_o_achado(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        com_texto = documento.new_page()
+        com_texto.insert_text((72, 72), "texto")
+        documento.new_page()  # sem inserir texto algum
+        caminho = tmp_path / "mista-texto.pdf"
+        documento.save(str(caminho))
+        documento.close()
+
+        aberto = fitz.open(caminho)
+        try:
+            assert "sem-camada-de-texto" not in {
+                a.codigo for a in caracterizar_pagina(aberto, 1)
+            }
+            assert "sem-camada-de-texto" in {a.codigo for a in caracterizar_pagina(aberto, 2)}
+        finally:
+            aberto.close()
+
+    def test_pagina_sem_problema_nao_gera_achado_grave(self, pdf_exemplo):
+        import fitz
+
+        aberto = fitz.open(pdf_exemplo)
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        assert all(a.severidade is not Severidade.BLOQUEIA for a in achados)
+
+    def test_detalhe_cita_o_numero_da_pagina(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        documento.new_page()  # página 1, sem texto
+        caminho = tmp_path / "sem-texto.pdf"
+        documento.save(str(caminho))
+        documento.close()
+
+        aberto = fitz.open(caminho)
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        (achado,) = [a for a in achados if a.codigo == "sem-camada-de-texto"]
+        assert "1" in achado.detalhe
+
+
+class TestImagemEmbutida:
+    """Achado que faltava apesar de o ADR-0021 declará-lo "pronto" — e que
+    precisa de um piso de área, medido contra dois documentos reais: sem
+    ele, o logotipo de cabeçalho de toda página disparava o achado em toda
+    página, escondendo justamente as páginas com conteúdo visual real."""
+
+    def _pdf_com_imagem(self, tmp_path, *, bbox):
+        import fitz
+
+        documento = fitz.open()
+        pagina = documento.new_page()
+        pixmap = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 4, 4))
+        pixmap.set_rect(pixmap.irect, (255, 0, 0))
+        pagina.insert_image(fitz.Rect(*bbox), pixmap=pixmap)
+        caminho = tmp_path / "com-imagem.pdf"
+        documento.save(caminho)
+        documento.close()
+        return caminho
+
+    def test_imagem_pequena_tipo_logo_nao_gera_achado(self, tmp_path):
+        """~0,3% da página — a ordem de grandeza do logotipo medido nos
+        documentos reais que motivaram este piso."""
+        caminho = self._pdf_com_imagem(tmp_path, bbox=(500, 10, 550, 40))
+
+        import fitz
+
+        aberto = fitz.open(str(caminho))
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        assert "imagem-embutida" not in {a.codigo for a in achados}
+
+    def test_imagem_grande_gera_achado(self, tmp_path):
+        """~24% da página — a ordem de grandeza de um diagrama real."""
+        caminho = self._pdf_com_imagem(tmp_path, bbox=(100, 300, 400, 500))
+
+        import fitz
+
+        aberto = fitz.open(str(caminho))
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        assert "imagem-embutida" in {a.codigo for a in achados}
 
 
 class TestValidacaoDeSaida:

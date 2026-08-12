@@ -1,6 +1,12 @@
 # ADR-0021 — Taxonomia de características estruturais
 
-**Status:** proposto · **Data:** 2026-07-31
+**Status:** aceito · **Data:** 2026-07-31 · **Implementado:** 2026-08-12
+
+> A peça que faltava fisicamente — a característica "imagem embutida", já
+> catalogada abaixo como "pronta" quando na verdade não existia em código —
+> foi implementada em `diagnostico.py` em 2026-08-12, junto com o piso de
+> área que a torna utilizável em produção (evita disparar em todo logotipo
+> de cabeçalho). Ver `PLANO.md`, seção "5. Taxonomia".
 
 ## Contexto
 

@@ -30,9 +30,13 @@ solto.
   item por resposta, não atende.
 - **Use as chaves pedidas.** Copiar o nome do cabeçalho do documento como chave
   produz saída que o destino não reconhece.
-- **Alinhe por nome de coluna, nunca por posição.** Se uma coluna do documento não
-  estiver entre os campos pedidos, pule-a — não empurre o valor dela para o campo
-  seguinte, e **não a inclua na resposta**.
+- **Sem ordem de colunas informada, alinhe por nome, nunca por posição.** Se uma
+  coluna do documento não estiver entre os campos pedidos, pule-a — não empurre o
+  valor dela para o campo seguinte, e **não a inclua na resposta**. **Com a ordem de
+  colunas informada** (a lista numerada na instrução), vale o contrário: o campo
+  pedido é o que está na posição indicada, não o que o nome mais parecido sugerir —
+  é a mesma regra da instrução acima, repetida aqui porque esta seção costuma ser
+  lida sozinha.
 - O `identificador` leva número **e** descrição. Só o número não identifica o item.
 - Use exatamente os valores impressos no documento. Não calcule, não converta, não
   arredonde.
@@ -45,8 +49,13 @@ solto.
 
 ## Justificativa de cada regra
 
-**"Alinhe por nome, nunca por posição"** — regra nascida de defeito medido, não de
-precaução. Na bateria de 2026-08-01 o modelo devolveu, para o primeiro item,
+**"Alinhe por nome, nunca por posição" (sem ordem informada)** — regra nascida de
+defeito medido, não de precaução, e anterior ao ADR-0023 (que ainda não existia
+em 2026-08-01): quando não há ordem de colunas descoberta, nome é o único sinal
+disponível. Com ordem descoberta, ADR-0023 mede o oposto — ver a nota acrescentada
+ao guardrail em 2026-08-12, corrigindo uma contradição que a auditoria externa
+apontou entre esta seção e a instrução do topo. Na bateria de 2026-08-01 o
+modelo devolveu, para o primeiro item,
 `energia_kcal = 124` (correto) e `proteina_g = 517`. O 517 é a **energia em
 quilojoules** do mesmo item: o documento tem uma coluna de energia em kJ que não
 estava entre os campos pedidos, e o modelo, em vez de pulá-la, empurrou todos os

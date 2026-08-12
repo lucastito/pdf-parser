@@ -37,6 +37,57 @@ class TestExtratorPdfplumber:
             ExtratorPdfplumber(str(tmp_path / "nao-existe.pdf")).extrair(doc)
 
 
+class TestMaterializacaoSemFallback:
+    """pdfplumber e Camelot não podem ter nome de campo próprio embutido.
+
+    Havia um fallback (`CAMPOS_NA_ORDEM`) com os 8 nomes do documento-caso — se
+    ninguém passasse `campos`, a tabela virava nutricional em qualquer
+    documento. A correção: sem `campos`, lê pelo cabeçalho que a própria
+    ferramenta detectou (`registros_de_matriz`); com `campos`, alinha por
+    posição (`registros_por_posicao`) — nunca um nome de campo assumido aqui.
+    """
+
+    def test_pdfplumber_sem_campos_usa_o_cabecalho_detectado(self, pdf_exemplo):
+        from parser.extratores.pdfplumber_ import ExtratorPdfplumber
+        from parser.portas import DocumentoCanonico
+
+        doc = DocumentoCanonico(identificador="d.pdf", paginas=[])
+        matriz = [["Item", "Pressao (psi)"], ["Valvula A", "150"]]
+
+        registros = ExtratorPdfplumber("x.pdf")._materializar(matriz, 1, doc)
+
+        assert len(registros) == 1
+        assert "Pressao (psi)" in registros[0].campos
+        assert "Umidade (%)" not in registros[0].campos  # nome do TACO, não deste doc
+
+    def test_pdfplumber_com_campos_alinha_por_posicao(self, pdf_exemplo):
+        from parser.extratores.pdfplumber_ import ExtratorPdfplumber
+        from parser.portas import DocumentoCanonico
+
+        doc = DocumentoCanonico(identificador="d.pdf", paginas=[])
+        matriz = [["lixo", "lixo"], ["1", "150"]]
+
+        registros = ExtratorPdfplumber("x.pdf", campos=["pressao_psi"])._materializar(
+            matriz, 1, doc
+        )
+
+        assert len(registros) == 1
+        assert "pressao_psi" in registros[0].campos
+
+    def test_camelot_sem_campos_usa_o_cabecalho_detectado(self):
+        from parser.extratores.camelot_ import ExtratorCamelot
+        from parser.portas import DocumentoCanonico
+
+        doc = DocumentoCanonico(identificador="d.pdf", paginas=[])
+        matriz = [["Item", "Temperatura (C)"], ["Sensor 1", "80"]]
+
+        registros = ExtratorCamelot("x.pdf")._materializar(matriz, 1, doc)
+
+        assert len(registros) == 1
+        assert "Temperatura (C)" in registros[0].campos
+        assert "Energia (kcal)" not in registros[0].campos
+
+
 class TestExtratorCamelot:
     def test_respeita_a_porta(self, pdf_exemplo):
         from parser.extratores.camelot_ import ExtratorCamelot
@@ -78,6 +129,36 @@ class TestExtratorOcr:
 
         with pytest.raises(DpiInvalido):
             ExtratorOCR(str(pdf_exemplo), dpi=0)
+
+    def test_sem_layout_autocalibra_pelas_palavras_do_ocr(
+        self, pdf_tabela_calibravel, monkeypatch
+    ):
+        """Sem layout declarado, a página não vira `[]` incondicional — o OCR
+        tenta se autocalibrar pelas próprias palavras reconhecidas
+        (ADR-0025). Aqui a fonte das palavras é trocada por texto nativo — o
+        alvo é a decisão de autocalibrar, não o reconhecimento óptico em si,
+        que exigiria tesseract instalado."""
+        from parser.extratores.ocr import ExtratorOCR
+        from parser.fontes.pdf import FontePDF
+        from parser.portas import DocumentoCanonico, Pagina
+
+        palavras = FontePDF().carregar(str(pdf_tabela_calibravel)).paginas[0].palavras
+
+        monkeypatch.setattr(
+            "parser.extratores.ocr._localizar_tesseract", lambda: "tesseract-falso"
+        )
+        monkeypatch.setattr(
+            ExtratorOCR, "_palavras", lambda self, imagem, pytesseract, rotacao=0: palavras
+        )
+        monkeypatch.setattr(ExtratorOCR, "_rotacao", lambda self, pagina: 0)
+
+        extrator = ExtratorOCR(str(pdf_tabela_calibravel))
+        documento = DocumentoCanonico(
+            identificador="d.pdf", paginas=[Pagina(numero=1, palavras=[])]
+        )
+        registros = extrator.extrair(documento)
+
+        assert registros, "autocalibração não produziu registro nenhum"
 
     def test_sem_tesseract_falha_com_mensagem_util(self, pdf_exemplo, monkeypatch):
         """Dependência externa ausente precisa dizer o que instalar."""

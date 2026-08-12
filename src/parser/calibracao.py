@@ -38,6 +38,7 @@ __all__ = [
     "CalibracaoFalhou",
     "Candidato",
     "calibrar",
+    "calibrar_palavras",
     "descobrir_nomes_de_coluna",
     "descobrir_paginas_de_dados",
 ]
@@ -171,6 +172,26 @@ def calibrar(caminho: str | Path, *, paginas: list[int] | None = None) -> Candid
         raise CalibracaoFalhou(f"páginas {paginas} não têm texto extraível")
 
     return _descobrir(amostra, paginas)
+
+
+def calibrar_palavras(palavras: list[Palavra]) -> Candidato:
+    """Descobre o layout a partir de palavras já extraídas, por qualquer meio.
+
+    `calibrar()` lê a camada de texto nativa via `FontePDF`. Esta função não
+    sabe — nem precisa saber — de onde as palavras vieram: a heurística de
+    geometria opera sobre posição, não sobre a origem do texto. É o que
+    permite a uma página **escaneada** se autocalibrar: o OCR já devolve
+    `Palavra` com coordenada, na mesma forma que a extração nativa produz, e a
+    mesma assinatura estatística (unidade entre parênteses como âncora) vale
+    para as duas.
+
+    Levanta:
+        CalibracaoFalhou: nenhuma estrutura reconhecível — mesmo critério de
+            `calibrar()`, propagado das mesmas funções internas.
+    """
+    if not palavras:
+        raise CalibracaoFalhou("nenhuma palavra para calibrar")
+    return _descobrir(palavras, paginas=[])
 
 
 def _descobrir(palavras: list[Palavra], paginas: list[int]) -> Candidato:

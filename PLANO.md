@@ -1,7 +1,164 @@
-# Plano do experimento — o que falta, em ordem
+# Plano — pdf-parser (Cenário A e Cenário B)
 
-> Atualizado em **2026-07-31**. Este arquivo é o ponto de retomada: diz o que
-> falta, em que ordem, e **por quê** cada item vem antes do seguinte.
+> Atualizado em **2026-08-12**. Este arquivo cobre os dois cenários que
+> compartilham o mesmo código (ver [CLAUDE.md](CLAUDE.md), "Dois cenários
+> de uso"): **Cenário A** — o experimento científico (branch `main`, GitHub)
+> — e **Cenário B** — o produto de produção da DSS (branch `dss-main`,
+> GitLab). Até 2026-08-12 eram dois arquivos (este e `docs/PLANO-PRODUTO.md`)
+> — unificados porque não havia conteúdo de fato repetido entre eles, e
+> manter dois arquivos de plano corria o risco real de divergirem sem que
+> ninguém notasse.
+>
+> **Aviso sobre nomenclatura, pra não confundir:** a seção "Duas entregas",
+> logo no início do bloco do Cenário A mais abaixo, foi escrita **antes de o
+> Cenário B existir** e chama de "Produto" um entregável do **próprio
+> Cenário A** — a ferramenta genérica de pesquisa como projeto pessoal, não a
+> produção real da DSS. É coincidência de nome entre dois conceitos
+> diferentes. Onde este arquivo fala da DSS, o termo usado é sempre "Cenário
+> B", nunca só "produto".
+
+## Índice por escopo
+
+| Escopo | Onde |
+|---|---|
+| **Só Cenário B** (produto DSS) | seção "Cenário B — Produto DSS", logo abaixo |
+| **Só Cenário A** (experimento científico) | o resto do arquivo, a partir de "Cenário A — Experimento científico" |
+| **Os dois** (código compartilhado) | ver [CLAUDE.md](CLAUDE.md), tabela "O que é compartilhado" — o achado sobre `concordancia.py`/`consolidacao.py` na seção B abaixo (item "pendência que atinge os dois cenários") é o **mesmo** P-1.1 descrito na seção do Cenário A, porque o código é o mesmo — não são dois problemas, é um problema citado nos dois lugares por necessidade de contexto, não por repetição de conteúdo |
+
+---
+
+## Cenário B — Produto DSS
+
+> Ponto de retomada do Cenário B (produto, branch `dss-main`, remoto
+> GitLab). O que já foi feito não se repete aqui em detalhe — está nos ADRs,
+> no código e nos testes. Isto é o estado e o que falta, não um changelog.
+
+### O que já está pronto
+
+**O roteador de extração por página** (ADR-0025) é o caminho de produção.
+`parser ingerir` decide a rota de cada página em tempo de execução — nunca
+por `layout`/`campos_na_ordem` declarado à mão — em quatro níveis de custo
+(ADR-0024): sinal grátis → determinístico (posicional + pdfplumber + Camelot
++ PyMuPDF, todos tentados) → palavra-chave (nível 2b, com vocabulário) →
+modelo (LLM texto, e agora VLM).
+
+Consolidado em 2026-08-11/12, em cima do que ADR-0025 já tinha:
+
+| Peça | Módulo | Estado |
+|---|---|---|
+| Concordância vira **votação célula a célula** quando 2+ rotas determinísticas concordam, em vez de escolher "a melhor" planilha | `consolidacao.materializar` + `planejador._decidir_entre_deterministicos` (rota `"consolidado"`) | pronto, testado — **mas ver a pendência logo abaixo, não é o mesmo que "resolvido"** |
+| VLM como **complemento**, não substituto — página com imagem embutida relevante ganha uma segunda decisão de visão, além da rota principal | `diagnostico._checar_imagem_embutida` + `planejador` | pronto, testado, calibrado contra os dois PDFs reais da DSS (ver limite abaixo) |
+| Vocabulário como fonte única dos campos do LLM/VLM — prompt enriquecido com descrição, unidade, opções válidas (enum) e faixa numérica | `vocabulario.CampoEsperado` + `fabrica._campos` + `ollama.ExtratorBaseadoEmModelo._prompt` | pronto, testado |
+| Vocabulário lê **várias abas** da planilha de schema, com dedupe, e recupera listas suspensas via XML bruto (`openpyxl` não lê o formato de extensão `x14:`) | `vocabulario.carregar_campos_do_xlsx(abas=[...])` | pronto, testado contra a planilha real (341 campos, 268 com enum recuperado) |
+| Saída grava **CSV e JSON automaticamente** — o CSV é o valor achatado, o JSON carrega origem/confiança/evidência por campo | `lote._gravar` | pronto, testado |
+| Crash corrigido: `parse_numero` explodia em número com múltiplos separadores de milhar e nenhum decimal (ex. coordenada UTM citada em prosa) | `normalizacao._para_float` | pronto, testado — achado rodando contra PDF real, não hipotético |
+
+Suite completa (`pytest -m "not experimento_a"`) e `flake8` limpos. Validado
+de ponta a ponta contra os dois PDFs reais em `inputs-dss/`.
+
+### ⚠ Pendência que atinge os dois cenários — NÃO fechada, e piorada nesta sessão
+
+**Isto é o mesmo P-1.1** descrito em "P-1 — o que as auditorias de 02/08
+puseram na frente de tudo", na seção do Cenário A mais abaixo —
+`concordancia.py`/`consolidacao.py` são módulos **compartilhados**, o código
+é idêntico para os dois cenários. Registrado aqui de novo **por
+necessidade de contexto** (quem lê só a seção B precisa saber disto), não
+por esquecimento de que já existe uma seção P-1 sobre o mesmo tema.
+
+- **O que já existia, e continua parcial:** `concordancia.py` ganhou
+  `itens_exclusivos` — os itens que uma rota produziu e não entraram na
+  interseção agora aparecem no relatório, com aviso explícito. Isso é
+  **visibilidade**, não **penalização**: a `taxa` de concordância continua
+  calculada só sobre a interseção, e um item fabricado não reduz esse
+  número.
+- **O que esta sessão criou de novo, e é uma lacuna real, não hipotética:**
+  a rota `"consolidado"` chama `consolidar(saidas)` com **todos** os itens
+  de **todas** as rotas, inclusive os exclusivos. Um item que só uma rota
+  "leu" (podendo ser fabricação — o caso já medido no corpus é o Camelot
+  devolvendo 62 registros pra uma página de ~31) vira um **voto único** no
+  resultado final, com confiança **0,9** — quase tão alta quanto
+  concordância plena, sem checar se aquele item veio de uma rota
+  historicamente propensa a inventar linha.
+- **Deliberadamente não corrigido nesta sessão** — decisão do usuário, pra
+  não gerar mais uma rodada de mudança em cima de um mecanismo ainda quente
+  no mesmo dia em que foi criado. Fica registrado aqui como dívida técnica
+  real — não é "resolvido", nem "P-1 fechado".
+- **Direção provável do conserto, ainda não decidida nem implementada:**
+  item exclusivo (só uma rota leu, entre várias consultadas) vira pendência
+  para revisão humana em vez de voto único automático — só concordância real
+  ou maioria entrariam na planilha sem revisão.
+
+### Limites declarados — não escondidos, registrados para revisão
+
+- **Enum/faixa do vocabulário casam por número de linha, não por coluna.**
+  `sqref` da validação de dado diz "estas linhas"; a regra pode pertencer a
+  uma coluna administrativa vizinha, não à célula de valor do campo. Medido:
+  campos de texto livre (`Company`, `Project`) vieram com `('Yes', 'No')` —
+  claramente errado. Tratar como candidato a confirmar, nunca como verdade.
+  Ver docstring de `CampoEsperado.opcoes` em `src/parser/vocabulario.py`.
+- **Piso de imagem relevante (`AREA_MINIMA_DE_IMAGEM_RELEVANTE = 0.02`) é
+  calibração sobre dois documentos, não medição.** Sem ele, todo logotipo de
+  cabeçalho disparava VLM em toda página. Com ele, uma imagem pequena mas
+  informativa (um ícone com valor, por exemplo) fica de fora. Ver docstring
+  em `src/parser/diagnostico.py`.
+- **Peso da votação em `consolidacao.py` continua uniforme e provisório**
+  (herdado do ADR-0017) — calibrar exige a matriz de correlação de erro
+  entre rotas, que só existe depois de medição. Ver também a pendência de
+  P-1.1 acima: os dois limites vêm da mesma causa-raiz, calibração que só
+  existe depois de gabarito.
+
+### O que falta, em ordem
+
+1. **Fechar a lacuna de votação/fabricação** descrita acima — item exclusivo
+   devia virar pendência de revisão humana, não voto único automático a
+   0,9 de confiança.
+2. **ADR-0026 — registrar o pacote desta sessão.** Consolidação ligada de
+   verdade (com a pendência acima registrada), VLM complementar por imagem
+   embutida (com o piso de área), e vocabulário unificado como fonte única
+   do LLM/VLM. Referenciar ADR-0017 (consolidação), ADR-0021 (a
+   característica "imagem embutida" que o ADR já listava como "pronta" sem
+   o código existir), ADR-0024.
+3. **Verificar deriva de documentação** — `SPEC.md` e `REQUISITOS.md` ainda
+   descrevem "um extrator por documento inteiro", sem roteador, sem nível
+   2b, sem vocabulário. O projeto é SDD/TDD por princípio próprio
+   (CLAUDE.md) e essa deriva já é conhecida, não auditada em detalhe.
+4. **CLI ainda não expõe `--vocabulario`** — hoje só existe como parâmetro
+   Python de `ingerir()`. Sem isso, Cenário B não tem como declarar o
+   vocabulário sem escrever um script.
+5. **Decisão de destino ainda em aberto, fora do escopo desta sessão:** o
+   usuário esclareceu que a planilha de schema da DSS **não é o formato de
+   saída** — é só a fonte do vocabulário de termos a procurar. O destino
+   real do Cenário B é uma resposta/chamada a outro módulo do Copilot (motor
+   de regras pós-extração), não o preenchimento da planilha. `DestinoJSON`
+   (já ligado) é o candidato natural a virar esse payload — mas nenhum
+   `Destino` que fale HTTP com um sistema externo existe ainda. Não é
+   dívida — é escopo que ninguém pediu para abrir ainda.
+
+### Estado do repositório — verificado em 2026-08-12, não presumido
+
+**Todo o trabalho desta sessão foi commitado localmente, em 13 commits
+pequenos e rotulados por escopo** — nada foi pushado. `dss-main` ficou 13
+commits à frente de `gitlab/main` (verificar `git log --oneline` pro número
+atual). Nove são compartilháveis com o Cenário A (mecanismo agnóstico:
+roteador, vocabulário, consolidação, extratores, fábrica, lote); os demais
+são marcados `(B)` no início da mensagem e **nunca devem ir para
+`origin`/GitHub** — alguns tocam dado real da DSS (`inputs-dss/`) ou citam o
+nome da planilha de schema.
+
+`core.hooksPath` foi configurado nesta sessão. A guarda de confidencialidade
+importa pro lado **pessoal/GitHub**, não pro `dss-main`/GitLab — ver a seção
+"Regra de confidencialidade" em CLAUDE.md. Antes de qualquer commit ir para
+`main`/`origin` (inclusive por cherry-pick de um dos commits "compartilháveis"
+acima), popular `.githooks/denylist.txt` localmente com os termos que não
+podem vazar pro público.
+
+---
+
+## Cenário A — Experimento científico
+
+> Atualizado em **2026-07-31**. Este bloco é o ponto de retomada do Cenário
+> A: diz o que falta, em que ordem, e **por quê** cada item vem antes do
+> seguinte.
 >
 > O que já foi feito não aparece aqui — está nos ADRs e no histórico do git.
 
@@ -46,8 +203,8 @@ requisito do produto e contribuição do artigo ao mesmo tempo.
 ### ⚠ P-1 — o que as auditorias de 02/08 puseram na frente de tudo
 
 **Duas auditorias independentes** revisaram o projeto no mesmo dia: uma por outro
-modelo, com escopo amplo ([`AUDITORIA_TECNICA_CIENTIFICA.md`](../AUDITORIA_TECNICA_CIENTIFICA.md)),
-e uma em cinco frentes internas ([`AUDITORIA-2026-08-02.md`](AUDITORIA-2026-08-02.md)).
+modelo, com escopo amplo ([`AUDITORIA_TECNICA_CIENTIFICA.md`](AUDITORIA_TECNICA_CIENTIFICA.md)),
+e uma em cinco frentes internas ([`AUDITORIA-2026-08-02.md`](experimentos/AUDITORIA-2026-08-02.md)).
 Elas convergiram num achado que **precede todo o resto**, e a prioridade agora é
 resolver o que elas apontaram.
 
@@ -63,11 +220,66 @@ auditoria independente: isolamento de processo, limites de recurso, injeção de
 instrução vinda do PDF, e célula de planilha começando por `=`. Não são hipóteses
 descartadas — é trabalho não feito.
 
+### Mapa completo dos P0 da auditoria externa (`AUDITORIA_TECNICA_CIENTIFICA.md`)
+
+> **Verificado item a item em 2026-08-12, lendo o código atual — não o resumo da
+> auditoria.** A tabela P-1 acima só nomeava 4 pendências; a auditoria externa
+> tem **sete** achados P0, e três delas (P0.2, P0.3, P0.4) nunca tinham entrado
+> em lugar nenhum deste plano. Ficam aqui, por completo, pra isso não se repetir.
+
+| # | O que a auditoria pede | Estado verificado em 2026-08-12 |
+|---|---|---|
+| P0.1 | Métrica que penalize itens fabricados/duplicados | **Aberto** — é o mesmo −1.1 acima. `itens_exclusivos` (`concordancia.py`) dá visibilidade, não penalização; a lacuna nova da consolidação (seção "Cenário B" no topo) piora, não fecha, este ponto |
+| P0.2 | Holdout deixou de ser independente (já revelou bug, código foi corrigido em resposta) — precisa de teste final **novo**, nunca tocado | **Aberto, nunca rastreado antes de hoje.** Nenhum arquivo do repositório reclassifica `holdout.csv` como "desenvolvimento" nem propõe um teste final intocado |
+| P0.3 | Gabarito (`taco.csv`) sem dupla anotação, cegamento nem adjudicação | **Aberto, nunca rastreado antes de hoje.** `experimentos/golden/README.md` descreve conferência de **uma pessoa só** — ver a seção "Limite declarado" adicionada lá em 2026-08-12 |
+| P0.4 | Protocolo dos degraus no experimento diverge do caminho de produção (contexto/seed/temperatura/raciocínio não propagados; prompt não é o mesmo) | **Aberto, nunca rastreado antes de hoje.** `src/parser/cli.py:526` monta `SaidaEmDegraus(_cliente(rota), campos)` sem propagar nenhum desses parâmetros da rota, e o prompt é montado ad hoc, não reaproveitado do caminho real |
+| P0.5 | Pipeline principal não roteia por características da página (`lote.py` chamava `ExtratorPosicional` direto) | **Fechado — só para o Cenário B.** `ingerir()` roteia por página por padrão (`calibrar_por_arquivo=True` → `planejador`, ADR-0025). O Cenário A (`pipeline.Pipeline`) continua com um extrator só, sem essa ligação |
+| P0.6 | Sem fronteira de segurança pra entrada não confiável (sandbox, limites de recurso/tempo/páginas/pixels) | **Aberto**, já citado no parágrafo acima desta tabela |
+| P0.7 | Ambiente não travado (dependências sem teto de versão, sem lockfile, sem CI, tags de modelo mutáveis) | **Parcialmente fechado.** `pyproject.toml` agora declara `pdfplumber`/`camelot-py`/`pytesseract`/`Pillow`/`psutil` (faltavam antes) — mas continua sem teto de versão, sem lockfile (`uv.lock`/equivalente) e sem CI |
+
+Achados adicionais da mesma auditoria, fora da lista de sete, também nunca
+rastreados antes de hoje — **verificados no código, não supostos**:
+
+| Achado | Onde | Estado verificado em 2026-08-12 |
+|---|---|---|
+| Proveniência mistura "como foi obtido" com "o quanto é confiável" | `ollama.py` marca saída de LLM/VLM como `Origem.EXTRAIDO` — mesma categoria de uma leitura por coordenada | **Aberto.** `modelo.py` só tem `EXTRAIDO`/`DERIVADO`/`INFERIDO`/`AUSENTE`; não existe eixo separado pra "método de obtenção" |
+| Schema do degrau é fraco; corte (`done_reason=length`) só é detectado quando a resposta vem **vazia** | `degraus.py`, `_esquema()` e `_tentar()` | **Aberto.** Uma resposta não vazia mas cortada no meio de um JSON sintaticamente válido pode passar sem ser marcada como corte |
+| Trava de `medicao.py` não é atômica (checar-depois-escrever, não `O_CREAT\|O_EXCL`) | `medicao.py`, função de trava | **Aberto** — risco de corrida real entre dois processos, não hipotético |
+| Guarda de confidencialidade: uma exceção de allowlist libera a **linha inteira**, não só o trecho permitido | `.githooks/verificar.py`, `_coberta_por_excecao` | **Aberto.** Um termo proibido na mesma linha de um termo permitido passaria sem ser barrado |
+| Contradição no prompt de texto: a instrução manda alinhar por posição quando a ordem é informada, e o guardrail dizia "nunca por posição" sem essa exceção | `prompts/extracao-tabela-texto.md` | **Corrigido em 2026-08-12** — guardrail reescrito pra citar a exceção explicitamente |
+| `experimentos/golden/README.md` descrevia `taco.csv` como "a criar", apesar de o arquivo já existir e já ser usado por toda a matriz de avaliação | `experimentos/golden/README.md` | **Corrigido em 2026-08-12** |
+
+### ⚠ Conflito de prioridade entre este plano e a auditoria externa — real, não hipotético
+
+**Achado em 2026-08-12, ao responder se havia algo em `PLANO.md` que contrariasse
+as auditorias.** Havia: a ordem P-1 → P0 (fechado) → **P1 (antes de distribuir)**
+→ P2 → P3 (fecha o artigo) deste plano só bloqueia em **4** dos **7** P0 da
+auditoria externa. Nada aqui impede, hoje, avançar pra P1/P2/P3 — inclusive
+rodar o experimento nas máquinas de outras pessoas e escrever o artigo — com
+P0.2 (holdout não independente), P0.3 (gabarito sem dupla anotação), P0.4
+(protocolo dos degraus divergente) e P0.6 (sem fronteira de segurança) ainda
+abertos.
+
+Isso colide direto com a seção 14 da própria auditoria externa
+("Critérios de aceite antes de submeter o artigo"), que lista golden
+independente com dupla anotação, teste final nunca usado em desenvolvimento e
+configuração íntegra por execução como **pré-requisitos**, não como itens
+paralelos — e com a ordem de fases dela (Fase 0 → 1 → 2 → 3), que coloca
+corpus/anotação/segurança **antes** de qualquer campanha confirmatória.
+
+**Bloqueio explícito, a partir de agora:** P1, P2 e P3 abaixo **não devem
+avançar para o ponto de gerar resultado citável no artigo (P3) nem para rodar
+a bateria nas máquinas de terceiros (P1) enquanto P0.2, P0.3, P0.4 e P0.6
+continuarem abertos.** Preparar o pacote de distribuição (o lado de
+engenharia de P1 — detecção de ambiente, contenção, robustez) pode seguir em
+paralelo, porque não depende deles; **rodar a campanha e publicar o número,
+sim, depende**.
+
 ### 🔑 O corpus existe: 19 PDFs, 16 características cobertas
 
 **Fechado em 02/08.** O gargalo declarado por meses — "só há um documento-caso" —
-deixou de existir. O corpus está em [`experimentos/pdf/`](pdf/), com
-[`manifest.yaml`](pdf/manifest.yaml) declarando, por documento: SHA-256, páginas,
+deixou de existir. O corpus está em [`experimentos/pdf/`](experimentos/pdf/), com
+[`manifest.yaml`](experimentos/pdf/manifest.yaml) declarando, por documento: SHA-256, páginas,
 proveniência, situação de redistribuição e **características confirmadas por
 página, com a evidência de cada uma**.
 
@@ -76,8 +288,8 @@ página, com a evidência de cada uma**.
 | Documentos | **19** |
 | Características com ao menos um caso | **19 de 19** |
 | Reproduzíveis por link público | 16 de 19 |
-| Critério de seleção | [`pdf/CARACTERISTICAS.md`](pdf/CARACTERISTICAS.md) |
-| Método da busca (743 PDFs varridos) | [`pdf/TRIAGEM.md`](pdf/TRIAGEM.md) |
+| Critério de seleção | [`pdf/CARACTERISTICAS.md`](experimentos/pdf/CARACTERISTICAS.md) |
+| Método da busca (743 PDFs varridos) | [`pdf/TRIAGEM.md`](experimentos/pdf/TRIAGEM.md) |
 
 **Este é o insumo da etapa que destrava todo o resto.** A sequência, e a razão de
 cada seta:
@@ -105,8 +317,8 @@ características); e o perfil comporta **uma** página de triagem, não N.
 
 ### 📌 Regra: a alocação de modelos só fecha com as máquinas medidas
 
-**Fonte única:** [`ALOCACAO-POR-MAQUINA.md`](ALOCACAO-POR-MAQUINA.md) define quem
-roda o quê. [`MODELOS.md`](MODELOS.md) define a escada e **referencia** aquele
+**Fonte única:** [`ALOCACAO-POR-MAQUINA.md`](experimentos/ALOCACAO-POR-MAQUINA.md) define quem
+roda o quê. [`MODELOS.md`](experimentos/MODELOS.md) define a escada e **referencia** aquele
 documento em vez de repetir a tabela — ela já existiu em três lugares e os três
 divergiram.
 
@@ -146,10 +358,17 @@ Guarda que ninguém invoca documenta a intenção e não impede nada.
 
 ### P1 — antes de distribuir (tolerância zero)
 
+> **Nota de numeração (corrigida 2026-08-12):** os itens abaixo usavam os
+> números soltos "7" e "8", que colidiam com outros "7"/"8" na seção P3 mais
+> abaixo — dois itens completamente diferentes com o mesmo número, em duas
+> tabelas separadas. Prefixados por seção (`P1-`, `P3-`) agora, pra que "item
+> 8" nunca mais seja ambíguo. Achado pela auditoria de 02/08, não corrigido
+> até esta data.
+
 | # | Item | Por que primeiro |
 |---|---|---|
-| 7 | **Ensaio prévio em escopo mínimo** | erro aparece em minutos, não em horas |
-| 8 | **A seção 4 inteira — os 21 itens** | detecção de ambiente, contenção, contaminação silenciosa, robustez, experiência de quem executa |
+| P1-1 | **Ensaio prévio em escopo mínimo** | erro aparece em minutos, não em horas |
+| P1-2 | **A seção 4 inteira — os 21 itens** | detecção de ambiente, contenção, contaminação silenciosa, robustez, experiência de quem executa |
 
 ✅ **Script de preparação com a escada nova** — fechado em 02/08. Ele instalava
 três modelos quando a escada do ADR-0014 já tinha oito. Agora traz os oito, **e um
@@ -157,7 +376,9 @@ teste amarra a lista dele à de `parser.cli`**: eram duas listas em linguagens
 diferentes, sem nada impedindo que divergissem de novo. Quem executa baixaria
 ~26 GB do conjunto errado e descobriria horas depois.
 
-O item 9 não é recorte: **tudo** que a seção 4 lista é pré-requisito de rodar sem
+**Não existe item "9" nesta lista** — a frase abaixo foi escrita como se
+houvesse um, e não há. O que ela descreve é o próprio **P1-2**: os 21 itens da
+seção 4 não são um recorte, são **todos** pré-requisito de rodar sem
 supervisão na máquina de outra pessoa.
 
 Fica de fora dos cinco, e continua aberto: **colunas deslocadas** — valores reais
@@ -166,21 +387,32 @@ quando vier do reconhecimento (P2), não de perfil escrito à mão.
 
 ### P2 — destrava o chefe (e o produto)
 
+> **2026-08-12 — o item P2-1 mudou de estado, mas só para o Cenário B.** O
+> "prompt intermediário para qualquer PDF" citado como "não implementado"
+> abaixo **foi implementado** para o Cenário B: é o roteador de extração por
+> página, ADR-0025 (`src/parser/planejador.py`), que monta a ordem de colunas
+> a partir da geometria descoberta e escala pro modelo quando preciso — ver
+> "Cenário B — Produto DSS" no topo deste arquivo. **Para o Cenário A**
+> (medir e comparar modelos sob o protocolo pré-registrado do experimento,
+> ADR-0020) isso continua não fechado: o roteador ainda não foi ligado ao
+> caminho do experimento (`pipeline.Pipeline`, que é só de A), e o item P2-2
+> abaixo continua de pé.
+
 | # | Item | Estado |
 |---|---|---|
-| 5 | **Prompt intermediário para qualquer PDF** | decidido (ADR-0023/0024), **não implementado** |
-| 6 | **Pipeline conectado** — reconhecimento → prompt → extração | peças prontas, fiação faltando |
+| P2-1 | **Prompt intermediário para qualquer PDF** | decidido (ADR-0023/0024) e **implementado para o Cenário B** (ADR-0025) — Cenário A ainda não usa o roteador |
+| P2-2 | **Pipeline conectado** — reconhecimento → prompt → extração | peças prontas; ligadas em B via `planejador`+`fabrica`+`lote`, **fiação do experimento (A) ainda faltando** |
 
-O que existe: nomes de coluna por geometria (11/11 no documento-caso) e
-reconhecimento por modelo (9% do custo da extração). O que falta: montar o prompt
-com isso e ligar ao fluxo.
+O que existia antes desta ressalva: nomes de coluna por geometria (11/11 no
+documento-caso) e reconhecimento por modelo (9% do custo da extração). O que
+faltava: montar o prompt com isso e ligar ao fluxo — feito para B, não para A.
 
 ### P3 — fecha o artigo
 
 | # | Item | Custo |
 |---|---|---|
-| 7 | **Refazer os modelos sob as correções** | ~4-6 h de máquina parada |
-| 8 | **Documentação e varredura final** | sem máquina |
+| P3-1 | **Refazer os modelos sob as correções** | ~4-6 h de máquina parada |
+| P3-2 | **Documentação e varredura final** | sem máquina |
 
 **Só 2 dos 8 modelos estão medidos de forma comparável.** Os outros rodaram cada
 um com uma configuração diferente, antes das correções — servem de indício, não
@@ -192,7 +424,7 @@ de resultado.
 é justamente o que dispensa configurar cada documento. Bloqueia a **triagem por
 característica**, que é evidência central do artigo.
 
-Lista do que procurar: [CARACTERISTICAS.md](pdf/CARACTERISTICAS.md).
+Lista do que procurar: [CARACTERISTICAS.md](experimentos/pdf/CARACTERISTICAS.md).
 
 ## Estado
 
@@ -204,8 +436,8 @@ Lista do que procurar: [CARACTERISTICAS.md](pdf/CARACTERISTICAS.md).
 | ADRs | **24** |
 | Ciclos de importação | **nenhum** (39 módulos) |
 | Rotas com resultado gravado | 7 de 8 — a de visão vive à parte |
-| Documentos-caso | **19**, cobrindo 19 características — ver [pdf/](pdf/) |
-| Vocabulário | [GLOSSARIO.md](../docs/GLOSSARIO.md) — "degrau" tinha 3 sentidos |
+| Documentos-caso | **19**, cobrindo 19 características — ver [pdf/](experimentos/pdf/) |
+| Vocabulário | [GLOSSARIO.md](docs/GLOSSARIO.md) — "degrau" tinha 3 sentidos |
 
 ### Medido na máquina de referência (página 29, ociosa)
 
@@ -652,7 +884,7 @@ recebiam; a correção foi ligar o que existia.
 > construção. É limite de desenho, não de execução — e o produto precisa montar o
 > prompt a partir do que o diagnóstico detecta, não do que o humano declara.
 >
-> Decisão em [ADR-0023](../docs/adr/0023-prompt-para-estrutura-desconhecida.md).
+> Decisão em [ADR-0023](docs/adr/0023-prompt-para-estrutura-desconhecida.md).
 > A peça central já existe: `calibracao.py` **descobre as colunas por geometria**,
 > sem declaração prévia.
 
@@ -831,7 +1063,7 @@ Falta:
 
 ## 2. Consolidação por campo
 
-> Decisão registrada em [ADR-0017](../docs/adr/0017-consolidacao-por-campo.md),
+> Decisão registrada em [ADR-0017](docs/adr/0017-consolidacao-por-campo.md),
 > incluindo o limite: rotas que compartilham fonte de erro podem errar juntas,
 > e a votação confirmaria o erro com confiança alta.
 
@@ -871,7 +1103,7 @@ entre estratégias (`comparar_estrategias`). Falta a camada que **decide**. A
 `Pendencia` de `lote.py` é o encaixe da saída.
 
 - [x] Implementar a consolidação com proveniência (quantas rotas concordaram) —
-      `src/parser/consolidacao.py`, 22 testes
+      `src/parser/consolidacao.py`, 35 testes
 - [x] **Pesos parametrizados**, com o padrão uniforme declarado como provisório
 
 ### O que a primeira execução sobre dados reais revelou
@@ -926,11 +1158,11 @@ pela rotação (`Alimentar Fibra`).
 - [ ] **Matriz de correlação de erros** entre rotas — pré-requisito da calibração,
       e resultado publicável por si: mostra quais estratégias são de fato
       independentes
-- [x] ADR da decisão — [ADR-0017](../docs/adr/0017-consolidacao-por-campo.md)
+- [x] ADR da decisão — [ADR-0017](docs/adr/0017-consolidacao-por-campo.md)
 
 ## 2b. Escopo: triagem e preenchimento são fases distintas
 
-> Decisão registrada em [ADR-0016](../docs/adr/0016-triagem-e-preenchimento.md),
+> Decisão registrada em [ADR-0016](docs/adr/0016-triagem-e-preenchimento.md),
 > com a conta completa e a verificação estrutural das páginas.
 
 **O problema, com números.** Se cada modelo rodar todas as hipóteses em todas as
@@ -1159,7 +1391,7 @@ identificador do processo sem depender de fabricante. Verificado.
 ## 5. Taxonomia de características, e a coleta que ela destrava
 
 > Taxonomia registrada em
-> [ADR-0021](../docs/adr/0021-taxonomia-de-caracteristicas.md), com a tabela
+> [ADR-0021](docs/adr/0021-taxonomia-de-caracteristicas.md), com a tabela
 > completa marcada por custo de detecção.
 
 **O entregável final do projeto** é diferente do que existe hoje. Hoje temos
@@ -1199,8 +1431,16 @@ Hoje ele **descreve**. O roteiro exige que **recomende**.
 
 - [x] Taxonomia completa, marcando **detectável hoje** × **exige código** ×
       **exige inspeção manual** — ADR-0021
-- [ ] Implementar a característica como segundo eixo em `triagem.py`, reusando o
-      diagnóstico como fonte
+- [x] **Implementar a característica como segundo eixo — 2026-08-12, e não em
+      `triagem.py`.** ADR-0021 já havia corrigido essa premissa: a estrutura
+      certa é `diagnostico.caracterizar_pagina(pagina) -> list[Achado]`, que
+      já é multirrótulo por construção (uma página acumula quantos achados
+      tiver, sem exclusividade) — não uma reforma de `triagem.Classe`, que
+      continua sendo o primeiro eixo ("o que tem nesta página"), exclusivo de
+      propósito. O achado que faltava fisicamente (`imagem-embutida`, que o
+      ADR-0021 já catalogava como "pronta" sem o código existir) foi
+      implementado nesta data. Usado em produção por `parser.planejador`
+      (Cenário B) — o Cenário A ainda não decide rota a partir disto.
 - [ ] **Coletar documentos por característica** (eixo B) — com cuidado de dado
       pessoal: nada que identifique alguém entra no conjunto
 - [ ] Evoluir o diagnóstico de descritivo para **prescritivo**
@@ -1224,7 +1464,7 @@ Hoje ele **descreve**. O roteiro exige que **recomende**.
 - [ ] Mapa de aderência à especificação de referência — vai em `docs/_private/`
 
 **Do artigo** — protocolo em
-[ADR-0020](../docs/adr/0020-pre-registro-do-protocolo.md):
+[ADR-0020](docs/adr/0020-pre-registro-do-protocolo.md):
 
 - [ ] Rascunho vivo, atualizado à medida que as medições saem — escrever no fim
       obrigaria a reconstruir raciocínio já esquecido

@@ -85,6 +85,13 @@ __all__ = [
 ]
 
 
+SAIDA_ESPERADA_PADRAO = 2607
+"""Tokens de saída presumidos quando `contexto_automatico` mede a entrada mas
+`tokens_maximos` não foi declarado. Vem da maior saída já observada para uma
+página inteira (mesmo padrão de `parser.contexto.aferir`); sem teto de saída
+declarado, é a única referência disponível para reservar espaço na conta."""
+
+
 class Degrau(Enum):
     """Como a saída do modelo é restringida, do mais estrito ao mais livre."""
 
@@ -171,6 +178,15 @@ class Uso:
 
     total_ns: int = 0
 
+    contexto_usado: int | None = None
+    """O `num_ctx` de fato enviado nesta chamada — declarado ou medido agora.
+
+    Existe para que o número usado fique auditável no mesmo lugar em que os
+    outros contadores já ficam, seja ele vindo do perfil ou calculado por
+    `parser.contexto.dimensionar`. Sem isto, "o que rodou" e "o que o perfil
+    diz" podem divergir sem que nada denuncie.
+    """
+
     @property
     def total(self) -> int:
         return self.entrada + self.saida
@@ -213,6 +229,8 @@ class Uso:
             dados["total_s"] = round(self.total_ns / 1_000_000_000, 3)
         if self.tokens_por_segundo is not None:
             dados["tokens_por_s"] = round(self.tokens_por_segundo, 2)
+        if self.contexto_usado is not None:
+            dados["contexto_usado"] = self.contexto_usado
         return dados
 
 
@@ -329,6 +347,8 @@ class SaidaEmDegraus:
         raciocinar: bool = False,
         tokens_maximos: int | None = None,
         contexto: int | None = None,
+        contexto_automatico: bool = False,
+        nativo: int | None = None,
         semente: int | None = None,
         temperatura: float = 0.0,
     ) -> None:
@@ -358,6 +378,14 @@ class SaidaEmDegraus:
                 Nenhum valor é inventado aqui. Um teto arbitrário viraria número
                 mágico sem procedência (ADR-0008) — e o valor certo depende de
                 quanto a entrada consome, que precisa ser medido.
+            contexto_automatico: sem `contexto` declarado, mede a entrada desta
+                chamada (uma sondagem barata, um token de saída) e calcula o
+                contexto com `parser.contexto.dimensionar` — nunca herda o
+                padrão do servidor (ADR-0018). Desligado por padrão: quem
+                constrói direto e não pede isto mantém o comportamento de
+                sempre (nenhum `num_ctx` enviado, vale o padrão do servidor).
+            nativo: teto de contexto do modelo, usado só junto com
+                `contexto_automatico` — pedir além dele seria recusado.
             semente: fixa a amostragem, tornando a geração repetível. Sem ela,
                 duas execuções da mesma configuração podem divergir — e entre
                 máquinas a diferença viraria indistinguível de ruído (ADR-0020).
@@ -373,6 +401,8 @@ class SaidaEmDegraus:
         self.raciocinar = raciocinar
         self.tokens_maximos = tokens_maximos
         self.contexto = contexto
+        self.contexto_automatico = contexto_automatico
+        self.nativo = nativo
         self.semente = semente
         self.temperatura = temperatura
         self._ultimo_uso: Uso | None = None
@@ -540,9 +570,9 @@ class SaidaEmDegraus:
         if uso and uso.total:
             partes.append(f"Tokens: entrada {uso.entrada} + saída {uso.saida} = {uso.total}.")
 
-        if uso and uso.bate_no_teto(self.contexto):
+        if uso and uso.bate_no_teto(uso.contexto_usado):
             partes.append(
-                f"A soma bateu no contexto configurado ({self.contexto}) — é ele "
+                f"A soma bateu no contexto usado ({uso.contexto_usado}) — é ele "
                 "que corta, e não o teto de saída. Declare num_ctx maior."
             )
         else:
@@ -588,10 +618,12 @@ class SaidaEmDegraus:
             opcoes["seed"] = self.semente
         if self.tokens_maximos:
             opcoes["num_predict"] = self.tokens_maximos
-        if self.contexto:
+
+        contexto = self._contexto_para(carga)
+        if contexto:
             # Sem isto vale o padrão do servidor, que limita entrada + saída
             # juntas e foi a causa medida das respostas vazias (ADR-0018).
-            opcoes["num_ctx"] = self.contexto
+            opcoes["num_ctx"] = contexto
         carga["options"] = opcoes
 
         resposta = self.cliente.transporte.enviar(
@@ -608,6 +640,7 @@ class SaidaEmDegraus:
             eval_ns=resposta.get("eval_duration") or 0,
             load_ns=resposta.get("load_duration") or 0,
             total_ns=resposta.get("total_duration") or 0,
+            contexto_usado=contexto,
         )
         texto = resposta.get("response", "")
         # O servidor às vezes entrega a estrutura pelo canal de raciocínio e
@@ -622,6 +655,49 @@ class SaidaEmDegraus:
                 texto = rascunho
                 self._veio_do_raciocinio = True
         return texto, resposta.get("done_reason")
+
+    def _contexto_para(self, carga: dict[str, Any]) -> int | None:
+        """O `num_ctx` desta chamada: declarado, medido agora, ou nenhum.
+
+        Com `contexto` fixado no construtor, é ele que vale sempre — inclusive
+        para uma bateria de experimento, em que o mesmo número precisa repetir
+        entre chamadas para a comparação valer (ADR-0013/0020).
+
+        Sem `contexto` e com `contexto_automatico` ligado, mede a entrada desta
+        chamada específica — nunca a de uma chamada anterior, cujo prompt ou
+        imagem pode ter tamanho diferente — e calcula o contexto a partir do
+        medido. É `parser.contexto.aferir` que faz a conta: a sondagem (pede
+        só um token de saída, então o custo é pequeno frente à geração
+        completa que vem depois) mora aqui, porque só este método sabe montar
+        a carga exata da chamada real; a fórmula mora lá, uma vez só.
+
+        Sem `contexto` e sem `contexto_automatico`, devolve `None`: mantém o
+        comportamento de sempre para quem constrói a classe direto sem pedir
+        a descoberta.
+        """
+        if self.contexto:
+            return self.contexto
+        if not self.contexto_automatico:
+            return None
+
+        from parser.contexto import aferir
+
+        def _medir(modelo: str, prompt: str, imagens: list[str] | None) -> int:
+            sondagem = dict(carga)
+            sondagem["options"] = {"num_predict": 1}
+            resposta = self.cliente.transporte.enviar(
+                f"{self.cliente.url}/api/generate", sondagem, self.cliente.timeout
+            )
+            return resposta.get("prompt_eval_count") or 0
+
+        afericao = aferir(
+            self.cliente.modelo,
+            medir=_medir,
+            prompt=str(carga.get("prompt", "")),
+            saida_esperada=self.tokens_maximos or SAIDA_ESPERADA_PADRAO,
+            nativo=self.nativo,
+        )
+        return afericao.contexto
 
     def _prompt_do_degrau(self, degrau: Degrau, prompt: str) -> str:
         """Quanto menos a gramática restringe, mais a instrução precisa dizer.

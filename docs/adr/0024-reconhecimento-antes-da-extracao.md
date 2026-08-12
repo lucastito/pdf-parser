@@ -1,6 +1,9 @@
 # ADR-0024 — Reconhecimento antes da extração, em três níveis de custo
 
-**Status:** proposto · **Data:** 2026-08-02
+**Status:** aceito · **Data:** 2026-08-02 · **Implementado (Cenário B):** 2026-08-11/12
+
+> Via ADR-0025 (`parser.planejador`, os quatro níveis de custo). O Cenário A
+> não usa este roteador ainda.
 
 ## Contexto
 

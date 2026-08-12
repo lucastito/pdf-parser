@@ -2,6 +2,18 @@
 
 **Status:** aceito · **Data:** 2026-07-29
 
+> **Retificação de 2026-08-12.** O número desta ADR (**84,5%**, medido contra
+> o gabarito de 40 itens que a própria estratégia de reconstrução direta
+> gerou — ver "Ressalva" no fim) ficou parado enquanto o número correto
+> avançou em outro lugar: `PLANO.md` já registra **99,5%** contra o mesmo
+> gabarito principal (tabela "Contra o conjunto de reserva"), e `REQUISITOS.md`
+> RF-2 cita o mesmo par (99,5% / 78% no conjunto de reserva). A auditoria de
+> 02/08 confirmou a divergência (`AUDITORIA-2026-08-02.md`) e ela ficou sem
+> corrigir até agora. **O que causou a melhoria de 84,5% para 99,5% não está
+> documentado em nenhum ADR** — é uma lacuna de rastreabilidade em si, não só
+> um número desatualizado; investigar antes de citar 84,5% ou 99,5% como se
+> fossem a mesma medição.
+
 ## Contexto
 
 A extração por OCR é requisito em dois lugares (RF-2 do projeto e critério de

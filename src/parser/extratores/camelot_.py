@@ -15,8 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from parser.extratores._tabular import registros_por_posicao
-from parser.extratores.pdfplumber_ import CAMPOS_NA_ORDEM
+from parser.extratores._tabular import registros_de_matriz, registros_por_posicao
 from parser.modelo import Registro
 from parser.portas import DocumentoCanonico
 
@@ -24,7 +23,12 @@ __all__ = ["ExtratorCamelot"]
 
 
 class ExtratorCamelot:
-    """Usa a detecção de tabela do Camelot."""
+    """Usa a detecção de tabela do Camelot.
+
+    Como `ExtratorPdfplumber`: `campos` vem de fora (calibração ou perfil), e
+    sem ele a matriz é lida pelo cabeçalho que o Camelot detectou — nunca por
+    um nome de campo assumido aqui.
+    """
 
     def __init__(
         self,
@@ -37,7 +41,7 @@ class ExtratorCamelot:
         self.caminho_pdf = caminho_pdf
         self.paginas = paginas
         self.modo = modo
-        self.campos = campos or CAMPOS_NA_ORDEM
+        self.campos = campos
 
     def extrair(self, documento: DocumentoCanonico) -> list[Registro]:
         import camelot
@@ -67,11 +71,18 @@ class ExtratorCamelot:
             matriz = tabela.df.values.tolist()
             if not matriz:
                 continue
-            # Alinhamento por posição, e não por cabeçalho: o cabeçalho detectado
-            # vem rotacionado e partido, mas as linhas de dados estão na ordem.
-            registros.extend(
-                registros_por_posicao(
-                    matriz, int(tabela.page), documento.identificador, self.campos
-                )
-            )
+            registros.extend(self._materializar(matriz, int(tabela.page), documento))
         return registros
+
+    def _materializar(
+        self, matriz: list[list[str | None]], numero: int, documento: DocumentoCanonico
+    ) -> list[Registro]:
+        """Ver `ExtratorPdfplumber._materializar` — mesma escolha, mesmo motivo.
+
+        Com `campos` conhecido, alinha por posição (o cabeçalho detectado pode
+        vir rotacionado e partido, mas as linhas de dado estão na ordem). Sem
+        `campos`, lê pelo cabeçalho que o próprio Camelot devolveu.
+        """
+        if self.campos:
+            return registros_por_posicao(matriz, numero, documento.identificador, self.campos)
+        return registros_de_matriz(matriz, numero, documento.identificador)

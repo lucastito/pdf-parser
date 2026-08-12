@@ -158,6 +158,38 @@ class TestCalibracao:
             calibrar(str(pdf), paginas=[9999])
 
 
+class TestCalibrarPalavras:
+    """A mesma heurística, sobre palavras já extraídas por qualquer meio — é a
+    peça que permite a uma página **escaneada** se autocalibrar
+    (`parser.extratores.ocr.ExtratorOCR`): o OCR devolve `Palavra` com
+    coordenada, na mesma forma que a extração nativa produz."""
+
+    def test_calibra_a_partir_de_palavras_de_qualquer_origem(self, pdf_tabela_calibravel):
+        from parser.calibracao import calibrar_palavras
+        from parser.fontes.pdf import FontePDF
+
+        pagina = FontePDF().carregar(str(pdf_tabela_calibravel)).paginas[0]
+
+        candidato = calibrar_palavras(pagina.palavras)
+
+        assert candidato.confianca > 0.5
+        assert set(candidato.layout) >= {"x_rotulos", "x_unidades", "x_valores_min"}
+
+    def test_sem_palavras_falha_claro(self):
+        from parser.calibracao import calibrar_palavras
+
+        with pytest.raises(CalibracaoFalhou):
+            calibrar_palavras([])
+
+    def test_sem_estrutura_reconhecivel_falha_claro(self, pdf_exemplo):
+        from parser.calibracao import calibrar_palavras
+        from parser.fontes.pdf import FontePDF
+
+        pagina = FontePDF().carregar(str(pdf_exemplo)).paginas[0]
+        with pytest.raises(CalibracaoFalhou):
+            calibrar_palavras(pagina.palavras)
+
+
 class TestCandidato:
     def test_candidato_ordena_por_confianca(self):
         alto = Candidato(layout={}, confianca=0.9, evidencias=[])

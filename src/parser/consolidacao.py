@@ -23,12 +23,12 @@ agora seria decidir por suposição o que a medição vai responder.
 
 from __future__ import annotations
 
-import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from parser.concordancia import _equivalentes, _indexar
+from parser.concordancia import _chave_de_item, _equivalentes, _indexar, _mais_legivel
+from parser.modelo import Campo, Evidencia, Registro
 
 __all__ = [
     "Celula",
@@ -37,7 +37,26 @@ __all__ = [
     "Placar",
     "ResultadoConsolidacao",
     "consolidar",
+    "materializar",
 ]
+
+CONFIANCA_CONCORDANCIA = 1.0
+"""Todas as rotas que leram disseram o mesmo — tão confiável quanto uma
+leitura determinística isolada, agora confirmada por mais de uma via
+independente. Ponto de partida declarado, não medido (mesmo espírito das
+demais constantes de confiança do projeto): calibrar quando houver gabarito
+de página consolidada."""
+
+CONFIANCA_VOTO_UNICO = 0.9
+"""Uma só rota leu, entre as que foram consultadas. Menor que
+`CONFIANCA_CONCORDANCIA` de propósito — é o que `Desfecho.VOTO_UNICO` já
+declara: dar a uma leitura solitária a marca de três leituras concordantes
+infla a confiança exatamente onde ela é menor."""
+
+CONFIANCA_MAIORIA = 0.85
+"""A maioria concordou, mas houve divergência registrada — mais incerto que
+concordância unânime, e ainda assim mais confiável que uma leitura sem
+segunda opinião nenhuma."""
 
 _ITENS_PARA_CONCLUIR_COLUNA_VAZIA = 10
 """Quantos itens é preciso ter para chamar uma coluna quase vazia de artefato.
@@ -293,26 +312,6 @@ def _agrupar_votos(valores: dict[str, Any]) -> list[list[str]]:
     return grupos
 
 
-def _chave_de_item(identificador: str) -> str:
-    """Forma normalizada usada **só para casar** o mesmo item entre rotas.
-
-    Medido sobre as saídas reais: apenas 81 de ~283 itens apareciam nas quatro
-    rotas. A causa dominante não é acento — é **espaço espúrio no meio da
-    palavra**, que o extrator de tabela insere ao atravessar a quebra de coluna
-    num cabeçalho rotacionado: `Arroz, integra l` e `Arroz, integral` são o
-    mesmo alimento, e viravam dois itens de um voto cada.
-
-    Remover **todo** espaço é agressivo de propósito, e seguro aqui porque o
-    identificador carrega o número do item: `100 Brocolis, cozido` e
-    `101 Brocolis, cru` continuam distintos. Fosse só o nome, colapsaria
-    demais — e colapsar itens diferentes é pior que não alinhar, porque
-    misturaria valores de alimentos distintos na mesma linha.
-    """
-    sem_acento = unicodedata.normalize("NFKD", identificador)
-    sem_acento = "".join(c for c in sem_acento if not unicodedata.combining(c))
-    return "".join(sem_acento.split()).casefold()
-
-
 def _numero_de_item(identificador: str) -> str:
     """O número que abre o identificador, se houver.
 
@@ -325,20 +324,6 @@ def _numero_de_item(identificador: str) -> str:
         return ""
     primeiro = texto.split()[0].rstrip(".,)")
     return primeiro if primeiro.isdigit() else ""
-
-
-def _mais_legivel(a: str, b: str) -> str:
-    """Entre duas grafias do mesmo item, a que vai para a planilha.
-
-    Critério: menos espaços vence — `Arroz, integral` sobre `Arroz, integra l`.
-    Empatando, a que tem acento, que é a forma correta em português. A chave
-    normalizada serve para casar; ninguém quer lê-la.
-    """
-    if a.count(" ") != b.count(" "):
-        return a if a.count(" ") < b.count(" ") else b
-    acentos = sum(1 for c in unicodedata.normalize("NFKD", a) if unicodedata.combining(c))
-    outros = sum(1 for c in unicodedata.normalize("NFKD", b) if unicodedata.combining(c))
-    return a if acentos >= outros else b
 
 
 def _canonizar(
@@ -481,6 +466,67 @@ def consolidar(
                 }
 
     return resultado
+
+
+def materializar(resultado: ResultadoConsolidacao, *, fonte: str) -> list[Registro]:
+    """Traduz a votação de volta para `Registro` — o formato que qualquer
+    destino do projeto sabe gravar (CSV, JSON, ou repassar a outro sistema).
+
+    Sem isto, `consolidar()` produzia um resultado que nada no projeto sabia
+    levar à saída: a votação existia, testada e correta, mas nunca chegava à
+    planilha final — a peça que faltava entre "decidir célula a célula" e
+    "gravar o resultado".
+
+    **Perda de proveniência, aceita.** `Celula` carrega só o valor vencedor e
+    quem votou — a evidência original (página, bbox, texto bruto) de cada
+    rota já foi descartada por `_indexar`/`_valor`, antes deste ponto. A
+    evidência produzida aqui registra a **decisão da votação em si**
+    (desfecho, rotas a favor, rotas divergentes), não onde no documento o
+    valor apareceu — é auditoria de outra natureza, não a mesma.
+
+    Célula com sentinela (`Sentinela.TRACO`, etc.) sai como texto: a votação
+    já achatou o valor original, e reconstruir a sentinela a partir da string
+    seria adivinhar, não recuperar informação perdida.
+    """
+    confianca_por_desfecho = {
+        Desfecho.CONCORDANCIA: CONFIANCA_CONCORDANCIA,
+        Desfecho.VOTO_UNICO: CONFIANCA_VOTO_UNICO,
+        Desfecho.MAIORIA: CONFIANCA_MAIORIA,
+    }
+
+    por_item: dict[str, dict[str, Campo]] = {}
+    for celula in resultado.celulas:
+        por_item.setdefault(celula.item, {})[celula.campo] = _campo_da_celula(
+            celula, confianca_por_desfecho
+        )
+
+    registros = []
+    for item, campos in por_item.items():
+        campos = dict(campos)
+        campos["identificador"] = Campo[str].extraido(
+            valor=item, evidencia=Evidencia(texto_bruto=item)
+        )
+        registros.append(Registro(campos=campos, fonte=fonte))
+    return registros
+
+
+def _campo_da_celula(celula: Celula, confianca_por_desfecho: dict[Desfecho, float]) -> Campo:
+    if not celula.preenche:
+        return Campo.ausente()
+
+    confianca = confianca_por_desfecho[celula.desfecho]
+    detalhe = f"consolidado ({celula.desfecho.value}): {', '.join(celula.rotas_a_favor)}"
+    if celula.rotas_divergentes:
+        detalhe += f"; divergiram: {', '.join(celula.rotas_divergentes)}"
+    evidencia = Evidencia(texto_bruto=str(celula.valor), vizinhanca=detalhe)
+
+    if isinstance(celula.valor, (int, float)) and not isinstance(celula.valor, bool):
+        return Campo[float].extraido(
+            valor=float(celula.valor), evidencia=evidencia, confianca=confianca
+        )
+    return Campo[str].extraido(
+        valor=str(celula.valor), evidencia=evidencia, confianca=confianca
+    )
 
 
 def _decidir(item: str, campo: str, votos: dict[str, Any], pesos: dict[str, float]) -> Celula:

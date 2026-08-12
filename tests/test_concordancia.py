@@ -154,6 +154,87 @@ class TestAlinhamento:
         assert r.comparacoes == 0
 
 
+class TestNormalizacaoDeIdentificador:
+    """`set.intersection` sobre string bruta perdia itens por espaço espúrio —
+    o mesmo defeito que `consolidacao._chave_de_item` já corrigia, só que não
+    replicado aqui (achado da auditoria de 2026-08-02)."""
+
+    def test_espaco_espurio_nao_impede_o_alinhamento(self):
+        """'Arroz, integra l' e 'Arroz, integral' são o mesmo item."""
+        r = comparar_estrategias(
+            {
+                "a": [_registro("1 Arroz, integral", v=2.6)],
+                "b": [_registro("1 Arroz, integra l", v=2.6)],
+            }
+        )
+        assert r.itens_comuns == 1
+        assert r.taxa == 1.0
+
+    def test_acento_nao_impede_o_alinhamento(self):
+        r = comparar_estrategias(
+            {
+                "a": [_registro("Proteína", v=1.0)],
+                "b": [_registro("Proteina", v=1.0)],
+            }
+        )
+        assert r.itens_comuns == 1
+
+    def test_itens_realmente_diferentes_continuam_separados(self):
+        """Normalização agressiva não pode fundir itens distintos."""
+        r = comparar_estrategias(
+            {
+                "a": [_registro("100 Brocolis, cozido", v=1.0)],
+                "b": [_registro("101 Brocolis, cru", v=2.0)],
+            }
+        )
+        assert r.itens_comuns == 0
+
+    def test_divergencia_mostra_a_grafia_mais_legivel(self):
+        r = comparar_estrategias(
+            {
+                "a": [_registro("Arroz, integral", v=1.0)],
+                "b": [_registro("Arroz, integra l", v=999.0)],
+            }
+        )
+        assert r.divergencias[0].item == "Arroz, integral"
+
+
+class TestItensExclusivos:
+    """A interseção sozinha é cega a fabricação: item que só uma rota produziu
+    nunca é comparado, então nunca é penalizado — precisa ficar visível em vez
+    de sumir (P0.1/P-1.1 das auditorias de 2026-08-02)."""
+
+    def test_item_fora_da_intersecao_e_contado(self):
+        r = comparar_estrategias(
+            {
+                "a": [_registro("X", v=1.0), _registro("Y", v=1.0), _registro("Z", v=1.0)],
+                "b": [_registro("X", v=1.0)],
+            }
+        )
+        assert r.itens_exclusivos["a"] == 2
+        assert r.itens_exclusivos["b"] == 0
+
+    def test_sem_item_exclusivo_o_dicionario_fica_zerado(self):
+        r = comparar_estrategias(
+            {
+                "a": [_registro("X", v=1.0)],
+                "b": [_registro("X", v=1.0)],
+            }
+        )
+        assert r.itens_exclusivos == {"a": 0, "b": 0}
+
+    def test_relatorio_avisa_sobre_itens_fora_da_intersecao(self):
+        r = comparar_estrategias(
+            {
+                "a": [_registro("X", v=1.0), _registro("Y", v=1.0)],
+                "b": [_registro("X", v=1.0)],
+            }
+        )
+        texto = r.relatorio()
+        assert "fora da interseção" in texto
+        assert "a" in texto
+
+
 class TestSentinelas:
     def test_sentinela_igual_concorda(self):
         r = comparar_estrategias(
