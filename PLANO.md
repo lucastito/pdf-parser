@@ -2,155 +2,71 @@
 
 > Atualizado em **2026-08-12**. Este arquivo cobre os dois cenários que
 > compartilham o mesmo código (ver [CLAUDE.md](CLAUDE.md), "Dois cenários
-> de uso"): **Cenário A** — o experimento científico (branch `main`, GitHub)
-> — e **Cenário B** — o produto de produção da DSS (branch `dss-main`,
-> GitLab). Até 2026-08-12 eram dois arquivos (este e `docs/PLANO-PRODUTO.md`)
-> — unificados porque não havia conteúdo de fato repetido entre eles, e
-> manter dois arquivos de plano corria o risco real de divergirem sem que
-> ninguém notasse.
+> de uso"): **Cenário A** — o experimento científico, mantido neste
+> repositório — e **Cenário B** — um cenário de uso corporativo, mantido em
+> repositório privado separado, fora daqui.
 >
 > **Aviso sobre nomenclatura, pra não confundir:** a seção "Duas entregas",
 > logo no início do bloco do Cenário A mais abaixo, foi escrita **antes de o
 > Cenário B existir** e chama de "Produto" um entregável do **próprio
-> Cenário A** — a ferramenta genérica de pesquisa como projeto pessoal, não a
-> produção real da DSS. É coincidência de nome entre dois conceitos
-> diferentes. Onde este arquivo fala da DSS, o termo usado é sempre "Cenário
-> B", nunca só "produto".
+> Cenário A** — a ferramenta genérica de pesquisa como projeto pessoal, não
+> o uso corporativo. É coincidência de nome entre dois conceitos diferentes.
 
 ## Índice por escopo
 
 | Escopo | Onde |
 |---|---|
-| **Só Cenário B** (produto DSS) | seção "Cenário B — Produto DSS", logo abaixo |
+| **Só Cenário B** (uso corporativo, fora deste repositório) | seção "Cenário B", logo abaixo — resumo mínimo; o detalhe vive no repositório privado |
 | **Só Cenário A** (experimento científico) | o resto do arquivo, a partir de "Cenário A — Experimento científico" |
-| **Os dois** (código compartilhado) | ver [CLAUDE.md](CLAUDE.md), tabela "O que é compartilhado" — o achado sobre `concordancia.py`/`consolidacao.py` na seção B abaixo (item "pendência que atinge os dois cenários") é o **mesmo** P-1.1 descrito na seção do Cenário A, porque o código é o mesmo — não são dois problemas, é um problema citado nos dois lugares por necessidade de contexto, não por repetição de conteúdo |
+| **Os dois** (código compartilhado) | ver [CLAUDE.md](CLAUDE.md), tabela "O que é compartilhado" — o achado abaixo sobre `concordancia.py`/`consolidacao.py` é o **mesmo** P-1.1 descrito na seção do Cenário A, porque o código é o mesmo — não são dois problemas, é um problema citado nos dois lugares por necessidade de contexto |
 
 ---
 
-## Cenário B — Produto DSS
+## Cenário B
 
-> Ponto de retomada do Cenário B (produto, branch `dss-main`, remoto
-> GitLab). O que já foi feito não se repete aqui em detalhe — está nos ADRs,
-> no código e nos testes. Isto é o estado e o que falta, não um changelog.
+> Este repositório não é o ponto de retomada do Cenário B — só registra o
+> que afeta código **compartilhado**, porque isso importa pra quem trabalha
+> aqui também. Detalhe operacional do Cenário B vive no repositório privado.
 
-### O que já está pronto
+O roteador de extração por página (ADR-0025), a consolidação por voto célula
+a célula (ADR-0017) e o vocabulário de campo esperado (`vocabulario.py`) são
+usados em produção nesse cenário desde 2026-08-11/12, validados contra
+documentos reais.
 
-**O roteador de extração por página** (ADR-0025) é o caminho de produção.
-`parser ingerir` decide a rota de cada página em tempo de execução — nunca
-por `layout`/`campos_na_ordem` declarado à mão — em quatro níveis de custo
-(ADR-0024): sinal grátis → determinístico (posicional + pdfplumber + Camelot
-+ PyMuPDF, todos tentados) → palavra-chave (nível 2b, com vocabulário) →
-modelo (LLM texto, e agora VLM).
+### ⚠ Pendência em código compartilhado — NÃO fechada
 
-Consolidado em 2026-08-11/12, em cima do que ADR-0025 já tinha:
+**É o mesmo P-1.1** descrito em "P-1 — o que as auditorias de 02/08 puseram
+na frente de tudo", mais abaixo — `concordancia.py`/`consolidacao.py` são
+módulos **compartilhados**, o código é idêntico para os dois cenários.
 
-| Peça | Módulo | Estado |
-|---|---|---|
-| Concordância vira **votação célula a célula** quando 2+ rotas determinísticas concordam, em vez de escolher "a melhor" planilha | `consolidacao.materializar` + `planejador._decidir_entre_deterministicos` (rota `"consolidado"`) | pronto, testado — **mas ver a pendência logo abaixo, não é o mesmo que "resolvido"** |
-| VLM como **complemento**, não substituto — página com imagem embutida relevante ganha uma segunda decisão de visão, além da rota principal | `diagnostico._checar_imagem_embutida` + `planejador` | pronto, testado, calibrado contra os dois PDFs reais da DSS (ver limite abaixo) |
-| Vocabulário como fonte única dos campos do LLM/VLM — prompt enriquecido com descrição, unidade, opções válidas (enum) e faixa numérica | `vocabulario.CampoEsperado` + `fabrica._campos` + `ollama.ExtratorBaseadoEmModelo._prompt` | pronto, testado |
-| Vocabulário lê **várias abas** da planilha de schema, com dedupe, e recupera listas suspensas via XML bruto (`openpyxl` não lê o formato de extensão `x14:`) | `vocabulario.carregar_campos_do_xlsx(abas=[...])` | pronto, testado contra a planilha real (341 campos, 268 com enum recuperado) |
-| Saída grava **CSV e JSON automaticamente** — o CSV é o valor achatado, o JSON carrega origem/confiança/evidência por campo | `lote._gravar` | pronto, testado |
-| Crash corrigido: `parse_numero` explodia em número com múltiplos separadores de milhar e nenhum decimal (ex. coordenada UTM citada em prosa) | `normalizacao._para_float` | pronto, testado — achado rodando contra PDF real, não hipotético |
-
-Suite completa (`pytest -m "not experimento_a"`) e `flake8` limpos. Validado
-de ponta a ponta contra os dois PDFs reais em `inputs-dss/`.
-
-### ⚠ Pendência que atinge os dois cenários — NÃO fechada, e piorada nesta sessão
-
-**Isto é o mesmo P-1.1** descrito em "P-1 — o que as auditorias de 02/08
-puseram na frente de tudo", na seção do Cenário A mais abaixo —
-`concordancia.py`/`consolidacao.py` são módulos **compartilhados**, o código
-é idêntico para os dois cenários. Registrado aqui de novo **por
-necessidade de contexto** (quem lê só a seção B precisa saber disto), não
-por esquecimento de que já existe uma seção P-1 sobre o mesmo tema.
-
-- **O que já existia, e continua parcial:** `concordancia.py` ganhou
-  `itens_exclusivos` — os itens que uma rota produziu e não entraram na
-  interseção agora aparecem no relatório, com aviso explícito. Isso é
-  **visibilidade**, não **penalização**: a `taxa` de concordância continua
-  calculada só sobre a interseção, e um item fabricado não reduz esse
-  número.
-- **O que esta sessão criou de novo, e é uma lacuna real, não hipotética:**
-  a rota `"consolidado"` chama `consolidar(saidas)` com **todos** os itens
-  de **todas** as rotas, inclusive os exclusivos. Um item que só uma rota
-  "leu" (podendo ser fabricação — o caso já medido no corpus é o Camelot
+- **`concordancia.py` ganhou `itens_exclusivos`** — os itens que uma rota
+  produziu e não entraram na interseção agora aparecem no relatório, com
+  aviso explícito. Isso é **visibilidade**, não **penalização**: a `taxa`
+  de concordância continua calculada só sobre a interseção, e um item
+  fabricado não reduz esse número.
+- **A rota `"consolidado"` (`planejador.py`) é uma lacuna real, não
+  hipotética:** ela chama `consolidar(saidas)` com **todos** os itens de
+  **todas** as rotas, inclusive os exclusivos. Um item que só uma rota "leu"
+  (podendo ser fabricação — o caso já medido no corpus é o Camelot
   devolvendo 62 registros pra uma página de ~31) vira um **voto único** no
   resultado final, com confiança **0,9** — quase tão alta quanto
   concordância plena, sem checar se aquele item veio de uma rota
-  historicamente propensa a inventar linha.
-- **Deliberadamente não corrigido nesta sessão** — decisão do usuário, pra
-  não gerar mais uma rodada de mudança em cima de um mecanismo ainda quente
-  no mesmo dia em que foi criado. Fica registrado aqui como dívida técnica
-  real — não é "resolvido", nem "P-1 fechado".
-- **Direção provável do conserto, ainda não decidida nem implementada:**
-  item exclusivo (só uma rota leu, entre várias consultadas) vira pendência
-  para revisão humana em vez de voto único automático — só concordância real
-  ou maioria entrariam na planilha sem revisão.
+  historicamente propensa a inventar linha. Deliberadamente não corrigido
+  ainda. Direção provável do conserto: item exclusivo vira pendência de
+  revisão humana, não voto único automático.
 
-### Limites declarados — não escondidos, registrados para revisão
+### Limites declarados em código compartilhado
 
-- **Enum/faixa do vocabulário casam por número de linha, não por coluna.**
-  `sqref` da validação de dado diz "estas linhas"; a regra pode pertencer a
-  uma coluna administrativa vizinha, não à célula de valor do campo. Medido:
-  campos de texto livre (`Company`, `Project`) vieram com `('Yes', 'No')` —
-  claramente errado. Tratar como candidato a confirmar, nunca como verdade.
-  Ver docstring de `CampoEsperado.opcoes` em `src/parser/vocabulario.py`.
-- **Piso de imagem relevante (`AREA_MINIMA_DE_IMAGEM_RELEVANTE = 0.02`) é
-  calibração sobre dois documentos, não medição.** Sem ele, todo logotipo de
-  cabeçalho disparava VLM em toda página. Com ele, uma imagem pequena mas
-  informativa (um ícone com valor, por exemplo) fica de fora. Ver docstring
-  em `src/parser/diagnostico.py`.
+- **Piso de imagem relevante (`AREA_MINIMA_DE_IMAGEM_RELEVANTE = 0.02`,
+  `diagnostico.py`) é calibração sobre dois documentos, não medição.** Sem
+  ele, todo logotipo de cabeçalho disparava VLM em toda página. Com ele, uma
+  imagem pequena mas informativa fica de fora.
 - **Peso da votação em `consolidacao.py` continua uniforme e provisório**
   (herdado do ADR-0017) — calibrar exige a matriz de correlação de erro
-  entre rotas, que só existe depois de medição. Ver também a pendência de
-  P-1.1 acima: os dois limites vêm da mesma causa-raiz, calibração que só
-  existe depois de gabarito.
-
-### O que falta, em ordem
-
-1. **Fechar a lacuna de votação/fabricação** descrita acima — item exclusivo
-   devia virar pendência de revisão humana, não voto único automático a
-   0,9 de confiança.
-2. **ADR-0026 — registrar o pacote desta sessão.** Consolidação ligada de
-   verdade (com a pendência acima registrada), VLM complementar por imagem
-   embutida (com o piso de área), e vocabulário unificado como fonte única
-   do LLM/VLM. Referenciar ADR-0017 (consolidação), ADR-0021 (a
-   característica "imagem embutida" que o ADR já listava como "pronta" sem
-   o código existir), ADR-0024.
-3. **Verificar deriva de documentação** — `SPEC.md` e `REQUISITOS.md` ainda
-   descrevem "um extrator por documento inteiro", sem roteador, sem nível
-   2b, sem vocabulário. O projeto é SDD/TDD por princípio próprio
-   (CLAUDE.md) e essa deriva já é conhecida, não auditada em detalhe.
-4. **CLI ainda não expõe `--vocabulario`** — hoje só existe como parâmetro
-   Python de `ingerir()`. Sem isso, Cenário B não tem como declarar o
-   vocabulário sem escrever um script.
-5. **Decisão de destino ainda em aberto, fora do escopo desta sessão:** o
-   usuário esclareceu que a planilha de schema da DSS **não é o formato de
-   saída** — é só a fonte do vocabulário de termos a procurar. O destino
-   real do Cenário B é uma resposta/chamada a outro módulo do Copilot (motor
-   de regras pós-extração), não o preenchimento da planilha. `DestinoJSON`
-   (já ligado) é o candidato natural a virar esse payload — mas nenhum
-   `Destino` que fale HTTP com um sistema externo existe ainda. Não é
-   dívida — é escopo que ninguém pediu para abrir ainda.
-
-### Estado do repositório — verificado em 2026-08-12, não presumido
-
-**Todo o trabalho desta sessão foi commitado localmente, em 13 commits
-pequenos e rotulados por escopo** — nada foi pushado. `dss-main` ficou 13
-commits à frente de `gitlab/main` (verificar `git log --oneline` pro número
-atual). Nove são compartilháveis com o Cenário A (mecanismo agnóstico:
-roteador, vocabulário, consolidação, extratores, fábrica, lote); os demais
-são marcados `(B)` no início da mensagem e **nunca devem ir para
-`origin`/GitHub** — alguns tocam dado real da DSS (`inputs-dss/`) ou citam o
-nome da planilha de schema.
-
-`core.hooksPath` foi configurado nesta sessão. A guarda de confidencialidade
-importa pro lado **pessoal/GitHub**, não pro `dss-main`/GitLab — ver a seção
-"Regra de confidencialidade" em CLAUDE.md. Antes de qualquer commit ir para
-`main`/`origin` (inclusive por cherry-pick de um dos commits "compartilháveis"
-acima), popular `.githooks/denylist.txt` localmente com os termos que não
-podem vazar pro público.
+  entre rotas, que só existe depois de medição.
+- **Enum/faixa do vocabulário (`vocabulario.py`) casam por número de linha,
+  não por coluna** — um limite genérico do leitor de planilha de schema,
+  independente de qual planilha for usada.
 
 ---
 
@@ -392,7 +308,7 @@ quando vier do reconhecimento (P2), não de perfil escrito à mão.
 > abaixo **foi implementado** para o Cenário B: é o roteador de extração por
 > página, ADR-0025 (`src/parser/planejador.py`), que monta a ordem de colunas
 > a partir da geometria descoberta e escala pro modelo quando preciso — ver
-> "Cenário B — Produto DSS" no topo deste arquivo. **Para o Cenário A**
+> "Cenário B" no topo deste arquivo. **Para o Cenário A**
 > (medir e comparar modelos sob o protocolo pré-registrado do experimento,
 > ADR-0020) isso continua não fechado: o roteador ainda não foi ligado ao
 > caminho do experimento (`pipeline.Pipeline`, que é só de A), e o item P2-2

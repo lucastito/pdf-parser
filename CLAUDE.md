@@ -11,9 +11,9 @@ Entrada e saída são **parametrizáveis**: o núcleo não conhece formato de ar
 Ver [README.md](README.md) e [REQUISITOS.md](REQUISITOS.md).
 
 **Ao retomar o trabalho:** o plano do que falta, em ordem e com justificativa, está
-em [experimentos/PLANO.md](experimentos/PLANO.md). As decisões e as medições que as
-sustentam estão em [docs/adr/](docs/adr/) — inclusive hipóteses que a medição
-refutou, registradas de propósito para que a busca não se repita.
+em [PLANO.md](PLANO.md). As decisões e as medições que as sustentam estão em
+[docs/adr/](docs/adr/) — inclusive hipóteses que a medição refutou, registradas de
+propósito para que a busca não se repita.
 
 ## Regra de confidencialidade — leia antes de escrever qualquer coisa
 
@@ -52,6 +52,43 @@ não o hook. Ver [.githooks/README.md](.githooks/README.md).
 
 Se você é um agente e precisa do contexto completo, leia `CLAUDE.local.md`.
 Se esse arquivo não existir, trabalhe só com o que está versionado e **pergunte**.
+
+## Dois cenários de uso, um núcleo só
+
+Este repositório serve dois propósitos diferentes, no mesmo código:
+
+- **Cenário A — pesquisa** (branch `main`, deste repositório): comparar
+  modelos, famílias, configurações e hipóteses. Documento-caso é o TACO;
+  perfil de exemplo é `perfis/nutricional.json` — **não é template a
+  replicar**, é só o exemplo de um domínio. Usa os subcomandos `ambiente`,
+  `diagnosticar`, `calibrar`, `avaliar`, `comparar`, `experimento` e a classe
+  `parser.pipeline.Pipeline`.
+- **Cenário B — uso corporativo** (mantido fora deste repositório, num
+  branch e remoto privados): processar documentos reais de um cenário de
+  produção, agnóstico ao domínio deles — não há estrutura fixa a assumir.
+  Usa só `ingerir`, que roteia por página (`parser.planejador`) sem layout
+  nem ordem de coluna declarados à mão.
+
+**Não há parâmetro de "modo" no código — o parâmetro é qual comando você
+roda.** `ingerir` é o único caminho de produção; os demais são ferramenta de
+pesquisa e não precisam ser tocados para operar em B.
+
+O que é compartilhado entre os dois, e por quê:
+
+| Módulo | Por quê é dos dois |
+|---|---|
+| `calibracao`, `triagem`, `diagnostico`, `planejador`, `fabrica` | descoberta de estrutura é agnóstica de domínio por definição |
+| `degraus` | qualquer chamada a LLM/VLM, em A ou B, precisa da mesma escada de restrição de saída |
+| `contexto` | dimensionar `num_ctx` pela entrada medida importa tanto num experimento quanto em produção real |
+| `concordancia`, `consolidacao` | comparar rotas entre si é tanto sinal de confiança em tempo de execução (B) quanto métrica de comparação (A) |
+
+O que é só de A, e por quê:
+
+| Módulo | Por quê não entra em B |
+|---|---|
+| `escada`, `procedencia`, `medicao` | alocação de modelo por máquina emprestada, trava de execução concorrente — B roda num servidor só |
+| `extratores/linear.py` | piso de comparação, deliberadamente ruim; não serve a produção |
+| `parser.pipeline.Pipeline` | um extrator só por documento — o modelo que `planejador` existe para superar |
 
 ## Setup
 

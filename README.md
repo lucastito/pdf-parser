@@ -9,6 +9,12 @@ layout e o destino são configuração — não código.
 
 ## Instalação
 
+Serve aos dois cenários de uso do projeto (pesquisa pessoal e um cenário de
+uso corporativo — ver `CLAUDE.md`, "Dois cenários de uso"). Onde os dois
+precisam de coisas diferentes, está marcado.
+
+Requer **Python 3.10+**.
+
 ```powershell
 git clone https://github.com/lucastito/pdf-parser.git
 cd pdf-parser
@@ -17,6 +23,44 @@ python -m pip install -e ".[dev]"
 ```
 
 O `git config` importa: os hooks de verificação não viajam no clone.
+
+`.[dev]` traz tudo que os **dois cenários** precisam pra rodar código e
+suíte de testes: `pydantic`, `pymupdf`, `pint`, `pandera`, `pdfplumber`,
+`camelot-py[cv]`, `pytesseract`, `Pillow` (declaradas em `dependencies`), mais
+`pytest`, `pytest-cov`, `black`, `flake8`, `pyyaml` (declaradas no extra
+`dev`).
+
+**Só quem for rodar o experimento multimáquina** (comparação de modelos,
+alocação por hardware — módulos `escada`/`procedencia`/`medicao`, ver
+`CLAUDE.md`) precisa do extra `experimento` (`psutil`):
+
+```powershell
+python -m pip install -e ".[dev,experimento]"
+```
+
+### Dependências de sistema — fora do `pip`, os dois cenários precisam
+
+| Ferramenta | Pra quê | Onde conseguir |
+|---|---|---|
+| **Tesseract OCR** | rota `ocr` — `pytesseract` só chama o binário, não o embute | [tesseract-ocr/tesseract](https://github.com/tesseract-ocr/tesseract) |
+| **Ghostscript** | rota `camelot`, flavor `lattice` | [ghostscript.com/releases](https://www.ghostscript.com/releases/gsdnld.html) |
+
+Sem eles, o `pip install` termina sem erro — a falta só aparece **na hora de
+rodar** aquela rota, com uma mensagem que não aponta pra cá. Instale os dois
+antes de rodar `parser ingerir` ou a suíte completa.
+
+### Servidor de inferência (rotas `llm`/`vlm`)
+
+Precisa de um servidor compatível com a API do [Ollama](https://ollama.com)
+no ar (local ou remoto — `url` é parâmetro de rota no perfil).
+
+- **Cenário A** (comparar modelos): a escada completa de 14 modelos vive em
+  código, em `src/parser/escada.py` — é a fonte única, não repita a lista em
+  documentação solta. `experimentos/scripts/1-preparar-maquina.ps1` instala a
+  escada inteira (~93 GB) e é idempotente.
+- **Cenário B** (uso corporativo): só o modelo que o perfil de produção
+  declarar em `rotas.llm.modelo`/`rotas.vlm.modelo` — mantido fora deste
+  repositório.
 
 ## Uso
 
@@ -196,4 +240,4 @@ resultaria de fazer diferente, incluindo casos em que a hipótese inicial se mos
 errada.
 
 O que ainda falta, com ordem e justificativa, está em
-[experimentos/PLANO.md](experimentos/PLANO.md).
+[PLANO.md](PLANO.md).
