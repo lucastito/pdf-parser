@@ -2,10 +2,10 @@
 
 **Status:** aceito · **Data:** 2026-08-11 · **Implementado e em produção (Cenário B):** 2026-08-11/12
 
-> Validado de ponta a ponta contra os dois PDFs reais em `inputs-dss/` — ver
-> "Cenário B — Produto DSS" em `PLANO.md` pro estado exato e o que ainda
-> falta (inclusive uma lacuna conhecida na consolidação, ADR-0017). O
-> Cenário A não usa este roteador ainda.
+> Validado de ponta a ponta contra documentos reais de um cenário corporativo
+> separado (fora deste repositório) — ver "Cenário B" em `PLANO.md` pro
+> estado exato e o que ainda falta (inclusive uma lacuna conhecida na
+> consolidação, ADR-0017). O Cenário A não usa este roteador ainda.
 
 ## Contexto
 
@@ -144,4 +144,4 @@ individualmente — um documento, uma família de layout. Continua em aberto
 saber com que taxa a rota de texto (nível 3) produz saída aproveitável em
 documentos de estrutura genuinamente diferente da tabela nutricional, e é
 isso que a coleta de documentos por característica (`experimentos/pdf/`) e o
-uso real sobre `inputs-dss/` vão responder.
+uso real no Cenário B vão responder.

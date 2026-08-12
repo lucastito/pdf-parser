@@ -13,8 +13,8 @@
 > todas as rotas, inclusive os que só uma rota produziu — um item exclusivo
 > vira `Desfecho.VOTO_UNICO` com confiança 0,9, sem checar se a rota de
 > origem tem histórico de fabricar linha (o problema que P-1.1 nomeia, ver
-> `PLANO.md`). Não corrigido de propósito; ver a seção "Cenário B — Produto
-> DSS" em `PLANO.md` para o detalhe e o estado exato.
+> `PLANO.md`). Não corrigido de propósito; ver a seção "Cenário B" em
+> `PLANO.md` para o detalhe e o estado exato.
 
 ## Contexto
 
