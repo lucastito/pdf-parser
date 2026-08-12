@@ -251,9 +251,7 @@ def _mapear_planilha_para_arquivo(caminho: str | Path) -> dict[str, str]:
             rid_por_nome[nome] = rid
 
     raiz_rel = ET.fromstring(rels_xml)
-    arquivo_por_rid = {
-        rel.get("Id"): rel.get("Target") for rel in raiz_rel if rel.get("Id")
-    }
+    arquivo_por_rid = {rel.get("Id"): rel.get("Target") for rel in raiz_rel if rel.get("Id")}
 
     return {
         nome: f"xl/{arquivo_por_rid[rid]}"

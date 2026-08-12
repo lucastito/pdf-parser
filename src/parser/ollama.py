@@ -244,9 +244,7 @@ class ExtratorBaseadoEmModelo:
             if campo.unidade:
                 partes_do_campo.append(f" (unidade: {campo.unidade})")
             if campo.opcoes:
-                partes_do_campo.append(
-                    f" — valores aceitos: {', '.join(campo.opcoes)}"
-                )
+                partes_do_campo.append(f" — valores aceitos: {', '.join(campo.opcoes)}")
             if campo.faixa:
                 minimo, maximo = campo.faixa
                 partes_do_campo.append(f" — faixa válida: {minimo} a {maximo}")

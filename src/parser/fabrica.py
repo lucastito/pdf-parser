@@ -299,9 +299,7 @@ def montar_extrator_para_decisao(
     if decisao.rota == "pymupdf":
         from parser.extratores.pymupdf_ import ExtratorPymupdf
 
-        return ExtratorPymupdf(
-            str(caminho), paginas=range(decisao.pagina - 1, decisao.pagina)
-        )
+        return ExtratorPymupdf(str(caminho), paginas=range(decisao.pagina - 1, decisao.pagina))
 
     if decisao.rota == "ocr":
         from parser.extratores.ocr import ExtratorOCR

@@ -229,6 +229,51 @@ class TestVarreduraNoExperimento:
         dados = json.loads(resumos[0].read_text(encoding="utf-8"))
         assert "extras" in dados, "a varredura não foi registrada no resumo"
 
+    def _perfil_com_modelo_llm(self, tmp_path, documento):
+        import json
+
+        perfil = tmp_path / "p.json"
+        perfil.write_text(
+            json.dumps(
+                {
+                    "nome": "t",
+                    "documento": str(documento),
+                    "rotas": {
+                        "llm": {
+                            "modelo": "modelo-inexistente:0b",
+                            "campos": ["identificador"],
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        return perfil
+
+    def test_varredura_da_rota_llm_usa_o_texto_da_pagina(self, tmp_path, capsys):
+        """A rota `llm` monta o prompt a partir do texto extraído da página, não
+        de imagem renderizada — é o único branch de `_varrer_degraus` que a
+        rota `vlm`, já coberta acima, não exercita."""
+        import json
+
+        documento = self._documento(tmp_path)
+        perfil = self._perfil_com_modelo_llm(tmp_path, documento)
+        destino = tmp_path / "res"
+
+        codigo = main(
+            [
+                "experimento",
+                "--perfil",
+                str(perfil),
+                "--destino",
+                str(destino),
+            ]
+        )
+
+        assert codigo in (0, 1)
+        dados = json.loads(next(destino.glob("*/resumo.json")).read_text(encoding="utf-8"))
+        assert "degraus-llm" in dados["extras"]
+
     def test_sem_degraus_pula_a_varredura(self, tmp_path):
         import json
 
@@ -371,6 +416,205 @@ class TestAvaliarRegistra:
 
         arquivos = {p.name for p in destino.glob("*/acuracia*.json")}
         assert len(arquivos) == 2, f"uma medição apagou a outra: {arquivos}"
+
+
+class TestComparar:
+    """`comparar` roteia por `montar_todas` + `Pipeline` e imprime a
+    concordância. Como o resto deste arquivo, não processa documento de
+    verdade — os extratores são substituídos por dublês (`monkeypatch`), e o
+    que se confere é a fiação: o relatório sai quando há 2+ saídas, uma rota
+    que falha na extração não derruba o comando, e menos de 2 saídas não
+    chama uma comparação que não teria o que comparar.
+    """
+
+    def _documento(self, tmp_path):
+        import fitz
+
+        caminho = tmp_path / "d.pdf"
+        pdf = fitz.open()
+        pdf.new_page().insert_text((72, 72), "texto")
+        pdf.save(caminho)
+        pdf.close()
+        return caminho
+
+    def _perfil(self, tmp_path, documento):
+        import json
+
+        perfil = tmp_path / "p.json"
+        perfil.write_text(
+            json.dumps({"nome": "t", "documento": str(documento), "rotas": {}}),
+            encoding="utf-8",
+        )
+        return perfil
+
+    def _registro(self, identificador: str):
+        from parser.modelo import Campo, Evidencia, Registro
+
+        ev = Evidencia(pagina=1, texto_bruto=identificador)
+        return Registro(
+            campos={
+                "identificador": Campo[str].extraido(valor=identificador, evidencia=ev),
+                "energia_kcal": Campo[float].extraido(valor=124.0, evidencia=ev),
+            },
+            fonte="d.pdf",
+        )
+
+    def _extrator_falso(self, resultado):
+        """`resultado` é a lista de registros a devolver, ou uma exceção a levantar."""
+
+        class _Extrator:
+            def extrair(_self, documento):
+                if isinstance(resultado, Exception):
+                    raise resultado
+                return resultado
+
+        return _Extrator()
+
+    def test_duas_rotas_concordando_imprime_o_relatorio(self, tmp_path, capsys, monkeypatch):
+        documento = self._documento(tmp_path)
+        perfil = self._perfil(tmp_path, documento)
+        registro = self._registro("1 X")
+        monkeypatch.setattr(
+            "parser.fabrica.montar_todas",
+            lambda perfil, incluir_modelos: {
+                "a": self._extrator_falso([registro]),
+                "b": self._extrator_falso([registro]),
+            },
+        )
+
+        codigo = main(["comparar", "--perfil", str(perfil), "--documento", str(documento)])
+
+        assert codigo == 0
+        assert "concordância geral" in capsys.readouterr().out
+
+    def test_rota_que_falha_na_extracao_nao_derruba_o_comando(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        documento = self._documento(tmp_path)
+        perfil = self._perfil(tmp_path, documento)
+        registro = self._registro("1 X")
+        monkeypatch.setattr(
+            "parser.fabrica.montar_todas",
+            lambda perfil, incluir_modelos: {
+                "boa": self._extrator_falso([registro]),
+                "ruim": self._extrator_falso(RuntimeError("falhou de propósito")),
+            },
+        )
+
+        codigo = main(["comparar", "--perfil", str(perfil), "--documento", str(documento)])
+
+        assert codigo == 0
+        assert "falhou" in capsys.readouterr().out
+
+    def test_menos_de_duas_saidas_nao_chama_a_comparacao(self, tmp_path, capsys, monkeypatch):
+        """Uma rota só (ou nenhuma com registro) não tem com o que comparar —
+        chamar `comparar_estrategias` aqui produziria o relatório vazio
+        ("apenas 1 estratégia"), que é ruído, não informação."""
+        documento = self._documento(tmp_path)
+        perfil = self._perfil(tmp_path, documento)
+        registro = self._registro("1 X")
+        monkeypatch.setattr(
+            "parser.fabrica.montar_todas",
+            lambda perfil, incluir_modelos: {
+                "unica": self._extrator_falso([registro]),
+                "vazia": self._extrator_falso([]),
+            },
+        )
+
+        codigo = main(["comparar", "--perfil", str(perfil), "--documento", str(documento)])
+
+        assert codigo == 0
+        assert "concordância geral" not in capsys.readouterr().out
+
+
+class TestAvaliarValidacoes:
+    """Branches de erro de `_avaliar` que a CLI real alcança.
+
+    Deixado de fora de propósito: o branch `perfil is None` (`cli.py:256-257`).
+    Tanto `avaliar` quanto `comparar` declaram `--perfil` como `required=True`
+    no argparse — esse `if` é defensivo, e `main()` nunca chega a executá-lo.
+    Forçar isso exigiria construir um `Namespace` à mão simulando um estado
+    que a CLI real não produz: cobertura de linha sem cobertura de
+    comportamento.
+    """
+
+    def _documento(self, tmp_path):
+        import fitz
+
+        caminho = tmp_path / "d.pdf"
+        pdf = fitz.open()
+        pdf.new_page().insert_text((72, 72), "texto")
+        pdf.save(caminho)
+        pdf.close()
+        return caminho
+
+    def _perfil(self, tmp_path, *, documento=None, rotas=None):
+        import json
+
+        perfil = tmp_path / "p.json"
+        conteudo = {"nome": "t", "rotas": rotas if rotas is not None else {}}
+        if documento is not None:
+            conteudo["documento"] = str(documento)
+        perfil.write_text(json.dumps(conteudo), encoding="utf-8")
+        return perfil
+
+    def _gabarito_simples(self, tmp_path):
+        gabarito = tmp_path / "g.csv"
+        gabarito.write_text("numero,descricao,energia_kcal\n1,Um,124.0\n", encoding="utf-8")
+        return gabarito
+
+    def test_gabarito_inexistente_vira_mensagem(self, tmp_path, capsys):
+        documento = self._documento(tmp_path)
+        perfil = self._perfil(tmp_path, documento=documento)
+
+        codigo = main(["avaliar", str(tmp_path / "nao-existe.csv"), "--perfil", str(perfil)])
+
+        assert codigo == 2
+        assert capsys.readouterr().err.strip()
+
+    def test_sem_documento_no_perfil_nem_na_linha_de_comando(self, tmp_path, capsys):
+        perfil = self._perfil(tmp_path, documento=None)
+        gabarito = self._gabarito_simples(tmp_path)
+
+        codigo = main(["avaliar", str(gabarito), "--perfil", str(perfil)])
+
+        assert codigo == 2
+        assert "documento" in capsys.readouterr().err.lower()
+
+    def test_gabarito_incompleto_avisa_quantos_faltam(self, tmp_path, capsys):
+        documento = self._documento(tmp_path)
+        perfil = self._perfil(tmp_path, documento=documento)
+        gabarito = tmp_path / "g.csv"
+        gabarito.write_text(
+            "numero,descricao,energia_kcal,energia_kcal_ok\n"
+            "1,Um,124.0,ok\n"
+            "2,Dois,360.0,\n",
+            encoding="utf-8",
+        )
+        destino = tmp_path / "res"
+
+        codigo = main(
+            ["avaliar", str(gabarito), "--perfil", str(perfil), "--destino", str(destino)]
+        )
+
+        assert codigo == 0
+        assert "1 de 2 valores conferidos" in capsys.readouterr().out
+
+    def test_rota_que_falha_ao_montar_conta_como_erro(self, tmp_path, capsys):
+        """`posicional` sem `layout` levanta `ConfiguracaoInvalida` na
+        montagem — o laço de `_avaliar` precisa registrar isso como erro da
+        rota, não deixar subir e derrubar a avaliação inteira."""
+        documento = self._documento(tmp_path)
+        perfil = self._perfil(tmp_path, documento=documento, rotas={"posicional": {}})
+        gabarito = self._gabarito_simples(tmp_path)
+        destino = tmp_path / "res"
+
+        codigo = main(
+            ["avaliar", str(gabarito), "--perfil", str(perfil), "--destino", str(destino)]
+        )
+
+        assert codigo == 1
+        assert "falhou" in capsys.readouterr().out
 
 
 class TestDocumentoDaLinhaDeComando:

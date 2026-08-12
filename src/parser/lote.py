@@ -186,9 +186,7 @@ def ingerir(
 
     for arquivo in arquivos:
         try:
-            registros, nota = _processar(
-                arquivo, perfil, calibrar_por_arquivo, vocabulario
-            )
+            registros, nota = _processar(arquivo, perfil, calibrar_por_arquivo, vocabulario)
             resultado.registros.extend(registros)
             resultado.processados += 1
             resultado.log.append(f"{arquivo.name}: {len(registros)} registro(s) — {nota}")

@@ -107,9 +107,7 @@ class ResultadoConcordancia:
         ]
         exclusivos = {n: q for n, q in self.itens_exclusivos.items() if q}
         if exclusivos:
-            linhas.append(
-                "\nitens fora da interseção (não entraram na concordância acima):"
-            )
+            linhas.append("\nitens fora da interseção (não entraram na concordância acima):")
             for nome, quantos in sorted(exclusivos.items(), key=lambda x: -x[1]):
                 linhas.append(
                     f"  {nome:20s} {quantos} — sem gabarito, pode ser cobertura "

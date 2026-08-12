@@ -166,8 +166,16 @@ def pdf_tabela_calibravel(tmp_path):
     # Sem dígito no nome: um "0"/"1" aqui derrubaria a proporção não-numérica
     # que a calibração usa para achar a faixa de identificadores (limiar 0,7).
     palavras = [
-        "Alfa", "Beta", "Gama", "Delta", "Epsilon",
-        "Zeta", "Eta", "Teta", "Iota", "Kapa",
+        "Alfa",
+        "Beta",
+        "Gama",
+        "Delta",
+        "Epsilon",
+        "Zeta",
+        "Eta",
+        "Teta",
+        "Iota",
+        "Kapa",
     ]
     for i in range(itens):
         pagina.insert_text((160 + i * 40, 600), f"Produto Modelo {palavras[i]}")

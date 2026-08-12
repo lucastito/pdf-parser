@@ -14,6 +14,7 @@ O que estes testes protegem:
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -574,3 +575,74 @@ class TestFalhaDeConfiguracaoNaoEEngolida:
 
         with pytest.raises(ConversaoImpossivel):
             ingerir(pasta_com_pdfs, perfil=PerfilUnidadeRuim())
+
+
+class TestContraDocumentoReal:
+    """`ingerir()` só era exercitado ponta a ponta contra PDF sintético
+    (`fitz`, gerado em memória, sem fonte rotacionada nem o ruído de um
+    documento real). Este teste roda o pipeline inteiro — roteador,
+    calibração, extração, consolidação — contra uma página do
+    documento-caso real do projeto (TACO) e confere contra o gabarito
+    conferido à mão, em vez de inventar uma checagem nova.
+
+    Recorta só a página de referência (29 — a mesma usada nas medições de
+    `PLANO.md`) para o teste continuar rápido: a extração determinística é
+    sub-segundo por página, e não há razão para processar o documento
+    inteiro numa suíte de unidade.
+    """
+
+    PDF_REAL = Path(__file__).resolve().parents[1] / "experimentos" / "pdf" / "TACO.pdf"
+    GABARITO = Path(__file__).resolve().parents[1] / "experimentos" / "golden" / "taco.csv"
+
+    def _pasta_com_a_pagina_29(self, tmp_path):
+        import fitz
+
+        if not self.PDF_REAL.exists():
+            pytest.skip(f"{self.PDF_REAL} não está neste clone")
+
+        recorte = fitz.open()
+        with fitz.open(self.PDF_REAL) as origem:
+            recorte.insert_pdf(origem, from_page=28, to_page=28)  # página 29, base 0
+
+        pasta = tmp_path / "entrada"
+        pasta.mkdir()
+        recorte.save(pasta / "taco-pagina-29.pdf")
+        recorte.close()
+        return pasta
+
+    def test_pipeline_completo_bate_com_o_gabarito_na_pagina_de_referencia(self, tmp_path):
+        from parser.gabarito import Gabarito
+
+        if not self.GABARITO.exists():
+            pytest.skip(f"{self.GABARITO} não está neste clone")
+
+        pasta = self._pasta_com_a_pagina_29(tmp_path)
+        gabarito = Gabarito.de_arquivo(self.GABARITO)
+
+        resultado = ingerir(pasta)
+
+        assert resultado.registros, "o pipeline real não extraiu nada da página 29"
+
+        por_identificador = {
+            str(registro.campos["identificador"].valor): registro
+            for registro in resultado.registros
+            if registro.campos.get("identificador") and registro.campos["identificador"].valor
+        }
+        item = next(
+            (v for k, v in por_identificador.items() if "Arroz, integral, cozido" in k),
+            None,
+        )
+        assert item is not None, (
+            "item de referência do gabarito não apareceu na extração real do "
+            f"documento; identificadores vistos: {sorted(por_identificador)[:10]}"
+        )
+
+        # Sem `mapeamento` declarado, `ingerir()` preserva o cabeçalho como a
+        # rota o leu — "Energia (kcal)", não o nome canônico do gabarito. É o
+        # comportamento real de produção sem perfil, não uma falha do teste.
+        esperado = gabarito.itens["1 Arroz, integral, cozido"]
+        campo = item.campos.get("Energia (kcal)")
+        assert (
+            campo is not None and campo.valor is not None
+        ), "energia (kcal) não foi extraída para o item de referência"
+        assert float(campo.valor) == pytest.approx(float(esperado["energia_kcal"]), abs=0.5)

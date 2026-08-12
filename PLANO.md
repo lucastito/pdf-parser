@@ -33,27 +33,28 @@ a célula (ADR-0017) e o vocabulário de campo esperado (`vocabulario.py`) são
 usados em produção nesse cenário desde 2026-08-11/12, validados contra
 documentos reais.
 
-### ⚠ Pendência em código compartilhado — NÃO fechada
+### ✅ Pendência em código compartilhado — fechada em 2026-08-12
 
-**É o mesmo P-1.1** descrito em "P-1 — o que as auditorias de 02/08 puseram
+**Era o mesmo P-1.1** descrito em "P-1 — o que as auditorias de 02/08 puseram
 na frente de tudo", mais abaixo — `concordancia.py`/`consolidacao.py` são
 módulos **compartilhados**, o código é idêntico para os dois cenários.
 
 - **`concordancia.py` ganhou `itens_exclusivos`** — os itens que uma rota
-  produziu e não entraram na interseção agora aparecem no relatório, com
-  aviso explícito. Isso é **visibilidade**, não **penalização**: a `taxa`
-  de concordância continua calculada só sobre a interseção, e um item
-  fabricado não reduz esse número.
-- **A rota `"consolidado"` (`planejador.py`) é uma lacuna real, não
-  hipotética:** ela chama `consolidar(saidas)` com **todos** os itens de
-  **todas** as rotas, inclusive os exclusivos. Um item que só uma rota "leu"
-  (podendo ser fabricação — o caso já medido no corpus é o Camelot
-  devolvendo 62 registros pra uma página de ~31) vira um **voto único** no
-  resultado final, com confiança **0,9** — quase tão alta quanto
-  concordância plena, sem checar se aquele item veio de uma rota
-  historicamente propensa a inventar linha. Deliberadamente não corrigido
-  ainda. Direção provável do conserto: item exclusivo vira pendência de
-  revisão humana, não voto único automático.
+  produziu e não entraram na interseção aparecem no relatório, com aviso
+  explícito. Isso é **visibilidade**, não **penalização**: a `taxa` de
+  concordância continua calculada só sobre a interseção, e um item fabricado
+  não reduz esse número. Isso não mudou.
+- **A rota `"consolidado"` (`planejador.py`) tinha uma lacuna real:** ela
+  chamava `consolidar(saidas)` com **todos** os itens de **todas** as
+  rotas, inclusive os exclusivos. Um item que só uma rota "lia" (podendo ser
+  fabricação — o caso medido no corpus é o Camelot devolvendo 62 registros
+  pra uma página de ~31) virava um **voto único** no resultado final, com
+  confiança **0,9** — quase tão alta quanto concordância plena, sem checar
+  se aquele item veio de uma rota historicamente propensa a inventar linha.
+  **Corrigido com `Desfecho.ITEM_EXCLUSIVO`** (ADR-0017): item presente em
+  só 1 das N≥2 rotas ativas vira pendência de revisão humana, não voto
+  automático; cobertura parcial genuína (2+ de N concordando) continua com
+  confiança normal.
 
 ### Limites declarados em código compartilhado
 
@@ -126,7 +127,7 @@ resolver o que elas apontaram.
 
 | # | O que | Por que antes de tudo |
 |---|---|---|
-| −1.1 | **Métrica que penalize fabricação** | `concordancia.py:198` usa `set.intersection`: itens inventados caem fora da conta. No corpus, `camelot` devolve **62 registros** para uma página de ~31 e marca ~99%. Enquanto isso não muda, **nenhuma medição nova vale mais que as antigas** |
+| −1.1 | **Métrica que penalize fabricação** | ✅ **Fechado em 2026-08-12.** `concordancia.py:198` usa `set.intersection` e continua medindo só a interseção — isso não mudou, é o papel de `concordancia.py` — mas a lacuna que publicava o item fabricado como dado (na consolidação, não na medição) foi fechada; ver "Cenário B" no topo deste arquivo e ADR-0017 |
 | −1.2 | **Suíte determinística** | duas auditorias tiveram falhas **diferentes** na mesma árvore; isoladas, todas passam. Guarda instável não guarda nada — e é o que iria para a máquina dos outros |
 | −1.3 | **`--sem-modelos` filtrando por propriedade** | `fabrica.py:183` filtra por nome exato; `vlm-menor` passa e carrega modelo em execução que pediu para não usar nenhum. Pequeno, e bloqueia distribuição |
 | −1.4 | **Diagnóstico por página → característica → páginas de triagem** | ver a seção do corpus abaixo: é o que destrava os perfis, e os perfis destravam a distribuição |
@@ -145,7 +146,7 @@ descartadas — é trabalho não feito.
 
 | # | O que a auditoria pede | Estado verificado em 2026-08-12 |
 |---|---|---|
-| P0.1 | Métrica que penalize itens fabricados/duplicados | **Aberto** — é o mesmo −1.1 acima. `itens_exclusivos` (`concordancia.py`) dá visibilidade, não penalização; a lacuna nova da consolidação (seção "Cenário B" no topo) piora, não fecha, este ponto |
+| P0.1 | Métrica que penalize itens fabricados/duplicados | ✅ **Fechado em 2026-08-12** — é o mesmo −1.1 acima. `itens_exclusivos` (`concordancia.py`) continua sendo visibilidade, não penalização — isso não mudou — mas a lacuna da consolidação (item que só uma rota leu virando voto único a 0,9 de confiança) foi fechada com `Desfecho.ITEM_EXCLUSIVO`; ver "Cenário B" no topo deste arquivo e ADR-0017 |
 | P0.2 | Holdout deixou de ser independente (já revelou bug, código foi corrigido em resposta) — precisa de teste final **novo**, nunca tocado | **Aberto, nunca rastreado antes de hoje.** Nenhum arquivo do repositório reclassifica `holdout.csv` como "desenvolvimento" nem propõe um teste final intocado |
 | P0.3 | Gabarito (`taco.csv`) sem dupla anotação, cegamento nem adjudicação | **Aberto, nunca rastreado antes de hoje.** `experimentos/golden/README.md` descreve conferência de **uma pessoa só** — ver a seção "Limite declarado" adicionada lá em 2026-08-12 |
 | P0.4 | Protocolo dos degraus no experimento diverge do caminho de produção (contexto/seed/temperatura/raciocínio não propagados; prompt não é o mesmo) | **Aberto, nunca rastreado antes de hoje.** `src/parser/cli.py:526` monta `SaidaEmDegraus(_cliente(rota), campos)` sem propagar nenhum desses parâmetros da rota, e o prompt é montado ad hoc, não reaproveitado do caminho real |
@@ -346,8 +347,8 @@ Lista do que procurar: [CARACTERISTICAS.md](experimentos/pdf/CARACTERISTICAS.md)
 
 | | |
 |---|---|
-| Testes | **706 passando**, 8 saltados |
-| Estilo | `flake8` e `black` limpos |
+| Testes | **781 passando**, 10 saltados (`pytest -m "not experimento_a"`) — atualizado em 2026-08-12 após fechar P-1.1/P0.1 e cobrir `cli.py::_comparar`, branches de erro de `_avaliar`, e um teste de integração ponta a ponta contra um documento real do corpus |
+| Estilo | `flake8` e `black` limpos — drift de formatação (versão de `black` mais nova) corrigido em 2026-08-12 |
 | Guarda de confidencialidade | 9/9 |
 | ADRs | **24** |
 | Ciclos de importação | **nenhum** (39 módulos) |

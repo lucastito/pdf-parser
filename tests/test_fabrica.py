@@ -145,9 +145,7 @@ class TestMontarExtratorParaDecisao:
     def test_ocr_usa_layout_declarado_no_perfil_como_alternativa(self):
         decisao = DecisaoDeRota(pagina=3, rota="ocr", nivel=1, motivo="sem texto")
         perfil = _perfil(posicional=Rota(nome="posicional", layout=LAYOUT))
-        assert isinstance(
-            montar_extrator_para_decisao(decisao, "doc.pdf", perfil), Extrator
-        )
+        assert isinstance(montar_extrator_para_decisao(decisao, "doc.pdf", perfil), Extrator)
 
     def test_ocr_sem_layout_no_perfil_ainda_monta_extrator(self):
         """Sem layout declarado, `ExtratorOCR` autocalibra por página — não é
