@@ -20,6 +20,11 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    # Embaralha a ordem dos testes a cada execução (semente aleatória por
+    # padrão, impressa no início da rodada). Existe pra achar dependência
+    # oculta de ordem/estado entre testes — o tipo de bug que só aparece às
+    # vezes, "na máquina de outra pessoa" (achado de PLANO.md, item −1.2).
+    "pytest-randomly>=3.0",
     "black>=24.0",
     "flake8>=7.0",
     # A suíte lê `experimentos/pdf/manifest.yaml` para conferir os documentos.
