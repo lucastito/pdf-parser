@@ -21,6 +21,7 @@ from parser.diagnostico import (
     caracterizar_pagina,
     contagem_por_caracteristica,
     diagnosticar,
+    escolher_paginas_de_referencia,
     paginas_por_caracteristica,
     validar_registros,
 )
@@ -443,6 +444,91 @@ class TestContagemPorCaracteristica:
             contagem_por_caracteristica(str(tmp_path / "nao-existe.pdf"))
 
 
+class TestEscolherPaginasDeReferencia:
+    """1 página representante por combinação distinta de características —
+    não 1 por característica isolada, que duplicaria coleta quando páginas
+    diferentes repetem a mesma combinação exata (ADR-0021: "a unidade de
+    análise é a combinação")."""
+
+    def _documento_com_combinacoes(self, tmp_path):
+        """5 páginas, 3 combinações distintas:
+
+        1: {pagina-rotacionada}                       — combinação A
+        2: {pagina-rotacionada}                       — combinação A de novo
+        3: {pagina-rotacionada, sem-camada-de-texto}  — combinação B
+        4: {pagina-em-paisagem}                       — combinação C
+        5: nenhuma característica
+        """
+        import fitz
+
+        documento = fitz.open()
+
+        p1 = documento.new_page()
+        p1.insert_text((72, 72), "texto")
+        p1.set_rotation(90)
+
+        p2 = documento.new_page()
+        p2.insert_text((72, 72), "texto")
+        p2.set_rotation(90)
+
+        p3 = documento.new_page()
+        p3.set_rotation(90)  # sem inserir texto: também sem-camada-de-texto
+
+        p4 = documento.new_page(width=800, height=600)  # página 4, paisagem
+        p4.insert_text((72, 72), "texto")  # senão também ganharia sem-camada-de-texto
+
+        p5 = documento.new_page()
+        p5.insert_text((72, 72), "texto sem nenhuma característica")
+
+        caminho = tmp_path / "combinacoes.pdf"
+        documento.save(str(caminho))
+        documento.close()
+        return caminho
+
+    def test_uma_pagina_por_combinacao_distinta(self, tmp_path):
+        caminho = self._documento_com_combinacoes(tmp_path)
+
+        resultado = escolher_paginas_de_referencia(str(caminho))
+
+        # Combinação A (só rotação): página 1 é a primeira ocorrência —
+        # página 2, mesma combinação exata, não deveria acrescentar mais
+        # uma referência.
+        assert resultado["pagina-rotacionada"] == [1, 3]
+
+    def test_combinacao_diferente_ganha_pagina_propria(self, tmp_path):
+        caminho = self._documento_com_combinacoes(tmp_path)
+
+        resultado = escolher_paginas_de_referencia(str(caminho))
+
+        assert resultado["sem-camada-de-texto"] == [3]
+        assert resultado["pagina-em-paisagem"] == [4]
+
+    def test_pagina_repetindo_combinacao_nao_vira_referencia_extra(self, tmp_path):
+        """A página 2 repete exatamente a combinação da página 1 — não deve
+        aparecer em lugar nenhum do resultado."""
+        caminho = self._documento_com_combinacoes(tmp_path)
+
+        resultado = escolher_paginas_de_referencia(str(caminho))
+
+        todas_as_paginas = {p for paginas in resultado.values() for p in paginas}
+        assert 2 not in todas_as_paginas
+
+    def test_pagina_sem_caracteristica_nao_entra_no_resultado(self, tmp_path):
+        caminho = self._documento_com_combinacoes(tmp_path)
+
+        resultado = escolher_paginas_de_referencia(str(caminho))
+
+        todas_as_paginas = {p for paginas in resultado.values() for p in paginas}
+        assert 5 not in todas_as_paginas
+
+    def test_documento_sem_nenhuma_caracteristica_devolve_dicionario_vazio(self, pdf_exemplo):
+        assert escolher_paginas_de_referencia(str(pdf_exemplo)) == {}
+
+    def test_arquivo_inexistente_falha_claro(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            escolher_paginas_de_referencia(str(tmp_path / "nao-existe.pdf"))
+
+
 class TestImagemEmbutida:
     """Achado que faltava apesar de o ADR-0021 declará-lo "pronto" — e que
     precisa de um piso de área, medido contra dois documentos reais: sem
@@ -488,6 +574,232 @@ class TestImagemEmbutida:
         finally:
             aberto.close()
         assert "imagem-embutida" in {a.codigo for a in achados}
+
+
+class TestPaginaEmPaisagem:
+    """Característica geometricamente trivial (sem calibração), observada de
+    verdade em documento real de um cenário corporativo (2026-08-13) — um
+    documento inteiro em slides, todas as páginas em paisagem."""
+
+    def _pdf_com_pagina(self, tmp_path, *, largura, altura):
+        import fitz
+
+        documento = fitz.open()
+        documento.new_page(width=largura, height=altura)
+        caminho = tmp_path / "pagina.pdf"
+        documento.save(caminho)
+        documento.close()
+        return caminho
+
+    def test_pagina_mais_larga_que_alta_gera_achado(self, tmp_path):
+        import fitz
+
+        caminho = self._pdf_com_pagina(tmp_path, largura=800, altura=600)
+        aberto = fitz.open(str(caminho))
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        (achado,) = [a for a in achados if a.codigo == "pagina-em-paisagem"]
+        assert achado.metodo is MetodoDeDeteccao.METADADO_NATIVO
+
+    def test_pagina_retrato_nao_gera_achado(self, tmp_path):
+        import fitz
+
+        caminho = self._pdf_com_pagina(tmp_path, largura=595, altura=842)
+        aberto = fitz.open(str(caminho))
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        assert "pagina-em-paisagem" not in {a.codigo for a in achados}
+
+    def test_pagina_quadrada_nao_gera_achado(self, tmp_path):
+        """Empate (largura == altura) não é paisagem."""
+        import fitz
+
+        caminho = self._pdf_com_pagina(tmp_path, largura=600, altura=600)
+        aberto = fitz.open(str(caminho))
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        assert "pagina-em-paisagem" not in {a.codigo for a in achados}
+
+
+class TestMultiplasColunasDeTexto:
+    """Observado de verdade em dois documentos reais de um cenário
+    corporativo (2026-08-13): prosa em coluna dupla (slide) e coluna de
+    comentário lateral reservada à parte do corpo (documento revisado) — as
+    duas são a mesma característica geométrica: texto relevante em faixas
+    de X que não se sobrepõem."""
+
+    def _inserir_bloco(self, pagina, x, y0, palavras):
+        texto = " ".join(f"palavra{i}" for i in range(palavras))
+        for i, linha in enumerate(_dividir(texto, 3)):
+            pagina.insert_text((x, y0 + i * 14), linha)
+
+    def test_duas_colunas_com_bastante_texto_geram_achado(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        pagina = documento.new_page()
+        self._inserir_bloco(pagina, 72, 100, 18)
+        self._inserir_bloco(pagina, 340, 100, 18)
+        caminho = tmp_path / "duas-colunas.pdf"
+        documento.save(caminho)
+        documento.close()
+
+        aberto = fitz.open(str(caminho))
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        (achado,) = [a for a in achados if a.codigo == "multiplas-colunas-de-texto"]
+        assert achado.severidade is Severidade.ALERTA
+
+    def test_uma_coluna_so_nao_gera_achado(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        pagina = documento.new_page()
+        self._inserir_bloco(pagina, 72, 100, 30)
+        caminho = tmp_path / "uma-coluna.pdf"
+        documento.save(caminho)
+        documento.close()
+
+        aberto = fitz.open(str(caminho))
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        assert "multiplas-colunas-de-texto" not in {a.codigo for a in achados}
+
+    def test_elemento_lateral_pequeno_abaixo_do_piso_nao_gera_achado(self, tmp_path):
+        """Um número de página ou carimbo curto ao lado do corpo do texto não
+        é uma segunda coluna — é o cabeçalho/rodapé que qualquer documento
+        paginado tem. Sem o piso de palavras, isso disparia em toda página."""
+        import fitz
+
+        documento = fitz.open()
+        pagina = documento.new_page()
+        self._inserir_bloco(pagina, 72, 100, 30)
+        pagina.insert_text((500, 800), "pág 1 de 22")
+        caminho = tmp_path / "com-rodape.pdf"
+        documento.save(caminho)
+        documento.close()
+
+        aberto = fitz.open(str(caminho))
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        assert "multiplas-colunas-de-texto" not in {a.codigo for a in achados}
+
+
+def _dividir(texto: str, palavras_por_linha: int) -> list[str]:
+    palavras = texto.split()
+    return [
+        " ".join(palavras[i : i + palavras_por_linha])
+        for i in range(0, len(palavras), palavras_por_linha)
+    ]
+
+
+class TestTabelaComFundoColorido:
+    """Observado de verdade em documento real de um cenário corporativo
+    (2026-08-13): tabela cujo agrupamento visual vem de cor de fundo
+    (cabeçalho colorido + faixas alternadas), sem nenhuma linha de grade —
+    detector de linha reta não teria o que reconhecer."""
+
+    def _inserir_tabela_colorida(self, pagina, *, linhas, colunas=3, cores=None):
+        import fitz
+
+        cores = cores or [(0.15, 0.38, 0.33), (0.80, 0.83, 0.82), (0.91, 0.92, 0.91)]
+        largura_coluna = 150
+        altura_linha = 20
+        for i in range(linhas):
+            cor = cores[i % len(cores)]
+            for j in range(colunas):
+                x0 = 50 + j * largura_coluna
+                y0 = 80 + i * altura_linha
+                pagina.draw_rect(
+                    fitz.Rect(x0, y0, x0 + largura_coluna, y0 + altura_linha),
+                    color=None,
+                    fill=cor,
+                )
+
+    def test_tabela_com_varias_linhas_e_cores_gera_achado(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        pagina = documento.new_page()
+        self._inserir_tabela_colorida(pagina, linhas=5)
+        caminho = tmp_path / "tabela-colorida.pdf"
+        documento.save(caminho)
+        documento.close()
+
+        aberto = fitz.open(str(caminho))
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        (achado,) = [a for a in achados if a.codigo == "tabela-com-fundo-colorido"]
+        assert achado.metodo is MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA
+
+    def test_pagina_sem_retangulo_preenchido_nao_gera_achado(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        pagina = documento.new_page()
+        pagina.insert_text((72, 72), "texto corrido sem tabela nenhuma")
+        caminho = tmp_path / "sem-tabela.pdf"
+        documento.save(caminho)
+        documento.close()
+
+        aberto = fitz.open(str(caminho))
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        assert "tabela-com-fundo-colorido" not in {a.codigo for a in achados}
+
+    def test_banner_isolado_de_uma_linha_nao_gera_achado(self, tmp_path):
+        """Uma única caixa colorida (destaque, banner) não é tabela — falta
+        o mínimo de linhas que distingue "tabela" de "elemento de destaque"."""
+        import fitz
+
+        documento = fitz.open()
+        pagina = documento.new_page()
+        self._inserir_tabela_colorida(pagina, linhas=1, cores=[(0.2, 0.4, 0.3)])
+        caminho = tmp_path / "banner.pdf"
+        documento.save(caminho)
+        documento.close()
+
+        aberto = fitz.open(str(caminho))
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        assert "tabela-com-fundo-colorido" not in {a.codigo for a in achados}
+
+    def test_todas_as_linhas_da_mesma_cor_nao_gera_achado(self, tmp_path):
+        """Sem alternância de cor entre linhas não há "listra" — pode ser só
+        uma caixa grande com bordas internas, não uma tabela zebrada."""
+        import fitz
+
+        documento = fitz.open()
+        pagina = documento.new_page()
+        self._inserir_tabela_colorida(pagina, linhas=4, cores=[(0.5, 0.5, 0.5)])
+        caminho = tmp_path / "mesma-cor.pdf"
+        documento.save(caminho)
+        documento.close()
+
+        aberto = fitz.open(str(caminho))
+        try:
+            achados = caracterizar_pagina(aberto, 1)
+        finally:
+            aberto.close()
+        assert "tabela-com-fundo-colorido" not in {a.codigo for a in achados}
 
 
 class TestValidacaoDeSaida:

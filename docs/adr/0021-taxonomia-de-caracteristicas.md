@@ -30,6 +30,31 @@
 > página tem característica N?" pra cada N do catálogo — é "que
 > característica(s) esta página tem?", com a resposta vindo da sonda, não
 > de uma lista fixa sendo conferida item a item.
+>
+> **Terceira retificação, 2026-08-13 (resto do −1.4, PLANO.md): descoberta
+> de característica exercitada de verdade, contra os dois documentos reais
+> de um cenário corporativo separado (fora deste repositório).** Em vez de
+> escrever sonda no escuro para as ~13
+> características que faltavam, a investigação de desenvolvimento que a
+> seção seguinte já formalizava foi executada de fato — inspeção página a
+> página dos dois documentos reais (blocos de texto, retângulos vetoriais,
+> renderização visual). Três características tinham evidência real e
+> viraram sonda, com validação (e uma correção real de falso positivo — ver
+> "O que já é detectável" abaixo): `pagina-em-paisagem`,
+> `multiplas-colunas-de-texto`, `tabela-com-fundo-colorido`. Duas ficaram
+> **observadas em documento real, mas não implementadas** — célula
+> mesclada/cabeçalho hierárquico (exige reconstrução de tabela que o
+> projeto não tem ainda) e gráfico/diagrama (exige inspeção visual ou LLM
+> para distinguir de foto ou tabela) — upgrade de status honesto em relação
+> a "hipotético, nunca visto", sem inventar código sem base. As demais
+> (manuscrito, idioma diferente, digitalização torta/ruim, PDF antigo)
+> seguem hipotéticas — nenhum dos dois documentos tem página digitalizada.
+> O algoritmo de "quantas páginas por característica" também fechou nesta
+> sessão: `diagnostico.escolher_paginas_de_referencia` — 1 página
+> representante por **combinação exata** de características, não por
+> característica isolada, operacionalizando o princípio que a seção "A
+> combinação é o que se mede" já declarava. Ver `PLANO.md`, "−1.4, o que
+> foi fechado e o que continua aberto" pro detalhe completo.
 
 ## Contexto
 
@@ -131,6 +156,55 @@ não é frequente o bastante hoje para justificar construir agora.
 | camada de texto parcial | `camada-de-texto-parcial` | alerta |
 | texto vertical | `texto-vertical` | alerta |
 | mapa de caracteres incompleto | `mapa-de-caracteres-incompleto` | alerta |
+| imagem embutida | `imagem-embutida` | nota |
+| página em paisagem | `pagina-em-paisagem` | nota |
+| múltiplas colunas de texto | `multiplas-colunas-de-texto` | alerta |
+| tabela com fundo colorido/listras | `tabela-com-fundo-colorido` | nota |
+
+As últimas três, fechadas em 2026-08-13, vieram de investigação contra
+documento real de um cenário corporativo separado (fora deste
+repositório), não de heurística no escuro:
+
+- **`pagina-em-paisagem`** — trivial (`mediabox.width > mediabox.height`),
+  sem calibração. Usa `mediabox`, não `rect`: `rect` troca largura por
+  altura sob rotação de 90/270°, o que faria uma página retrato rotacionada
+  contar como paisagem — achado real de teste, corrigido antes de
+  validar contra os documentos reais.
+- **`multiplas-colunas-de-texto`** — agrupa blocos de texto por faixa de X
+  que não se sobrepõe, descartando grupos abaixo de um piso de palavras
+  (`PALAVRAS_MINIMAS_POR_COLUNA = 15`, ponto de partida declarado sobre os
+  dois documentos, mesmo espírito de `AREA_MINIMA_DE_IMAGEM_RELEVANTE`).
+  Generaliza corretamente entre dois layouts bem diferentes, confirmado
+  contra os dois documentos reais: prosa em coluna dupla (um deles é
+  formatado em slides) e coluna de comentário de revisão reservada à parte
+  do corpo do texto (o outro, num documento de texto corrido) — ambos são
+  geometricamente a mesma característica.
+- **`tabela-com-fundo-colorido`** — agrupa retângulos preenchidos por linha
+  (mesmo Y), exige 2+ células por linha somando ≥35% da largura da página,
+  3+ linhas e 2+ cores distintas entre elas. **Achado real de validação:**
+  a primeira versão não excluía preenchimento quase-preto, e uma tabela com
+  borda desenhada como retângulo fino preenchido de preto (não traço)
+  produzia dezenas de "linhas", todas pretas; somada a **uma única** célula
+  de destaque colorida não relacionada em outro ponto da mesma página, isso
+  passava no piso de "2+ cores" por acidente — corrigido excluindo
+  preenchimento com os três canais abaixo de 0,15 (`LIMIAR_QUASE_PRETO`) do
+  agrupamento, tratado como linha de grade (`tabela com grade`,
+  característica ainda não implementada), não como cor de tabela.
+
+**Observado em documento real, mas não implementado — motivo declarado,
+não esquecimento:**
+
+| Característica | Por que não virou sonda ainda |
+|---|---|
+| célula mesclada / cabeçalho hierárquico | Exige reconstrução de estrutura de tabela (detectar que uma célula cobre várias subcolunas) que o projeto não tem como primitiva geral — diferente de geometria simples de linha/retângulo. |
+| gráfico / diagrama | Distinguir diagrama esquemático de gráfico de dados ou de foto exige inspeção visual (método 3, `LLM_SIMPLES`) — geometria não alcança essa distinção. |
+
+As demais características do catálogo (`CARACTERISTICAS.md`) — manuscrito,
+número em formato estrangeiro, idioma diferente, digitalização torta/ruim,
+PDF gerado por digitalizador antigo, tabela sem grade por só espaçamento —
+continuam **hipotéticas**, sem mudança de status: nenhum dos dois
+documentos reais investigados tem página digitalizada nem exercita essas
+características.
 
 Os demais achados do módulo (`cobertura-baixa`, `valor-constante`,
 `fora-da-faixa`, `nenhum-registro`, `sem-identificador`,
@@ -210,16 +284,18 @@ Marcado por custo de detecção, que é o que decide o que entra primeiro.
 |---|---|
 | página rotacionada | **pronta** |
 | texto vertical | **pronta** |
+| página em paisagem | **pronta** |
+| múltiplas colunas de texto | **pronta** |
 | inclinação de digitalização | exige código |
-| múltiplas colunas de texto | exige código |
 
 ### Estrutura de tabela
 
 | Característica | Detecção |
 |---|---|
+| tabela com fundo colorido/listras | **pronta** |
 | tabela com grade | exige código |
 | **tabela sem bordas** (alinhamento por espaço) | exige código |
-| células mescladas / cabeçalho hierárquico | exige código |
+| células mescladas / cabeçalho hierárquico | observada em documento real, exige código (reconstrução de tabela) |
 | registro em várias linhas | exige código |
 | tabela que cruza páginas | exige código |
 | número de colunas | **pronta** (via reconstrução posicional) |
@@ -229,7 +305,7 @@ Marcado por custo de detecção, que é o que decide o que entra primeiro.
 | Característica | Detecção |
 |---|---|
 | imagem embutida | **pronta** |
-| gráfico / diagrama | exige inspeção manual |
+| gráfico / diagrama | observada em documento real, exige inspeção visual/LLM |
 | manuscrito | exige inspeção manual |
 | ruído de digitalização | exige código |
 

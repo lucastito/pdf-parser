@@ -39,6 +39,7 @@ __all__ = [
     "caracterizar_pagina",
     "contagem_por_caracteristica",
     "diagnosticar",
+    "escolher_paginas_de_referencia",
     "paginas_por_caracteristica",
     "relatorio",
     "validar_registros",
@@ -214,6 +215,49 @@ def contagem_por_caracteristica(caminho: str | Path) -> dict[str, int]:
     )
 
 
+def escolher_paginas_de_referencia(caminho: str | Path) -> dict[str, list[int]]:
+    """Escolhe 1 página representante por **combinação distinta** de
+    características do documento — nunca uma página por característica
+    isolada, o que duplicaria coleta quando páginas diferentes exercitam
+    exatamente a mesma combinação (ADR-0021: "a unidade de análise é a
+    combinação... a triagem roda uma página por combinação relevante, e
+    não uma por eixo").
+
+    A primeira página (em ordem) de cada combinação nova é a escolhida —
+    critério simples e determinístico; não há razão para preferir a
+    página com mais achados dentro do **mesmo** conjunto exato de códigos,
+    já que por definição elas são equivalentes para este propósito.
+
+    Devolve no formato que `Perfil.paginas_de_referencia_por_caracteristica`
+    já aceita — mas cada página escolhida entra na lista de **todas** as
+    características que ela exibe, não numa lista isolada por
+    característica: uma página com 3 características vale como referência
+    das 3 ao mesmo tempo, em vez de 3 páginas escolhidas às cegas, uma por
+    característica, sem checar se já havia página cobrindo mais de uma.
+
+    Página sem nenhuma característica não entra — não há o que
+    referenciar.
+
+    Levanta:
+        FileNotFoundError: arquivo inexistente.
+    """
+    caracterizacao = caracterizar_documento(caminho)
+
+    representante_por_combinacao: dict[frozenset[str], int] = {}
+    for numero, achados in sorted(caracterizacao.items()):
+        if not achados:
+            continue
+        combinacao = frozenset(a.codigo for a in achados)
+        representante_por_combinacao.setdefault(combinacao, numero)
+
+    paginas_por_codigo: dict[str, list[int]] = {}
+    for combinacao, pagina in representante_por_combinacao.items():
+        for codigo in combinacao:
+            paginas_por_codigo.setdefault(codigo, []).append(pagina)
+
+    return {codigo: sorted(paginas) for codigo, paginas in paginas_por_codigo.items()}
+
+
 _SONDAS: list[Callable[[Any, int], Achado | None]] = []
 """Registro de sondas de característica — cada uma roda e reporta o que
 achar, ou `None`. Adicionar característica nova é registrar uma sonda nova
@@ -292,6 +336,181 @@ def _sonda_imagem_embutida(documento, numero: int) -> Achado | None:
     if not _pagina_tem_imagem(documento, numero):
         return None
     return _achado_imagem_embutida(numero)
+
+
+@_sonda
+def _sonda_pagina_em_paisagem(documento, numero: int) -> Achado | None:
+    # `mediabox`, não `rect`: `rect` troca largura por altura sob rotação de
+    # 90/270° (é o retângulo *renderizado*), o que faria uma página retrato
+    # rotacionada contar como paisagem — característica diferente da que
+    # `pagina-rotacionada` já cobre, não deveriam se sobrepor.
+    caixa = documento[numero - 1].mediabox
+    if caixa.width <= caixa.height:
+        return None
+    return Achado(
+        codigo="pagina-em-paisagem",
+        severidade=Severidade.NOTA,
+        detalhe=f"página {numero}: {caixa.width:.0f}×{caixa.height:.0f}",
+        acao=(
+            "Geometria de referência (coordenadas de rótulo/valor calibradas noutro "
+            "documento) não se transfere direto — orientação diferente muda onde o "
+            "conteúdo cai na página."
+        ),
+        metodo=MetodoDeDeteccao.METADADO_NATIVO,
+    )
+
+
+@_sonda
+def _sonda_multiplas_colunas_de_texto(documento, numero: int) -> Achado | None:
+    grupos = _colunas_de_texto(documento, numero)
+    if len(grupos) < 2:
+        return None
+    return Achado(
+        codigo="multiplas-colunas-de-texto",
+        severidade=Severidade.ALERTA,
+        detalhe=f"página {numero}: {len(grupos)} colunas de texto distintas",
+        acao=(
+            "Leitura de texto corrido em ordem de coordenada concatenaria colunas "
+            "diferentes numa frase só. Trate cada faixa de X como um fluxo "
+            "separado, ou restrinja a extração à coluna de interesse."
+        ),
+        metodo=MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA,
+    )
+
+
+PALAVRAS_MINIMAS_POR_COLUNA = 15
+"""Piso para uma faixa de X contar como coluna de texto, não um elemento
+pequeno lateral (célula de cabeçalho de página, número de página, carimbo).
+
+Ponto de partida declarado sobre dois documentos reais de um cenário
+corporativo (2026-08-13), mesmo espírito de `AREA_MINIMA_DE_IMAGEM_RELEVANTE`
+— não é calibração fina. Sem o piso, um cabeçalho repetido de poucas
+palavras (comum a toda página de um documento com cabeçalho/rodapé
+tabular) dispararia "múltiplas colunas" em todo documento com esse layout,
+mesmo sem nenhuma coluna de texto de verdade."""
+
+
+def _colunas_de_texto(documento, numero: int) -> list[tuple[float, float, int]]:
+    """Agrupa os blocos de texto da página por faixa de X que não se
+    sobrepõe — cada grupo é uma "coluna" candidata (x0, x1, palavras).
+
+    Detecta tanto prosa em coluna dupla quanto uma coluna de comentário/nota
+    lateral reservada à parte do corpo do texto — geometricamente as duas
+    são a mesma coisa: conteúdo textual relevante em faixas de X distintas
+    na mesma página. Grupos abaixo de `PALAVRAS_MINIMAS_POR_COLUNA` são
+    descartados antes de contar.
+    """
+    blocos = []
+    for bloco in documento[numero - 1].get_text("dict").get("blocks", []):
+        if "lines" not in bloco:
+            continue
+        palavras = sum(
+            len(span["text"].split()) for linha in bloco["lines"] for span in linha["spans"]
+        )
+        if palavras == 0:
+            continue
+        x0, _, x1, _ = bloco["bbox"]
+        blocos.append((x0, x1, palavras))
+
+    grupos: list[list[float | int]] = []
+    for x0, x1, palavras in sorted(blocos):
+        if grupos and x0 <= grupos[-1][1]:
+            grupos[-1][1] = max(grupos[-1][1], x1)
+            grupos[-1][2] += palavras
+        else:
+            grupos.append([x0, x1, palavras])
+
+    return [(g[0], g[1], g[2]) for g in grupos if g[2] >= PALAVRAS_MINIMAS_POR_COLUNA]
+
+
+LARGURA_MINIMA_DE_LINHA_COLORIDA = 0.35
+"""Fração mínima da largura da página que as células preenchidas de uma
+linha precisam somar para contar como candidata a linha de tabela.
+
+Descarta preenchimento pequeno (ícone, marcador, sublinhado colorido) que
+não é célula de tabela. Ponto de partida declarado sobre dois documentos
+reais (2026-08-13), mesmo espírito de `AREA_MINIMA_DE_IMAGEM_RELEVANTE`."""
+
+LINHAS_MINIMAS_TABELA_COLORIDA = 3
+"""Abaixo disto (ex.: 1-2 linhas) é mais provável banner/caixa de destaque
+do que tabela — uma tabela de verdade tem cabeçalho e ao menos duas linhas
+de dado."""
+
+
+@_sonda
+def _sonda_tabela_com_fundo_colorido(documento, numero: int) -> Achado | None:
+    linhas = _linhas_de_celulas_coloridas(documento[numero - 1])
+    if len(linhas) < LINHAS_MINIMAS_TABELA_COLORIDA:
+        return None
+
+    cores = {cor for _, cor in linhas}
+    if len(cores) < 2:
+        return None
+
+    return Achado(
+        codigo="tabela-com-fundo-colorido",
+        severidade=Severidade.NOTA,
+        detalhe=(
+            f"página {numero}: {len(linhas)} linhas de célula colorida, {len(cores)} cores"
+        ),
+        acao=(
+            "Tabela sem linha de grade — o agrupamento visual vem da cor de fundo "
+            "(cabeçalho e faixas alternadas), não de borda. Detectores de tabela "
+            "que procuram linha reta não têm o que reconhecer aqui; alinhamento "
+            "por posição de texto continua funcionando."
+        ),
+        metodo=MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA,
+    )
+
+
+LIMIAR_QUASE_PRETO = 0.15
+"""Preenchimento com os três canais abaixo disto é tratado como linha de
+borda, não como cor de tabela — descoberto validando contra documento real
+(2026-08-13): tabela com bordas desenhadas como retângulos finos preenchidos
+de preto (em vez de traço) produzia dezenas de "linhas", todas pretas;
+somada a **uma única** célula de destaque colorida (não relacionada, ex.
+texto realçado) em outro ponto da mesma página, isso passava no piso de
+"2+ cores distintas" por acidente — a tabela com borda e o destaque isolado
+não têm nenhuma relação entre si. Preto é o sinal de "grade desenhada por
+preenchimento", que é `tabela com grade`, não `tabela com fundo colorido` —
+características diferentes, não implementada a primeira ainda."""
+
+
+def _linhas_de_celulas_coloridas(pagina) -> list[tuple[float, tuple]]:
+    """Agrupa retângulos preenchidos (exceto quase-pretos — ver
+    `LIMIAR_QUASE_PRETO`) por Y (arredondado) — cada grupo com 2+ células
+    cobrindo uma fração relevante da largura da página é uma linha
+    candidata de tabela com fundo colorido, não com borda."""
+    area_pagina = pagina.rect.width * pagina.rect.height
+    if area_pagina <= 0:
+        return []
+
+    tolerancia_y = 2.0
+    por_y: dict[float, list[tuple[float, float, tuple]]] = {}
+    for desenho in pagina.get_drawings():
+        cor = desenho.get("fill")
+        if cor is None or all(canal < LIMIAR_QUASE_PRETO for canal in cor):
+            continue
+        r = desenho["rect"]
+        area = r.width * r.height
+        if area <= 0 or area / area_pagina > 0.5:
+            continue  # maior que meia página: provável fundo, não célula
+        y = round(r.y0 / tolerancia_y) * tolerancia_y
+        por_y.setdefault(y, []).append((r.x0, r.x1, cor))
+
+    linhas = []
+    for y, celulas in por_y.items():
+        if len(celulas) < 2:
+            continue
+        largura_total = sum(x1 - x0 for x0, x1, _ in celulas)
+        if largura_total / pagina.rect.width < LARGURA_MINIMA_DE_LINHA_COLORIDA:
+            continue
+        # Uma linha pode ter mais de uma cor (ex. coluna de destaque numa
+        # linha de dado); representá-la pela cor mais comum é suficiente
+        # para o que importa aqui — se a *linha* varia em relação às outras.
+        cor_da_linha = Counter(c for _, _, c in celulas).most_common(1)[0][0]
+        linhas.append((y, cor_da_linha))
+    return linhas
 
 
 def _pagina_rotacionada(documento, numero: int) -> bool:

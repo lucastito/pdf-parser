@@ -6,6 +6,22 @@
 > **Marque o que encontrar.** O que ficar sem marca vira limitação declarada no
 > relatório — não buraco silencioso.
 
+## Confirmadas em documento real de produção, fora deste corpus (2026-08-13)
+
+Investigação de desenvolvimento contra os dois documentos reais de um
+cenário corporativo separado (Cenário B, fora deste repositório —
+proveniência e redistribuição diferentes deste corpus, **não** entram
+aqui como coleta) confirmou de verdade, com sonda
+implementada e validada (`ADR-0021`): **item 6** (duas ou mais colunas de
+texto — inclusive coluna de comentário de revisão reservada, geometricamente
+a mesma característica), **item 13** (página em paisagem) e **item 16**
+(tabela com fundo colorido/listras, sem grade). Observados de verdade mas
+ainda sem sonda (exigem reconstrução de tabela ou inspeção visual/LLM):
+**item 4** (células mescladas/cabeçalho hierárquico) e **item 8** (gráfico
+com números ao lado). Isso não marca ☑ abaixo — a checklist é sobre a
+coleta *deste* corpus — mas confirma que valem a pena priorizar quando
+achar exemplar redistribuível.
+
 ## Antes de começar: três regras
 
 **1. Poucos documentos, muitas características.** O objetivo não é volume. Um PDF

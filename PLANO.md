@@ -20,12 +20,14 @@ depois delas, não em paralelo:**
 1. ✅ **Diagnóstico da escada de escalada** — **fechado em 2026-08-13.**
    Seção própria, logo depois da tabela "Mapa completo dos P0" mais abaixo,
    atualizada com o que foi implementado; detalhe completo em `ADR-0027`.
-2. **O resto do −1.4** — tabela P-1 mais abaixo e a seção "−1.4, o que
-   foi fechado e o que continua aberto", bloco "Ainda aberto": taxonomia
-   completa (só 5 de ~19 características têm detector), algoritmo de
-   "quantas páginas por característica", e a correção do `triagem.Classe`
-   grosseiro (**precisa de medição antes de mexer** — não é ajuste no
-   escuro, ver "Limite declarado sobre `triagem.Classe`" no `ADR-0021`).
+2. ⚠ **O resto do −1.4** — **parcialmente fechado em 2026-08-13.** Taxonomia
+   avançada (3 sondas novas, validadas contra documento real — `ADR-0021`) e
+   o algoritmo de "quantas páginas por característica"
+   (`diagnostico.escolher_paginas_de_referencia`, 1 página por combinação
+   exata) fecharam. **A correção do `triagem.Classe` grosseiro continua
+   aberta, de propósito** — precisa de medição antes de mexer, não é ajuste
+   no escuro (ver "Limite declarado sobre `triagem.Classe`" no `ADR-0021`);
+   nenhum documento novo mudou esse quadro.
 3. **P0.4** — tabela "Mapa completo dos P0", linha P0.4: protocolo dos
    degraus no experimento diverge do caminho de produção
    (`src/parser/cli.py` não propaga contexto/seed/temperatura/raciocínio da
@@ -158,7 +160,7 @@ resolver o que elas apontaram.
 | −1.1 | **Métrica que penalize fabricação** | ✅ **Fechado em 2026-08-12.** `concordancia.py:198` usa `set.intersection` e continua medindo só a interseção — isso não mudou, é o papel de `concordancia.py` — mas a lacuna que publicava o item fabricado como dado (na consolidação, não na medição) foi fechada; ver "Cenário B" no topo deste arquivo e ADR-0017 |
 | −1.2 | **Suíte determinística** | ⚠ **Investigado a fundo em 2026-08-12, não reproduzido — não é o mesmo que fechado.** Duas auditorias tiveram falhas **diferentes** na mesma árvore, isoladas todas passavam. Tentativas de reprodução hoje: 3 rodadas completas em ordem fixa, 4 rodadas com ordem **de verdade** embaralhada (`pytest-randomly`, sementes 111/222/333/42 — `PYTHONHASHSEED` não é fixo neste ambiente, então cada rodada já usava semente de hash diferente) e leitura de código dos 4 módulos citados (`configuracao.py`, `degraus.py`, `consolidacao.py`, `concordancia.py`) atrás de `set()` sem `sorted()`, mutação de `os.environ` fora de `monkeypatch`, `lru_cache` compartilhado, threading — nada encontrado; todo `set()` nos dois últimos módulos já passa por `sorted()` antes de virar saída. **Todas as sete rodadas passaram integralmente.** A única pista que este arquivo registrava (arquivo temporário deixado para trás) já tinha sido corrigida — nome único + limpeza — **antes** da auditoria de 02/08 encontrar a instabilidade, e não explicaria falha em `test_configuracao.py`/`test_degraus.py`, que não tocam PDF. **`pytest-randomly` adotado permanentemente** (`pyproject.toml`) como tripwire: se a instabilidade for real e só não apareceu hoje, uma rodada futura com ordem embaralhada tem mais chance de expor. **Gatilho automático de captura criado** (`tests/_gatilho_instabilidade.py`, testado em `tests/test_gatilho_instabilidade.py` contra um caso real e controlado de contaminação entre testes): quando um teste falha rodando a suíte completa, grava sozinho — sem precisar de ninguém notar na hora — a ordem exata dos testes que rodaram antes, a semente do `pytest-randomly`, e o resultado de rodar o mesmo teste sozinho num processo novo (confirma ou não o padrão "passa isolado, falha no conjunto"), tudo em `diagnostico-instabilidade/` (fora do git). Guarda instável não guarda nada — e é o que iria para a máquina dos outros; permanece aberto até haver uma falha real para investigar, não uma hipótese |
 | −1.3 | **`--sem-modelos` filtrando por propriedade** | ✅ **Fechado.** `fabrica.py` filtra por identidade de função (`ROTAS.get(nome) in (_llm, _vlm)`), não por nome exato — cobre `vlm-menor`/`llm-menor`. Teste dedicado: `tests/test_fabrica.py::test_exclui_tambem_as_variantes_menores_de_modelo`. Esta linha estava desatualizada: o código já tinha corrigido antes de o texto ser revisado |
-| −1.4 | **Diagnóstico por página → característica → páginas de triagem** | ✅ **Parcialmente fechado em 2026-08-12** — ver detalhe logo abaixo. Destrava os perfis; os perfis destravam a distribuição |
+| −1.4 | **Diagnóstico por página → característica → páginas de triagem** | ⚠ **Parcialmente fechado (2026-08-12, avançado em 2026-08-13)** — ver detalhe logo abaixo. Só `triagem.Classe` grosseiro continua aberto, de propósito. Destrava os perfis; os perfis destravam a distribuição |
 
 Fora desses, seguem **abertos e não verificados** os achados de segurança da
 auditoria independente: isolamento de processo, limites de recurso, injeção de
@@ -257,18 +259,52 @@ pra uma classificação mais cara (`LLM_SIMPLES`) em vez de descartar direto
 — não um número ajustado sem dado. Ver `ADR-0021`, "Limite declarado sobre
 `triagem.Classe`", e `docs/GLOSSARIO.md`, entrada "classe de conteúdo".
 
+**Fechado (terceira rodada, 2026-08-13 — resto do −1.4, taxonomia e
+algoritmo de páginas de referência):**
+- **Investigação de desenvolvimento contra documento real**, exatamente o
+  fluxo que este ADR já formalizava ("descoberta é aberta no
+  desenvolvimento"): em vez de escrever sonda no escuro para as ~13
+  características que faltavam, os dois documentos reais de um cenário
+  corporativo separado (Cenário B, fora deste repositório) foram
+  inspecionados página a página (blocos de texto, retângulos vetoriais,
+  renderização visual) pra achar o que é real.
+- **Três sondas novas, com evidência real e validadas contra os dois
+  documentos** (achados estruturais agora cobrem 7 características, não
+  mais 5): `pagina-em-paisagem` (trivial, `mediabox`), `multiplas-colunas-de-texto`
+  (agrupamento de blocos por faixa de X, generalizou corretamente entre
+  slide com colunas lado a lado e documento com coluna de comentário de
+  revisão reservada — mesma característica geométrica, dois layouts bem
+  diferentes) e `tabela-com-fundo-colorido` (retângulos preenchidos
+  agrupados em linha, 2+ cores). A validação contra documento real pegou um
+  falso positivo genuíno na terceira (tabela com borda desenhada em preto
+  preenchido, somada a um destaque isolado, passava no piso de "2+ cores"
+  por acidente) — corrigido excluindo preenchimento quase-preto do
+  agrupamento antes de fechar. Ver `ADR-0021` pro detalhe.
+- **Duas características viraram "observada em documento real, não
+  implementada"** (upgrade de status honesto, não invenção de código sem
+  base): célula mesclada/cabeçalho hierárquico (exige reconstrução de
+  tabela que o projeto não tem ainda) e gráfico/diagrama (exige inspeção
+  visual/LLM). As demais do catálogo (manuscrito, idioma, digitalização
+  torta/ruim, PDF antigo) seguem hipotéticas — nenhum dos dois documentos
+  tem página digitalizada.
+- **Algoritmo de "quantas páginas por característica" fechado:**
+  `diagnostico.escolher_paginas_de_referencia(caminho) -> dict[str,
+  list[int]]` — 1 página representante por **combinação exata** de
+  características (não por característica isolada), operacionalizando o
+  princípio que o `ADR-0021` já declarava ("a unidade de análise é a
+  combinação"). Uma página com 3 características conta como referência das
+  3 de uma vez; uma combinação repetida em páginas diferentes não gera
+  referência duplicada.
+
 **Ainda aberto, de propósito, fora do escopo de hoje:**
-- Os achados estruturais cobrem só 5 características (rotação, ausência de
-  texto, texto vertical, mapa de caracteres, imagem embutida) — a taxonomia
-  completa do `ADR-0021` (19 códigos em `CARACTERISTICAS.md`, eixos
-  layout/degradação/domínio) continua maior do que o que há em código; o
-  próprio ADR já declara isso "aberto".
+- A taxonomia completa do `ADR-0021` (19 códigos em `CARACTERISTICAS.md`,
+  eixos layout/degradação/domínio) continua maior do que o que há em
+  código — célula mesclada, gráfico/diagrama e as características nunca
+  observadas seguem sem sonda, pelos motivos declarados acima e no ADR.
+  Nenhum achado usa `LLM_SIMPLES` ainda — é o que falta pro eixo de
+  domínio.
 - P0.5 (Cenário A, `pipeline.Pipeline` sem roteamento por página) — item
   separado, não tocado.
-- O algoritmo de "quantas páginas por característica" continua sem regra
-  fechada — o `ADR-0021` só fixa o princípio ("1 por combinação relevante,
-  sem duplicar coleta"), não o "quantas". `Perfil` agora **comporta** N; o
-  "como escolher N" ainda é decisão de quem monta o perfil, não automação.
 - A correção do `triagem.Classe` grosseiro (parágrafo curto acima) —
   precisa de medição antes de mexer, não é para hoje.
 
@@ -515,7 +551,7 @@ Lista do que procurar: [CARACTERISTICAS.md](experimentos/pdf/CARACTERISTICAS.md)
 
 | | |
 |---|---|
-| Testes | **830 passando**, 10 saltados (`pytest -m "not experimento_a"`) — atualizado em 2026-08-13 após fechar o diagnóstico da escada de escalada (trilha de tentativas por página, `ADR-0027`) |
+| Testes | **846 passando**, 10 saltados (`pytest -m "not experimento_a"`) — atualizado em 2026-08-13 após avançar o resto do −1.4 (3 sondas de característica novas validadas contra documento real, algoritmo de páginas de referência por combinação) |
 | Estilo | `flake8` e `black` limpos |
 | Guarda de confidencialidade | 9/9 |
 | ADRs | **27** |
