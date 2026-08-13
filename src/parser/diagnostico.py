@@ -513,6 +513,54 @@ def _linhas_de_celulas_coloridas(pagina) -> list[tuple[float, tuple]]:
     return linhas
 
 
+PADROES_DE_INSTRUCAO_SUSPEITA = (
+    "ignore previous instructions",
+    "ignore all previous instructions",
+    "ignore the instructions above",
+    "disregard the above",
+    "disregard previous instructions",
+    "you are now",
+    "new instructions:",
+    "system prompt",
+    "system:",
+    "ignore as instruções anteriores",
+    "ignore todas as instruções",
+    "desconsidere as instruções",
+    "desconsidere o texto acima",
+    "você agora é",
+    "novas instruções:",
+)
+"""Frases-gatilho clássicas de injeção de instrução (OWASP LLM01), em
+português e inglês — ponto de partida declarado, não lista exaustiva: quem
+monta um PDF malicioso não está limitado a estas frases. Existe para
+detectar o caso comum e barato de checar, não para garantir a ausência do
+ataque. Ver ADR de postura de segurança do servidor de inferência."""
+
+
+@_sonda
+def _sonda_possivel_injecao_de_instrucao(documento, numero: int) -> Achado | None:
+    # `get_text()` quebra linha entre blocos próximos mesmo dentro da mesma
+    # frase visual (`"ignore previous instructions"` vira três linhas) — sem
+    # normalizar espaço em branco, uma frase-gatilho que atravessa quebra de
+    # linha (o caso comum, não a exceção) passaria batido.
+    texto = " ".join(documento[numero - 1].get_text().lower().split())
+    achadas = [padrao for padrao in PADROES_DE_INSTRUCAO_SUSPEITA if padrao in texto]
+    if not achadas:
+        return None
+    return Achado(
+        codigo="possivel-injecao-de-instrucao",
+        severidade=Severidade.ALERTA,
+        detalhe=f"página {numero}: frase-gatilho encontrada ({achadas[0]!r})",
+        acao=(
+            "Documento pode conter texto pensado para ser lido como instrução pelo "
+            "modelo, não como dado. Isole o conteúdo extraído como dado citado "
+            "(nunca concatenado como comando) no prompt, e trate esta página com "
+            "atenção extra antes de confiar no resultado do modelo para ela."
+        ),
+        metodo=MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA,
+    )
+
+
 def _pagina_rotacionada(documento, numero: int) -> bool:
     return bool(documento[numero - 1].rotation)
 
@@ -777,9 +825,58 @@ def validar_registros(
     achados += _checar_identificadores(registros)
     achados += _checar_cobertura(registros)
     achados += _checar_valores_constantes(registros)
+    achados += _checar_injecao_de_formula(registros)
     if faixas:
         achados += _checar_faixas(registros, faixas)
     return achados
+
+
+PREFIXOS_DE_FORMULA = ("=", "+", "-", "@", "\t", "\r")
+"""Prefixos que uma planilha (Excel, LibreOffice, Google Sheets) interpreta
+como início de fórmula, não de texto — a injeção de fórmula clássica (OWASP):
+um valor de célula como `=HYPERLINK("http://...","clique")` ou
+`=cmd|'/C calc'!A1` executa ao abrir o CSV, não ao lê-lo como dado.
+
+Só se aplica a campo de **texto** (`str`) — um campo numérico já validado
+como `float`/`int` pelo schema não pode conter sintaxe de fórmula; o ataque
+mora em campo livre (identificador, descrição), nunca em campo tipado."""
+
+
+def _checar_injecao_de_formula(registros: list[Registro]) -> list[Achado]:
+    """Valor de célula que uma planilha abriria como fórmula, não como dado.
+
+    O destino CSV (`parser.destinos`) não escapa isso — é o consumidor
+    (Excel/LibreOffice/Sheets) que interpreta o prefixo como fórmula ao
+    abrir o arquivo. Sinalizar aqui, antes de gravar, é o único lugar que
+    conhece a origem (extraído de PDF, não digitado por humano de confiança).
+    """
+    suspeitos = []
+    for registro in registros:
+        for nome, campo in registro.campos.items():
+            valor = campo.valor
+            if isinstance(valor, str) and valor.startswith(PREFIXOS_DE_FORMULA):
+                suspeitos.append((nome, valor))
+
+    if not suspeitos:
+        return []
+
+    nome, valor = suspeitos[0]
+    return [
+        Achado(
+            codigo="possivel-injecao-de-formula",
+            severidade=Severidade.BLOQUEIA,
+            detalhe=(
+                f"{len(suspeitos)} valor(es) começam com prefixo de fórmula de "
+                f"planilha (ex.: campo {nome!r} = {valor!r})"
+            ),
+            acao=(
+                "Valor extraído do documento começa com =, +, -, @ ou tabulação — "
+                "uma planilha abriria isto como fórmula, não como texto, e "
+                "executaria o que o documento de origem ditou. Escape com apóstrofo "
+                "antes de gravar em CSV, ou rejeite a linha para revisão humana."
+            ),
+        )
+    ]
 
 
 def _checar_identificadores(registros: list[Registro]) -> list[Achado]:

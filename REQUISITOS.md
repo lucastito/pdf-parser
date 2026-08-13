@@ -8,6 +8,10 @@ Requisitos funcionais + ferramentas/modelos candidatos + plano de avaliação. R
 > Estado revisado em 2026-07-31 contra o código e as medições. A acurácia citada
 > é contra o **conjunto de reserva** — layout não usado no ajuste —, que é o
 > número que vale.
+>
+> **Segurança do servidor de inferência** (rodar modelo contra PDF de origem
+> não confiável): ver [ADR-0028](docs/adr/0028-postura-de-seguranca-do-servidor-de-inferencia.md)
+> — parcial, com limite declarado (P0.6, `PLANO.md`).
 
 ---
 

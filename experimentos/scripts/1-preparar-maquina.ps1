@@ -4,8 +4,8 @@
 
 .DESCRIPTION
     Instala e verifica, sem repetir trabalho: Python, dependências, servidor de
-    inferência e os oito modelos (~26 GB). Idempotente — interromper e rodar de
-    novo continua de onde parou.
+    inferência e os modelos da escada (revisão de 2026-08-13, oito fabricantes,
+    ~165 GB). Idempotente — interromper e rodar de novo continua de onde parou.
 
     Ao final roda a suíte de testes. Se ela falhar, o script para: medir com um
     clone inconsistente produziria números sem valor.
@@ -26,14 +26,17 @@ $RAIZ = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $RAIZ
 $env:PYTHONIOENCODING = "utf-8"
 
-# A escada do ADR-0014, revisada em 2026-08-01. Ordem crescente de tamanho:
-# se o disco ou a rede falharem, falham no fim, com os menores ja baixados.
+# A escada do ADR-0014, revisada em 2026-08-13 (oito fabricantes, ver
+# experimentos/MODELOS.md). Ordem crescente de tamanho: se o disco ou a rede
+# falharem, falham no fim, com os menores ja baixados.
 $MODELOS = @(
-    "qwen3:1.7b", "minicpm-v4.6:1b", "qwen3-vl:2b",
-    "glm-ocr", "qwen3:4b", "qwen3-vl:4b",
-    "qwen3:8b", "qwen3-vl:8b", "minicpm-v4.5:8b",
-    "deepseek-ocr:3b", "gemma4:12b", "qwen3:14b",
-    "qwen3:30b", "qwen3-vl:30b"
+    "ibm/granite-docling", "qwen3.5:0.8b", "qwen3:1.7b", "minicpm-v4.6:1b",
+    "qwen3-vl:2b", "glm-ocr", "granite3.2-vision:2b", "qwen3:4b",
+    "nemotron-3-nano:4b", "ministral-3:3b", "qwen3-vl:4b", "qwen3.5:4b",
+    "deepseek-r1:7b", "qwen3:8b", "deepseek-r1:8b", "granite4.1:8b",
+    "qwen3-vl:8b", "minicpm-v4.5:8b", "qwen3.5:9b", "deepseek-ocr:3b",
+    "gemma4:12b", "qwen3:14b", "mistral-small3.2:24b", "qwen3:30b",
+    "qwen3-vl:30b", "nemotron-3.5-lightning:30b"
 )
 
 function Passo($n, $t) { Write-Host "`n[$n/5] $t" -ForegroundColor Cyan }
@@ -115,6 +118,21 @@ if ($SemModelos) {
         exit 1
     }
     Ok "ollama presente"
+
+    # CVE-2026-7482 ("Bleeding Llama", CVSS 9,1): vazamento de memoria nao
+    # autenticado em versoes anteriores a 0.17.1, via /api/create com GGUF
+    # malformado. Nao seguir adiante com versao vulneravel (ADR-0028).
+    $versaoTexto = (ollama --version 2>&1 | Select-String '\d+\.\d+\.\d+').Matches.Value
+    if ($versaoTexto -and ([version]$versaoTexto -lt [version]"0.17.1")) {
+        Falha "ollama $versaoTexto e vulneravel a CVE-2026-7482 (Bleeding Llama) - atualize antes de continuar"
+        exit 1
+    }
+    Ok "versao do ollama verificada ($versaoTexto, >= 0.17.1)"
+
+    # Um modelo por vez, sem competir por recurso com outro (pergunta do
+    # usuario, ADR-0028) - o servidor descarrega o anterior antes de
+    # carregar o proximo, em vez de manter varios residentes.
+    $env:OLLAMA_MAX_LOADED_MODELS = "1"
 
     if (-not (Get-Process ollama -ErrorAction SilentlyContinue)) {
         Aviso "iniciando servidor..."

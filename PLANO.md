@@ -162,10 +162,13 @@ resolver o que elas apontaram.
 | −1.3 | **`--sem-modelos` filtrando por propriedade** | ✅ **Fechado.** `fabrica.py` filtra por identidade de função (`ROTAS.get(nome) in (_llm, _vlm)`), não por nome exato — cobre `vlm-menor`/`llm-menor`. Teste dedicado: `tests/test_fabrica.py::test_exclui_tambem_as_variantes_menores_de_modelo`. Esta linha estava desatualizada: o código já tinha corrigido antes de o texto ser revisado |
 | −1.4 | **Diagnóstico por página → característica → páginas de triagem** | ⚠ **Parcialmente fechado (2026-08-12, avançado em 2026-08-13)** — ver detalhe logo abaixo. Só `triagem.Classe` grosseiro continua aberto, de propósito. Destrava os perfis; os perfis destravam a distribuição |
 
-Fora desses, seguem **abertos e não verificados** os achados de segurança da
-auditoria independente: isolamento de processo, limites de recurso, injeção de
-instrução vinda do PDF, e célula de planilha começando por `=`. Não são hipóteses
-descartadas — é trabalho não feito.
+Destes, **dois fecharam em 2026-08-13** (`ADR-0028`): injeção de instrução
+vinda do PDF (`diagnostico.possivel-injecao-de-instrucao`) e célula de
+planilha começando por `=` (`diagnostico.possivel-injecao-de-formula`), os
+dois com detecção testada — não com sandbox, que é diferente de detectar.
+**Isolamento de processo e limites de recurso continuam abertos e não
+verificados** — visibilidade não é contenção, e não são hipóteses
+descartadas: é trabalho não feito.
 
 ### −1.4, o que foi fechado e o que continua aberto — 2026-08-12
 
@@ -355,7 +358,7 @@ propósito para caber esse fallback depois sem mudar de esquema.
 | P0.3 | Gabarito (`taco.csv`) sem dupla anotação, cegamento nem adjudicação | **Aberto, nunca rastreado antes de hoje.** `experimentos/golden/README.md` descreve conferência de **uma pessoa só** — ver a seção "Limite declarado" adicionada lá em 2026-08-12 |
 | P0.4 | Protocolo dos degraus no experimento diverge do caminho de produção (contexto/seed/temperatura/raciocínio não propagados; prompt não é o mesmo) | **Aberto, nunca rastreado antes de hoje.** `src/parser/cli.py:526` monta `SaidaEmDegraus(_cliente(rota), campos)` sem propagar nenhum desses parâmetros da rota, e o prompt é montado ad hoc, não reaproveitado do caminho real |
 | P0.5 | Pipeline principal não roteia por características da página (`lote.py` chamava `ExtratorPosicional` direto) | **Fechado — só para o Cenário B.** `ingerir()` roteia por página por padrão (`calibrar_por_arquivo=True` → `planejador`, ADR-0025). O Cenário A (`pipeline.Pipeline`) continua com um extrator só, sem essa ligação |
-| P0.6 | Sem fronteira de segurança pra entrada não confiável (sandbox, limites de recurso/tempo/páginas/pixels) | **Aberto**, já citado no parágrafo acima desta tabela |
+| P0.6 | Sem fronteira de segurança pra entrada não confiável (sandbox, limites de recurso/tempo/páginas/pixels) | ⚠ **Parcialmente fechado em 2026-08-13** — ver `ADR-0028`. Dois detectores novos e testados (`possivel-injecao-de-instrucao`, `possivel-injecao-de-formula`) e postura de servidor verificada contra fonte real (`CVE-2026-7482`). **Sandbox de processo e limites de recurso/tempo/páginas/pixels continuam abertos** — visibilidade não é contenção |
 | P0.7 | Ambiente não travado (dependências sem teto de versão, sem lockfile, sem CI, tags de modelo mutáveis) | **Parcialmente fechado.** `pyproject.toml` agora declara `pdfplumber`/`camelot-py`/`pytesseract`/`Pillow`/`psutil` (faltavam antes) — mas continua sem teto de versão, sem lockfile (`uv.lock`/equivalente) e sem CI |
 
 Achados adicionais da mesma auditoria, fora da lista de sete, também nunca
@@ -551,10 +554,10 @@ Lista do que procurar: [CARACTERISTICAS.md](experimentos/pdf/CARACTERISTICAS.md)
 
 | | |
 |---|---|
-| Testes | **846 passando**, 10 saltados (`pytest -m "not experimento_a"`) — atualizado em 2026-08-13 após avançar o resto do −1.4 (3 sondas de característica novas validadas contra documento real, algoritmo de páginas de referência por combinação) |
+| Testes | **860 passando**, 10 saltados (`pytest -m "not experimento_a"`) — atualizado em 2026-08-13 após avançar o resto do −1.4, fechar parcialmente o P0.6 (detectores de injeção de instrução e de fórmula) e dar suporte a Basic Auth via URL (`ollama._extrair_credenciais`), tudo em `ADR-0028` |
 | Estilo | `flake8` e `black` limpos |
 | Guarda de confidencialidade | 9/9 |
-| ADRs | **27** |
+| ADRs | **28** |
 | Ciclos de importação | **nenhum** (39 módulos) |
 | Rotas com resultado gravado | 7 de 8 — a de visão vive à parte |
 | Documentos-caso | **19**, cobrindo 19 características — ver [pdf/](experimentos/pdf/) |

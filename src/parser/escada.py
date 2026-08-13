@@ -82,13 +82,74 @@ ESCADA: tuple[Modelo, ...] = (
     # --- Visão: especializados em documento --------------------------------
     Modelo("glm-ocr", "visao", 2.2, "Zhipu", "especializado em documento, e minúsculo"),
     Modelo("deepseek-ocr:3b", "visao", 6.7, "DeepSeek", "compressão óptica de contexto"),
+    Modelo(
+        "ibm/granite-docling",
+        "visao",
+        0.522,
+        "IBM",
+        "especializado em documento, o menor da escada inteira",
+    ),
+    # --- Visão: reintegrado (revisão de 2026-08-13, ver MODELOS.md) ---------
+    Modelo(
+        "granite3.2-vision:2b",
+        "visao",
+        2.4,
+        "IBM",
+        "reintegrado — descartado em 2026-08-01 por benchmark de terceiro, mesmo "
+        "argumento que reintegrou deepseek-ocr: o projeto tem instrumentação "
+        "própria para diagnosticar a falha atribuída a ele",
+    ),
     # --- Texto --------------------------------------------------------------
     Modelo("qwen3:1.7b", "texto", 1.4, "Alibaba", "piso da rota de texto"),
     Modelo("qwen3:4b", "texto", 2.5, "Alibaba", "denominador comum com a referência"),
     Modelo("qwen3:8b", "texto", 5.2, "Alibaba", "efeito do tamanho, resto constante"),
     Modelo("qwen3:14b", "texto", 9.3, "Alibaba", "limite prático do envelope de 12 GB"),
+    Modelo(
+        "deepseek-r1:7b",
+        "texto",
+        4.7,
+        "DeepSeek",
+        "raciocínio dedicado, destilado, porte menor",
+    ),
+    Modelo("deepseek-r1:8b", "texto", 5.2, "DeepSeek", "raciocínio dedicado, destilado"),
+    Modelo("nemotron-3-nano:4b", "texto", 2.8, "NVIDIA", "fabricante novo, porte comparável"),
+    Modelo("granite4.1:8b", "texto", 5.3, "IBM", "fabricante novo, porte médio, texto apenas"),
     # --- Família independente, nas duas rotas -------------------------------
     Modelo("gemma4:12b", "ambas", 7.6, "Google", "família independente, e multimodal"),
+    # --- Geração nova da família de referência: unifica texto e visão -------
+    Modelo(
+        "qwen3.5:0.8b",
+        "ambas",
+        1.0,
+        "Alibaba",
+        "nativamente multimodal — a unificação texto+visão custa qualidade?",
+    ),
+    Modelo("qwen3.5:4b", "ambas", 3.4, "Alibaba", "mesma pergunta do 0.8b, porte médio"),
+    Modelo("qwen3.5:9b", "ambas", 6.6, "Alibaba", "mesma pergunta, porte maior"),
+    # --- MoE esparso, comparado entre fabricantes ---------------------------
+    Modelo(
+        "nemotron-3.5-lightning:30b",
+        "texto",
+        25.0,
+        "NVIDIA",
+        "MoE esparso (3B ativado de 30B) — mesma pergunta do Qwen3.5, fabricante cruzado",
+    ),
+    # --- Fabricante europeu, unifica as duas rotas num modelo denso --------
+    Modelo(
+        "ministral-3:3b",
+        "ambas",
+        3.0,
+        "Mistral AI",
+        "único fabricante europeu da escada, porte de edge — alcança até a máquina "
+        "de referência",
+    ),
+    Modelo(
+        "mistral-small3.2:24b",
+        "ambas",
+        15.0,
+        "Mistral AI",
+        "mesmo fabricante, porte maior — efeito do tamanho dentro da família europeia",
+    ),
     # --- Teto: existem para falhar e marcar o limite ------------------------
     Modelo("qwen3-vl:30b", "visao", 20.0, "Alibaba", "teto de visão"),
     Modelo("qwen3:30b", "texto", 19.0, "Alibaba", "teto de texto"),
@@ -99,6 +160,14 @@ ESCADA: tuple[Modelo, ...] = (
 são três pontos com origem, geração e quantização constantes, o que dá a curva de
 tamanho mais limpa que o experimento pode ter. O de 4 bilhões é, além disso, o
 modelo com mais medição acumulada no projeto.
+
+**Revisão de 2026-08-13** (detalhe completo e "o que não entrou" em
+`experimentos/MODELOS.md`): acrescentou três fabricantes novos (NVIDIA, IBM,
+Mistral AI — eram cinco, agora oito), reintegrou `granite3.2-vision` pelo mesmo
+motivo que já tinha reintegrado `deepseek-ocr`, e acrescentou a geração
+`qwen3.5` (nativamente multimodal) ao lado da família de referência, sem
+substituí-la. Todo tamanho abaixo é o de download **verificado** na página do
+modelo em `ollama.com/library/...` — nunca estimado.
 """
 
 MODELOS_DO_EXPERIMENTO: tuple[str, ...] = tuple(m.nome for m in ESCADA)

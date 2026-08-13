@@ -332,3 +332,18 @@ documentos de origem cuja licença não permita.
 1. Formatos de entrada além de PDF: nomes e amostras a confirmar antes de investir.
 2. Schema do destino externo: não disponível nesta fase; mapeamento fica genérico.
 3. Alvo de 5 minutos: falta o volume de referência para dimensionar.
+4. Sandbox de processo e limites de recurso/tempo/páginas/pixels pra entrada
+   não confiável (P0.6, `PLANO.md`) — continua aberto. Ver
+   [ADR-0028](docs/adr/0028-postura-de-seguranca-do-servidor-de-inferencia.md)
+   pro que já foi verificado/testado (versão do Ollama, detecção de injeção
+   de instrução e de fórmula) e pro que continua risco declarado.
+5. **Ligado ao item 1 — quando CSV/Excel virar formato de entrada
+   suportado:** planilha real de cliente pode ter fórmula, automação e
+   campo com opção em lista suspensa/checkbox (não só valor estático) —
+   registrado em 2026-08-13, a partir de exemplar real de planilha de
+   schema visto em ambiente de desenvolvimento. **Decisão explicitamente
+   não tomada agora:** capturar a fórmula (a regra de cálculo) ou o valor
+   já calculado por ela (o resultado que a célula mostra)? As duas leituras
+   servem a perguntas diferentes, e escolher sem um caso real de cliente na
+   frente seria decidir no escuro — mesmo princípio que já rege o resto do
+   projeto (medir antes de decidir, não estimar).

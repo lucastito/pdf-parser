@@ -58,6 +58,39 @@ class Transporte(Protocol):
     def enviar(self, url: str, carga: dict, timeout: float) -> dict: ...
 
 
+def _extrair_credenciais(url: str) -> tuple[str, dict[str, str]]:
+    """Separa usuário/senha embutidos na URL (`http://usuario:senha@host`)
+    do resto — e devolve o cabeçalho `Authorization: Basic ...` já pronto.
+
+    Existe porque `Rota.url` (`configuracao.py`) é o único lugar onde o
+    perfil declara o endereço do servidor, e um reverse proxy com Basic Auth
+    na frente do Ollama (`ADR-0028`) não tem outro jeito de receber
+    credencial sem inventar um campo novo no perfil — a convenção de URL
+    (`usuario:senha@host`) já resolve isso sem mudar o schema.
+
+    Sem usuário na URL, devolve a URL como veio e nenhum cabeçalho extra —
+    o caminho de hoje (sem proxy, ou proxy sem Basic Auth) continua igual.
+    """
+    import base64
+    import urllib.parse
+
+    partes = urllib.parse.urlsplit(url)
+    if not partes.username:
+        return url, {}
+
+    usuario = urllib.parse.unquote(partes.username)
+    senha = urllib.parse.unquote(partes.password or "")
+    credenciais = base64.b64encode(f"{usuario}:{senha}".encode("utf-8")).decode("ascii")
+
+    netloc_sem_credenciais = partes.hostname or ""
+    if partes.port:
+        netloc_sem_credenciais += f":{partes.port}"
+    url_sem_credenciais = urllib.parse.urlunsplit(
+        (partes.scheme, netloc_sem_credenciais, partes.path, partes.query, partes.fragment)
+    )
+    return url_sem_credenciais, {"Authorization": f"Basic {credenciais}"}
+
+
 class _TransporteHTTP:
     """Transporte real, sobre a biblioteca padrão — sem dependência extra."""
 
@@ -65,10 +98,11 @@ class _TransporteHTTP:
         import urllib.error
         import urllib.request
 
+        url_final, cabecalhos_auth = _extrair_credenciais(url)
         requisicao = urllib.request.Request(
-            url,
+            url_final,
             data=json.dumps(carga).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", **cabecalhos_auth},
         )
         try:
             with urllib.request.urlopen(requisicao, timeout=timeout) as resposta:

@@ -17,6 +17,127 @@ melhora o resultado, ou satura?**
 Responder exige rodar uma escada crescente até a máquina não aguentar. E exige que
 quem executa não precise descobrir os parâmetros sozinho: eles vão resolvidos.
 
+## Revisão de 2026-08-13 — servidor de produção, oito origens
+
+> Motivada por uma decisão real de configuração de servidor (infra própria ou
+> de terceiro, com ou sem restrição de GPU). Esta seção documenta **o que foi
+> considerado, o que foi selecionado, e por quê** — insumo direto pra escrever o
+> artigo (considerado → selecionado → rodado → melhor, comparando porte e
+> fabricante).
+
+### Requisitos que decidiram a lista
+
+1. **Precisa rodar no Ollama** — cada modelo foi verificado por tag exata na
+   biblioteca (`ollama.com/library/...`), não por menção genérica em texto de
+   terceiro. Achado real: um modelo que parecia disponível ("Nemotron Nano V2
+   VL") não tem tag oficial confirmada — só variantes de comunidade, não
+   oficiais; ficou fora até isso mudar.
+2. **Regra do degrau (`ADR-0014`), agora aplicada entre fabricantes também** —
+   cada modelo entra só se responder pergunta que nenhum outro já responde:
+   tamanho dentro da família, MoE esparso vs. denso, fabricante novo, ou
+   especialização em documento.
+3. **Nuvem-agnóstico** — o mesmo modelo Ollama roda idêntico em servidor
+   próprio, AWS, GCP ou Azure; o que muda é só a classe de GPU da instância.
+   Dois patamares, não um: **mínimo** (infra própria modesta, ~16 GB de GPU) e
+   **sem restrição** (servidor próprio, ou parceria de nuvem grande, 40-80 GB
+   de GPU) — o produto precisa dos dois, sem presumir qual predomina.
+4. **Disponibilidade real, não teórica** — modelo cuja única forma de rodar é
+   nuvem paga do próprio fabricante (`deepseek-v4-flash`, só tags `:cloud` no
+   Ollama) não conta como "modelo local instalável no servidor do cliente".
+5. **Peso incompatível com qualquer servidor razoável** — descartado
+   independente de benchmark, por escala (Kimi K3: 2,8 trilhões de parâmetros;
+   Llama 4: 109B-400B mesmo na configuração mais leve).
+
+### O que foi considerado e não entrou — com o motivo
+
+| Candidato | Fabricante | Por que não entrou |
+|---|---|---|
+| Llama 4 Scout/Maverick | Meta | 109B–400B mesmo na config mais leve; pesado demais mesmo em servidor robusto |
+| Kimi K3 | Moonshot AI | 2,8 trilhões de parâmetros — fora de qualquer escala razoável |
+| Phi-4-reasoning-vision-15B | Microsoft | pesos de visão ainda não suportados no Ollama/llama.cpp (só o texto roda) |
+| PaddleOCR-VL, GOT-OCR 2.0, MinerU2.5-Pro, dots.ocr | vários | sem pacote oficial no Ollama, mesmo sendo líderes de benchmark (OmniDocBench) |
+| `deepseek-v4-flash` | DeepSeek | só roda via nuvem paga do próprio Ollama (tags `:cloud`) — não é modelo local |
+| "Nemotron Nano V2 VL" | NVIDIA | mencionado em fontes gerais, mas **sem tag oficial confirmada** na biblioteca do Ollama |
+| `deepseek-v3.1`/`v3`/`coder`/`v2`/`llm` | DeepSeek | não isolam pergunta nova além do que `deepseek-v4-flash`/`deepseek-r1` já cobririam |
+
+### Correção registrada: `nemotron-3-nano` é só texto
+
+Verificação direta na página do modelo (`ollama.com/library/nemotron-3-nano`)
+mostra entrada **"Text"** apenas — não é multimodal, ao contrário do que uma
+busca inicial (menos específica) sugeriu. Entra só na escada de texto.
+
+### Reintegrado, mesmo motivo do `deepseek-ocr`: `granite3.2-vision` (2B)
+
+**Estava descartado nesta seção** ("Descartados, e por quê", abaixo) desde
+2026-08-01, por um benchmark independente relatar saídas malformadas e tabela
+errada. A mesma nota de rodapé já dizia, na época: *"descarte por fonte externa
+é provisório... se sobrar tempo, medir o granite3.2-vision tem valor
+justamente por ser barato e por sabermos diagnosticar a falha que lhe
+atribuem"* — exatamente o argumento que já tinha reintegrado o `deepseek-ocr`
+uma seção abaixo. Volta como candidato agora, pelo mesmo motivo: o projeto tem
+instrumentação própria (canal de raciocínio, contagem de tokens, diagnóstico de
+corte) que o benchmark de terceiro não tinha. Se falhar aqui, será por medição
+própria — e terá valor por confirmar ou refutar o benchmark externo.
+
+### Três origens novas: NVIDIA, IBM, Mistral AI
+
+Chegam a **oito** fabricantes distintos (eram cinco), reforçando a mesma regra
+já registrada nesta seção ("viés de fabricante"): quanto mais origens, menos a
+conclusão fica amarrada a um fornecedor só.
+
+| Fabricante | Modelo novo | Por que |
+|---|---|---|
+| NVIDIA | `nemotron-3-nano:4b` | fabricante novo, porte comparável ao denominador comum |
+| NVIDIA | `nemotron-3.5-lightning:30b` | MoE esparso (3B ativado de 30B) — mesma pergunta do Qwen3.5/3.6, fabricante diferente |
+| IBM | `granite4.1:8b` | fabricante novo, porte médio |
+| IBM | `granite3.2-vision:2b` | reintegrado — ver acima |
+| IBM | `ibm/granite-docling` (258M) | especializado em documento, o menor de todos os candidatos |
+| Mistral AI | `ministral-3:3b` | mesmo fabricante, porte de edge — sem ele, a máquina de referência (2 GB) não alcançaria origem europeia nenhuma (achado real de teste, `TestAlocacaoPorMaquina::test_alcanca_todas_as_origens`) |
+| Mistral AI | `mistral-small3.2:24b` | mesmo fabricante, porte maior; unifica texto+visão num modelo denso só |
+
+### Geração nova da família de referência: Qwen3 → Qwen3.5
+
+`qwen3.5` é **nativamente multimodal em todos os tamanhos** (0,8B/2B/4B/9B),
+ao contrário de `qwen3` (só texto) + `qwen3-vl` (só visão) como modelos
+separados. Pergunta que só esta comparação responde: **a unificação
+texto+visão custa qualidade, ou não?** `qwen3`/`qwen3-vl` continuam na escada
+como referência — é a família com mais medição acumulada no projeto — e
+`qwen3.5` entra ao lado, não no lugar.
+
+### Escada final de texto (LLM) — 2026-08-13
+
+| Modelo | Fabricante | Tamanho | Pergunta |
+|---|---|---|---|
+| `qwen3:1.7b`/`4b`/`8b`/`14b` | Alibaba | 1,4 / 2,5 / 5,2 / 9,3 GB | referência, mais medida no projeto |
+| `qwen3.5:0.8b`/`4b`/`9b` | Alibaba | 1,0 / 3,4 / 6,6 GB | unificação texto+visão custa qualidade? |
+| `deepseek-r1:7b`/`8b` | DeepSeek | 4,7 / 5,2 GB | raciocínio dedicado, destilado |
+| `nemotron-3-nano:4b` | NVIDIA | 2,8 GB | fabricante novo |
+| `nemotron-3.5-lightning:30b` | NVIDIA | 25 GB (3B ativo) | MoE esparso, fabricante cruzado |
+| `gemma4:12b` | Google | ~7,6 GB | família independente, já medida |
+| `granite4.1:8b` | IBM | 5,3 GB | fabricante novo |
+| `ministral-3:3b` | Mistral AI | 3,0 GB | fabricante europeu, alcança a máquina de referência |
+| `mistral-small3.2:24b` | Mistral AI | 15 GB | mesmo fabricante, unifica rotas, porte maior |
+
+### Escada final de visão (VLM) — 2026-08-13
+
+| Modelo | Fabricante | Tamanho | Pergunta |
+|---|---|---|---|
+| `qwen3-vl:2b`/`4b`/`8b` | Alibaba | 1,9 / 3,3 / 6,1 GB | referência, mais medida no projeto |
+| `qwen3.5:0.8b`/`4b`/`9b` | Alibaba | 1,0 / 3,4 / 6,6 GB | mesma pergunta da escada de texto |
+| `minicpm-v4.6` | OpenBMB | 1,6 GB | piso da escada |
+| `granite3.2-vision:2b` | IBM | 2,4 GB | reintegrado — ver acima |
+| `gemma4:12b` | Google | ~7,6 GB | controle de independência |
+| `ministral-3:3b` | Mistral AI | 3,0 GB | fabricante europeu, porte de edge |
+| `mistral-small3.2:24b` | Mistral AI | 15 GB | mesmo fabricante, porte maior |
+
+### Escada final de especializados em documento/OCR — 2026-08-13
+
+| Modelo | Fabricante | Tamanho | Pergunta |
+|---|---|---|---|
+| `glm-ocr` | Zhipu | 1,6-2,2 GB | especializado, minúsculo |
+| `deepseek-ocr:3b` | DeepSeek | 6,7 GB | compressão óptica de contexto |
+| `ibm/granite-docling` | IBM | 0,522 GB (258M parâmetros) | menor especializado de todos, ponta a ponta |
+
 ## Escada de visão (o modelo lê a página como imagem)
 
 Cada degrau precisa responder a uma pergunta que os outros não respondem. Modelo
@@ -199,8 +320,12 @@ amarra a decisão a um fornecedor.
 
 ## Descartados, e por quê
 
-**`granite3.2-vision` (2B)** — posicionado para documento, mas um benchmark
-independente o desqualificou: saídas malformadas ou com tabelas erradas.
+**`granite3.2-vision` (2B)** — ✅ **reintegrado em 2026-08-13** (ver "Revisão de
+2026-08-13", seção "Reintegrado, mesmo motivo do `deepseek-ocr`", no topo deste
+arquivo). Estava aqui por um benchmark independente relatar saídas malformadas
+e tabela errada — mas a nota abaixo já previa isso como provisório, e o mesmo
+argumento que reintegrou `deepseek-ocr` (instrumentação própria pra diagnosticar
+a falha que o benchmark de terceiro atribuiu) se aplica aqui.
 
 **`llava:7b`** — OCRBench 536 contra 852 e ~888 dos incluídos. Ver acima.
 
@@ -208,9 +333,7 @@ independente o desqualificou: saídas malformadas ou com tabelas erradas.
 utilizável.
 
 > **Descarte por fonte externa é provisório, não definitivo.** Nenhum destes foi
-> medido aqui. Servem para escolher o que testar primeiro, não para concluir — e
-> se sobrar tempo, medir o `granite3.2-vision` tem valor justamente por ser
-> barato e por sabermos diagnosticar a falha que lhe atribuem.
+> medido aqui. Servem para escolher o que testar primeiro, não para concluir.
 
 ### Reintegrado: `deepseek-ocr` (3B)
 

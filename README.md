@@ -242,6 +242,26 @@ $env:PARSER_DOCUMENTO_CASO = "C:\caminho\documento.pdf"
 python -m pytest
 ```
 
+## Segurança do servidor de inferência
+
+Detalhe completo, com fonte, em [ADR-0028](docs/adr/0028-postura-de-seguranca-do-servidor-de-inferencia.md).
+Resumo do que é verificado e testado — e do que continua risco declarado.
+**Válido nos dois cenários**, já que o Cenário A também roda Ollama, local, na
+própria máquina; a parte de rede do ADR (proxy, firewall) é específica do
+servidor do Cenário B, que este repositório não usa.
+
+| Verificado/testado | Continua aberto |
+|---|---|
+| Versão do Ollama (recusa `< 0.17.1` — `CVE-2026-7482`, vazamento de memória não autenticado) | Sandbox de processo (P0.6) |
+| `possivel-injecao-de-instrucao` (frase-gatilho por página, `diagnostico.py`) | Lista de frases-gatilho não é exaustiva — camada, não defesa inteira |
+| `possivel-injecao-de-formula` (célula que planilha executaria como fórmula) | Limite de recurso/tempo/páginas/pixels (P0.6) |
+| `OLLAMA_MAX_LOADED_MODELS=1` (um modelo por vez, sem competir por recurso) | Peso de modelo malicioso desde a origem (mesmo hash correto) — sem ferramenta de mercado pra GGUF, só organização verificável + Ollama corrigido |
+| Adulteração de peso em trânsito — já coberta pelo próprio `ollama pull` (SHA256 contra o manifesto, sem ferramenta extra) | Varredura de dependência automatizada em CI (`pip-audit` sem trava) |
+
+**Não existe "relatório de segurança perfeito"** — o próprio OWASP LLM Top 10
+declara isso para injeção de instrução. O que este projeto faz é o que faz em
+tudo o mais: medir e declarar, não presumir cobertura.
+
 ## Decisões
 
 Cada decisão de arquitetura está em [docs/adr/](docs/adr/), com a medição que a

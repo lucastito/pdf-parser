@@ -101,6 +101,66 @@ class TestCliente:
         assert transporte.chamadas[0]["timeout"] == 300.0
 
 
+class TestCredenciaisNaUrl:
+    """Reverse proxy com Basic Auth na frente do Ollama (ADR-0028) não tem
+    outro jeito de receber credencial sem inventar campo novo no perfil —
+    `usuario:senha@host` na própria `Rota.url` resolve isso."""
+
+    def test_url_sem_usuario_nao_gera_cabecalho(self):
+        from parser.ollama import _extrair_credenciais
+
+        url, cabecalhos = _extrair_credenciais("http://servidor:11434")
+        assert url == "http://servidor:11434"
+        assert cabecalhos == {}
+
+    def test_url_com_usuario_e_senha_gera_basic_auth(self):
+        import base64
+
+        from parser.ollama import _extrair_credenciais
+
+        url, cabecalhos = _extrair_credenciais("http://pdf-parser:segredo@servidor:8443")
+        assert url == "http://servidor:8443"
+        esperado = base64.b64encode(b"pdf-parser:segredo").decode("ascii")
+        assert cabecalhos == {"Authorization": f"Basic {esperado}"}
+
+    def test_credenciais_nao_vazam_para_a_url_final(self):
+        """A URL que de fato sai na requisição não pode carregar a senha em
+        texto claro — ela já foi convertida em cabeçalho."""
+        from parser.ollama import _extrair_credenciais
+
+        url, _ = _extrair_credenciais(
+            "http://usuario:senha-secreta@servidor:8443/api/generate"
+        )
+        assert "senha-secreta" not in url
+        assert "usuario" not in url
+
+    def test_preserva_caminho_e_porta(self):
+        from parser.ollama import _extrair_credenciais
+
+        url, _ = _extrair_credenciais("http://u:s@servidor:8443/api/generate?x=1")
+        assert url == "http://servidor:8443/api/generate?x=1"
+
+    def test_usuario_sem_senha_ainda_gera_cabecalho(self):
+        from parser.ollama import _extrair_credenciais
+
+        url, cabecalhos = _extrair_credenciais("http://so-usuario@servidor:8443")
+        assert "Authorization" in cabecalhos
+
+    def test_cliente_ollama_encaminha_url_com_credenciais_ao_transporte(self):
+        """De ponta a ponta: `Rota.url` com credenciais chega ao transporte
+        exatamente como declarada — quem decodifica é `_TransporteHTTP`,
+        não `ClienteOllama`."""
+        transporte = TransporteFalso(resposta={})
+        cliente = ClienteOllama(
+            modelo="m", transporte=transporte, url="http://pdf-parser:segredo@servidor:8443"
+        )
+        cliente.gerar("p", schema={})
+        assert (
+            transporte.chamadas[0]["url"]
+            == "http://pdf-parser:segredo@servidor:8443/api/generate"
+        )
+
+
 class TestOrdemDasColunas:
     """A ordem das colunas do documento vai no prompt — e é o que corrige o
     deslocamento.
