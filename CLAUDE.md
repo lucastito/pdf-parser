@@ -78,6 +78,7 @@ O que é compartilhado entre os dois, e por quê:
 | Módulo | Por quê é dos dois |
 |---|---|
 | `calibracao`, `triagem`, `diagnostico`, `planejador`, `fabrica` | descoberta de estrutura é agnóstica de domínio por definição |
+| `vocabulario` | ler "campo esperado" de uma planilha de schema é agnóstico — não sabe se o schema é nutricional, financeiro ou técnico, só sabe procurar o que foi declarado |
 | `degraus` | qualquer chamada a LLM/VLM, em A ou B, precisa da mesma escada de restrição de saída |
 | `contexto` | dimensionar `num_ctx` pela entrada medida importa tanto num experimento quanto em produção real |
 | `concordancia`, `consolidacao` | comparar rotas entre si é tanto sinal de confiança em tempo de execução (B) quanto métrica de comparação (A) |

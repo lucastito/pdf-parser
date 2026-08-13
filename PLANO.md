@@ -12,6 +12,37 @@
 > Cenário A** — a ferramenta genérica de pesquisa como projeto pessoal, não
 > o uso corporativo. É coincidência de nome entre dois conceitos diferentes.
 
+## ⭐ Próxima sessão — prioridades confirmadas pelo usuário em 2026-08-12
+
+**Nesta ordem, e só estas quatro — o resto da lista de abertos continua
+depois delas, não em paralelo:**
+
+1. **Diagnóstico da escada de escalada** — seção própria, logo depois da
+   tabela "Mapa completo dos P0" mais abaixo (busque "Diagnóstico da escada
+   de escalada — registrado em 2026-08-12, não implementado"). Ainda **sem
+   desenho** — a primeira coisa a fazer é decidir onde o registro de
+   execução por página vive (estender `DecisaoDeRota`? um tipo novo?), não
+   sair escrevendo código.
+2. **O resto do −1.4** — tabela P-1 mais abaixo e a seção "−1.4, o que
+   foi fechado e o que continua aberto", bloco "Ainda aberto": taxonomia
+   completa (só 5 de ~19 características têm detector), algoritmo de
+   "quantas páginas por característica", e a correção do `triagem.Classe`
+   grosseiro (**precisa de medição antes de mexer** — não é ajuste no
+   escuro, ver "Limite declarado sobre `triagem.Classe`" no `ADR-0021`).
+3. **P0.4** — tabela "Mapa completo dos P0", linha P0.4: protocolo dos
+   degraus no experimento diverge do caminho de produção
+   (`src/parser/cli.py` não propaga contexto/seed/temperatura/raciocínio da
+   rota real; prompt montado ad hoc). Item de código, bem delimitado.
+4. **O resto do P0.5** — mesma tabela, linha P0.5: `pipeline.Pipeline`
+   (Cenário A) continua sem roteamento por página — só o Cenário B tem isso
+   hoje.
+
+Os itens −1.2 (suíte não determinística, investigada e não reproduzida),
+P0.2/P0.3 (curadoria humana de gabarito/holdout), P0.6 (segurança), P0.7
+(ambiente) e a deriva de documentação continuam abertos e rastreados nas
+tabelas de sempre — não fazem parte do que foi priorizado pra próxima
+sessão, mas não foram esquecidos nem removidos.
+
 ## Índice por escopo
 
 | Escopo | Onde |
@@ -243,6 +274,38 @@ pra uma classificação mais cara (`LLM_SIMPLES`) em vez de descartar direto
   "como escolher N" ainda é decisão de quem monta o perfil, não automação.
 - A correção do `triagem.Classe` grosseiro (parágrafo curto acima) —
   precisa de medição antes de mexer, não é para hoje.
+
+### Diagnóstico da escada de escalada — registrado em 2026-08-12, não implementado
+
+**Pedido:** em produção, a cada página que sobe de nível na escada
+(determinístico → palavra-chave → llm → vlm), registrar **por que** subiu, e
+quando um nível resolve, fechar o registro com **por que os anteriores não
+resolveram e por que este resolveu**. Um caso de 3 níveis tentados (ex.:
+determinístico falhou, llm falhou, vlm funcionou) produz 3 informações úteis
+juntas: duas justificativas de falha + uma de sucesso — o log por
+documento/página vira uma trilha auditável, não só uma contagem.
+
+**O que já existe:** `DecisaoDeRota.motivo` (`planejador.py`) já é calculado
+por página e já explica *por que escalou* — "rotas determinísticas
+divergiram acima do limiar", "confiança insuficiente (X%)", "geometria não
+reconheceu estrutura", "sem camada de texto", etc. Isso cobre a metade
+"por que não resolveu antes".
+
+**O que falta, e é lacuna real:**
+1. `motivo` é calculado no **planejamento**, antes de qualquer rota rodar —
+   não sabe ainda se o nível escalado vai funcionar. Falta capturar o
+   **resultado de execução** (registros produzidos, ou erro) no nível que
+   de fato roda, não só a decisão de tentá-lo.
+2. `lote.py::_processar_por_pagina` **descarta `decisao.motivo`** ao montar
+   o log — hoje só conta `"posicional×5, llm×2"`, sem guardar o porquê de
+   nenhuma decisão individual.
+3. Não existe hoje a trilha encadeada por página — "nível 2 falhou por X,
+   nível 3 (llm) falhou por Y, nível 3 (vlm) funcionou e achou Z" — como um
+   registro só, consultável depois.
+
+**Não implementado hoje** — desenho novo, vale medir onde encaixa melhor
+(estender `DecisaoDeRota`? um `RegistroDeExecucao` novo, por página, que
+`lote.py` monta ao redor da decisão + resultado?) antes de escrever código.
 
 ### Mapa completo dos P0 da auditoria externa (`AUDITORIA_TECNICA_CIENTIFICA.md`)
 

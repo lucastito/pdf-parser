@@ -100,6 +100,16 @@ com o motivo e a ação recomendada.
 perfil informado como alternativa, falha explícita se nenhum servir. Uma pasta com
 documentos de origens diferentes funciona sem configuração por arquivo.
 
+**`--vocabulario`** declara os campos esperados a partir de uma planilha `.xlsx`
+(nome, unidade, opções, faixa), pra o roteador tentar achar valor por
+palavra-chave em página sem tabela antes de escalar pro modelo:
+
+```powershell
+python -m parser.cli ingerir ./entrada `
+    --vocabulario schema.xlsx --vocabulario-abas DADOS `
+    --saida ./saida/consolidado.csv
+```
+
 ### Medir antes de confiar
 
 ```powershell
