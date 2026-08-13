@@ -426,6 +426,122 @@ class TestRoteamentoPorPagina:
         assert "nao-reconhecivel" in resultado.falhas[0].arquivo
 
 
+class TestTrilhaDeAuditoriaPorPagina:
+    """A escalada vira auditável no `.log`: cada ferramenta tentada, sucesso
+    ou falha, mais o desfecho real da execução — não só a contagem agregada
+    por rota. Registrado no PLANO.md em 2026-08-12 ("Diagnóstico da escada
+    de escalada"), desenhado e fechado em 2026-08-13."""
+
+    def test_pagina_resolvida_grava_tentativas_e_execucao_no_log(
+        self, tmp_path, pdf_tabela_calibravel
+    ):
+        import shutil
+
+        pasta = tmp_path / "entrada"
+        pasta.mkdir()
+        shutil.copy(pdf_tabela_calibravel, pasta / "doc.pdf")
+
+        resultado = ingerir(pasta)
+
+        (linha,) = resultado.log
+        assert "pág 1" in linha
+        assert "posicional sucesso" in linha
+        # As ferramentas que também rodaram e não acharam nada continuam
+        # visíveis — não só o vencedor.
+        assert "pdfplumber falhou" in linha
+        assert "camelot falhou" in linha
+        assert "execução: sucesso" in linha
+
+    def test_formatar_trilha_lista_tentativas_anteriores_e_desfecho(self):
+        from parser.lote import _formatar_trilha
+        from parser.planejador import DecisaoDeRota, TentativaDeRota
+
+        decisao = DecisaoDeRota(
+            pagina=7,
+            rota="llm",
+            nivel=3,
+            motivo="rotas determinísticas divergiram acima do limiar (camelot, pdfplumber)",
+            tentativas=(
+                TentativaDeRota(
+                    rota="pdfplumber",
+                    nivel=2,
+                    sucesso=True,
+                    motivo="12 registro(s)",
+                    registros=12,
+                ),
+                TentativaDeRota(
+                    rota="camelot", nivel=2, sucesso=True, motivo="9 registro(s)", registros=9
+                ),
+            ),
+        )
+        execucao = TentativaDeRota(
+            rota="llm", nivel=3, sucesso=True, motivo="31 registro(s)", registros=31
+        )
+
+        linha = _formatar_trilha(decisao, execucao)
+
+        assert "pág 7" in linha
+        assert "pdfplumber sucesso (12 registro(s))" in linha
+        assert "camelot sucesso (9 registro(s))" in linha
+        assert "decisão: llm" in linha
+        assert "execução: sucesso (31 registro(s))" in linha
+
+    def test_formatar_trilha_sem_tentativas_anteriores_nao_quebra(self):
+        """Uma página resolvida logo na primeira ferramenta tentada (sem
+        nenhuma outra rodada antes) ainda produz uma linha válida."""
+        from parser.lote import _formatar_trilha
+        from parser.planejador import DecisaoDeRota, TentativaDeRota
+
+        decisao = DecisaoDeRota(pagina=1, rota="ocr", nivel=1, motivo="sem camada de texto")
+        execucao = TentativaDeRota(rota="ocr", nivel=1, sucesso=False, motivo="0 registro(s)")
+
+        linha = _formatar_trilha(decisao, execucao)
+
+        assert "pág 1" in linha
+        assert "decisão: ocr" in linha
+        assert "execução: falhou (0 registro(s))" in linha
+
+    def test_execucao_sem_registros_e_registrada_como_falha_mesmo_com_decisao_valida(
+        self, tmp_path, pdf_contexto_com_valor_para_lote
+    ):
+        """A decisão pode ser razoável (achou campo por palavra-chave) e
+        ainda assim a execução real produzir zero — as duas coisas são
+        informações distintas, e a segunda só existe depois de rodar."""
+        import shutil
+
+        from parser.vocabulario import CampoEsperado
+
+        pasta = tmp_path / "entrada"
+        pasta.mkdir()
+        shutil.copy(pdf_contexto_com_valor_para_lote, pasta / "doc.pdf")
+        vocabulario = [CampoEsperado(nome="profundidade", sinonimos=("Water Depth",))]
+
+        resultado = ingerir(pasta, vocabulario=vocabulario)
+
+        (linha,) = resultado.log
+        assert "palavra_chave" in linha
+        assert "execução: sucesso" in linha
+
+
+@pytest.fixture
+def pdf_contexto_com_valor_para_lote(tmp_path):
+    import fitz
+
+    caminho = tmp_path / "contexto-com-valor-lote.pdf"
+    documento = fitz.open()
+    pagina = documento.new_page()
+    texto = (
+        "Este relatorio descreve o contexto geral do projeto e resume as "
+        "condicoes observadas em campo. Water Depth: 1850 m. Nenhuma "
+        "tabela de valores aparece nesta pagina em particular."
+    )
+    for i, palavra in enumerate(texto.split()):
+        pagina.insert_text((72 + (i % 8) * 60, 100 + (i // 8) * 20), palavra)
+    documento.save(caminho)
+    documento.close()
+    return caminho
+
+
 class TestVocabularioNoLote:
     """Nível 2b de ponta a ponta: página sem tabela, com vocabulário
     declarado, produz registro sem precisar de modelo algum."""

@@ -103,10 +103,20 @@ produção; o princípio "falha alto, nunca lixo" se preserva — página sem
 estrutura reconhecível vira pendência nomeada, nunca registro inventado.
 
 **Contra:** o comportamento de uma pasta deixa de ser "um layout, um
-resultado" e passa a ser por página, o que torna o log mais longo (mitigado
-por um resumo agregado por rota, não por página individual). A escolha de
-quando escalar de nível 2 para nível 3 usa um único limiar de confiança
-(0,75) medido num documento só — o mesmo limite que a calibração já tinha.
+resultado" e passa a ser por página, o que torna o log mais longo
+~~(mitigado por um resumo agregado por rota, não por página individual)~~.
+
+> **Retificação de 2026-08-13:** a mitigação acima foi revertida de
+> propósito pelo `ADR-0027` — o log por página passou a existir também,
+> com a trilha completa de ferramentas tentadas e o desfecho real de
+> execução, porque é exatamente essa granularidade que a auditoria de
+> produção (e o experimento de avaliação de modelos, `ADR-0026`) precisa.
+> O resumo agregado por rota continua existindo — a trilha por página vem
+> **além** dele, não no lugar.
+
+A escolha de quando escalar de nível 2 para nível 3 usa um único limiar de
+confiança (0,75) medido num documento só — o mesmo limite que a calibração
+já tinha.
 
 ## Limite declarado (fora desta fatia)
 

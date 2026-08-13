@@ -44,7 +44,7 @@ chama é `parser.fabrica` + `parser.lote`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +60,7 @@ __all__ = [
     "CONFIANCA_MINIMA_DE_CALIBRACAO",
     "LIMIAR_DE_CONCORDANCIA",
     "DecisaoDeRota",
+    "TentativaDeRota",
     "planejar",
 ]
 
@@ -71,6 +72,32 @@ LIMIAR_DE_CONCORDANCIA = 0.80
 segunda medição. Ponto de partida declarado, não calibrado — revisar quando
 houver documentos variados o bastante para medir onde o corte deveria estar.
 """
+
+
+@dataclass(frozen=True)
+class TentativaDeRota:
+    """Uma rota/ferramenta que de fato **rodou** numa página, e o desfecho.
+
+    Existe para que a escalada seja auditável, não só o vencedor: cada
+    ferramenta ou modelo que tentou e não resolveu fica registrado, com o
+    motivo — nunca descartado em silêncio. Só existe tentativa para o que
+    **executou** (chamou o extrator de verdade); uma rota que nem chegou a
+    rodar por pré-condição não satisfeita (ex. posicional sem confiança de
+    calibração, palavra-chave sem vocabulário declarado) não gera tentativa
+    — essa ausência já fica explicada pelo `motivo` da decisão final.
+
+    O formato é uma sequência (`DecisaoDeRota.tentativas`), não um enum de
+    dois passos, de propósito: comporta hoje 1-2 tentativas por nível, e
+    comporta sem mudança de esquema uma cadeia mais longa no futuro (ex.
+    llm principal → llm alternativo → vlm), quando o fallback de execução
+    entre modelos for medido e decidido (ver ADR-0025, "Limite declarado").
+    """
+
+    rota: str
+    nivel: int
+    sucesso: bool
+    motivo: str
+    registros: int = 0
 
 
 @dataclass(frozen=True)
@@ -95,6 +122,12 @@ class DecisaoDeRota:
     materializado da votação célula a célula (`parser.consolidacao`).
     Reexecutar as ferramentas determinísticas na hora de extrair de verdade
     duplicaria o trabalho — a votação já rodou aqui, e é determinística."""
+    tentativas: tuple[TentativaDeRota, ...] = ()
+    """Tudo que rodou nesta página antes desta decisão (e incluindo, quando a
+    própria rota escolhida é determinística), na ordem em que rodou — a
+    trilha auditável da escalada. `lote.py` acrescenta mais uma tentativa
+    depois, com o desfecho real da execução (planejar decide, não executa
+    rede/modelo — ver módulo)."""
 
 
 def planejar(
@@ -185,7 +218,7 @@ def _planejar_pagina(
         # nível 2 não têm o que reconhecer aqui, então não se tenta
         # calibração nem descoberta de coluna. Ainda vale o nível 2b: o
         # parágrafo pode citar exatamente o valor que o schema pede.
-        decisao = _tentar_palavra_chave(pagina, vocabulario)
+        decisao, tentativa_2b = _tentar_palavra_chave(pagina, vocabulario)
         if decisao is not None:
             return decisao
         return DecisaoDeRota(
@@ -193,6 +226,7 @@ def _planejar_pagina(
             rota="llm",
             nivel=3,
             motivo=f"triagem: {resultado_triagem.motivo} — sem tabela, prompt genérico",
+            tentativas=(tentativa_2b,) if tentativa_2b else (),
         )
 
     # A partir daqui: Classe.DADOS, com camada de texto — nível 2.
@@ -213,16 +247,26 @@ def _planejar_pagina(
         or None
     )
 
-    resultados = _tentar_deterministicos(caminho, numero, pagina, candidato, colunas)
-    decisao = _decidir_entre_deterministicos(numero, resultados, candidato, colunas)
+    resultados, tentativas_deterministicas = _tentar_deterministicos(
+        caminho, numero, pagina, candidato, colunas
+    )
+    decisao = _decidir_entre_deterministicos(
+        numero, resultados, candidato, colunas, tuple(tentativas_deterministicas)
+    )
     if decisao is not None:
         return decisao
 
     # Nível 2b: as ferramentas de tabela não bastaram, mas ainda é
     # determinístico tentar achar valor por rótulo antes do modelo.
-    decisao = _tentar_palavra_chave(pagina, vocabulario)
+    decisao, tentativa_2b = _tentar_palavra_chave(pagina, vocabulario)
+    tentativas_ate_aqui = tuple(tentativas_deterministicas) + (
+        (tentativa_2b,) if tentativa_2b else ()
+    )
     if decisao is not None:
-        return decisao
+        # `decisao.tentativas` já traz só a própria tentativa de nível 2b —
+        # precede com o que já tinha rodado no nível 2, senão a trilha
+        # perderia as ferramentas de tabela que tentaram antes e não acharam.
+        return replace(decisao, tentativas=tentativas_ate_aqui)
 
     # Nível 3: nada determinístico bastou, sozinho ou em concordância.
     if resultados:
@@ -242,6 +286,7 @@ def _planejar_pagina(
         motivo=motivo,
         confianca=candidato.confianca if candidato else None,
         ordem_das_colunas=colunas,
+        tentativas=tentativas_ate_aqui,
     )
 
 
@@ -251,15 +296,17 @@ def _tentar_deterministicos(
     pagina: Pagina,
     candidato,
     colunas: list[str] | None,
-) -> dict[str, list]:
-    """Roda as três rotas determinísticas com os parâmetros já descobertos.
+) -> tuple[dict[str, list], list[TentativaDeRota]]:
+    """Roda as três ou quatro rotas determinísticas com os parâmetros já descobertos.
 
     Nenhuma delas recebe nome de campo próprio: `posicional` usa o layout que
     a geometria achou (só se confiante o bastante para ser um layout
     plausível); `pdfplumber`/`camelot` recebem a mesma ordem de colunas que o
     prompt do modelo receberia, ou nenhuma — nesse caso leem pelo cabeçalho
     que a própria ferramenta detectar. Uma rota que falhar ou não achar nada
-    simplesmente não entra no dicionário devolvido; não é erro, é resultado.
+    não entra no dicionário de resultados — mas **entra** na lista de
+    tentativas devolvida junto, com o motivo, para a escalada ficar
+    auditável (`DecisaoDeRota.tentativas`).
     """
     from parser.extratores.camelot_ import ExtratorCamelot
     from parser.extratores.pdfplumber_ import ExtratorPdfplumber
@@ -267,6 +314,7 @@ def _tentar_deterministicos(
     from parser.extratores.pymupdf_ import ExtratorPymupdf
 
     resultados: dict[str, list] = {}
+    tentativas: list[TentativaDeRota] = []
 
     if candidato is not None and candidato.confianca >= CONFIANCA_MINIMA_DE_CALIBRACAO:
         try:
@@ -277,8 +325,28 @@ def _tentar_deterministicos(
             registros = ExtratorPosicional(layout).extrair(documento_pagina)
             if registros:
                 resultados["posicional"] = registros
-        except Exception:  # noqa: BLE001 — rota descartada, não erro do planejamento
-            pass
+                tentativas.append(
+                    TentativaDeRota(
+                        rota="posicional",
+                        nivel=2,
+                        sucesso=True,
+                        motivo=f"{len(registros)} registro(s) pelo layout calibrado",
+                        registros=len(registros),
+                    )
+                )
+            else:
+                tentativas.append(
+                    TentativaDeRota(
+                        rota="posicional",
+                        nivel=2,
+                        sucesso=False,
+                        motivo="layout calibrado não achou registros",
+                    )
+                )
+        except Exception as erro:  # noqa: BLE001 — rota descartada, não erro do planejamento
+            tentativas.append(
+                TentativaDeRota(rota="posicional", nivel=2, sucesso=False, motivo=str(erro))
+            )
 
     documento_vazio = DocumentoCanonico(identificador="_planejamento", paginas=[])
     intervalo = range(numero - 1, numero)
@@ -291,8 +359,25 @@ def _tentar_deterministicos(
             registros = extrator.extrair(documento_vazio)
             if registros:
                 resultados[nome] = registros
-        except Exception:  # noqa: BLE001 — idem
-            pass
+                tentativas.append(
+                    TentativaDeRota(
+                        rota=nome,
+                        nivel=2,
+                        sucesso=True,
+                        motivo=f"{len(registros)} registro(s)",
+                        registros=len(registros),
+                    )
+                )
+            else:
+                tentativas.append(
+                    TentativaDeRota(
+                        rota=nome, nivel=2, sucesso=False, motivo="não achou registros"
+                    )
+                )
+        except Exception as erro:  # noqa: BLE001 — idem
+            tentativas.append(
+                TentativaDeRota(rota=nome, nivel=2, sucesso=False, motivo=str(erro))
+            )
 
     # PyMuPDF não aceita ordem de coluna — sempre lê pelo cabeçalho que o
     # próprio detector encontrar. Zero configuração, mas por isso mesmo não
@@ -305,48 +390,86 @@ def _tentar_deterministicos(
         registros = extrator.extrair(documento_vazio)
         if registros:
             resultados["pymupdf"] = registros
-    except Exception:  # noqa: BLE001 — idem
-        pass
+            tentativas.append(
+                TentativaDeRota(
+                    rota="pymupdf",
+                    nivel=2,
+                    sucesso=True,
+                    motivo=f"{len(registros)} registro(s)",
+                    registros=len(registros),
+                )
+            )
+        else:
+            tentativas.append(
+                TentativaDeRota(
+                    rota="pymupdf", nivel=2, sucesso=False, motivo="não achou registros"
+                )
+            )
+    except Exception as erro:  # noqa: BLE001 — idem
+        tentativas.append(
+            TentativaDeRota(rota="pymupdf", nivel=2, sucesso=False, motivo=str(erro))
+        )
 
-    return resultados
+    return resultados, tentativas
 
 
 def _tentar_palavra_chave(
     pagina: Pagina, vocabulario: list[CampoEsperado] | None
-) -> DecisaoDeRota | None:
+) -> tuple[DecisaoDeRota | None, TentativaDeRota | None]:
     """Nível 2b: acha valor por proximidade de rótulo, sem tabela nenhuma.
 
     Só roda se um vocabulário foi declarado — sem ele não há nome de campo
-    para procurar, e o núcleo permanece agnóstico. Casamento é exato
-    (`parser.extratores.palavra_chave`, deliberadamente conservador); página
-    sem achado não é erro, só significa que este nível não bastou.
+    para procurar, e o núcleo permanece agnóstico; nesse caso devolve
+    `(None, None)`, sem tentativa — o nível nem chegou a executar. Casamento
+    é exato (`parser.extratores.palavra_chave`, deliberadamente
+    conservador); página sem achado não é erro, só significa que este nível
+    não bastou — mas, tendo rodado, gera tentativa (sucesso ou falha).
     """
     if not vocabulario:
-        return None
+        return None, None
 
     from parser.extratores.palavra_chave import ExtratorPorPalavraChave
 
     documento_pagina = DocumentoCanonico(identificador="_planejamento", paginas=[pagina])
     registros = ExtratorPorPalavraChave(vocabulario).extrair(documento_pagina)
     if not registros:
-        return None
+        tentativa = TentativaDeRota(
+            rota="palavra_chave",
+            nivel=2,
+            sucesso=False,
+            motivo="nenhum campo casado por rótulo",
+        )
+        return None, tentativa
 
     achados = sorted(n for n in registros[0].campos if n != "identificador")
-    return DecisaoDeRota(
+    motivo = f"achou {len(achados)} campo(s) por palavra-chave: {', '.join(achados)}"
+    tentativa = TentativaDeRota(
+        rota="palavra_chave", nivel=2, sucesso=True, motivo=motivo, registros=len(registros)
+    )
+    decisao = DecisaoDeRota(
         pagina=pagina.numero,
         rota="palavra_chave",
         nivel=2,
-        motivo=f"achou {len(achados)} campo(s) por palavra-chave: {', '.join(achados)}",
+        motivo=motivo,
+        tentativas=(tentativa,),
     )
+    return decisao, tentativa
 
 
 def _decidir_entre_deterministicos(
-    numero: int, resultados: dict[str, list], candidato, colunas: list[str] | None
+    numero: int,
+    resultados: dict[str, list],
+    candidato,
+    colunas: list[str] | None,
+    tentativas: tuple[TentativaDeRota, ...] = (),
 ) -> DecisaoDeRota | None:
     """Decide a partir do que as rotas determinísticas encontraram — ou não decide.
 
     Devolve `None` quando nenhuma rota achou nada, ou quando mais de uma achou
     mas discordou demais: nos dois casos, quem chamou escala para o nível 3.
+    `tentativas` (opcional — quem chama de fora de `_planejar_pagina`, como os
+    testes diretos, não precisa fornecer) só viaja na decisão, não influencia
+    a escolha.
     """
     if not resultados:
         return None
@@ -361,6 +484,7 @@ def _decidir_entre_deterministicos(
             confianca=candidato.confianca if (candidato and nome == "posicional") else None,
             layout=candidato.layout if (candidato and nome == "posicional") else None,
             ordem_das_colunas=colunas if nome != "posicional" else None,
+            tentativas=tentativas,
         )
 
     saidas = {
@@ -386,6 +510,7 @@ def _decidir_entre_deterministicos(
         nivel=2,
         motivo=motivo,
         registros=[r.model_dump(mode="json") for r in registros_consolidados],
+        tentativas=tentativas,
     )
 
 

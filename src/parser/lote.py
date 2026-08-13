@@ -300,7 +300,7 @@ def _processar_por_pagina(
     pendência, e as demais páginas seguem sendo processadas.
     """
     from parser.fabrica import RotaNaoConfigurada, montar_extrator_para_decisao
-    from parser.planejador import planejar
+    from parser.planejador import TentativaDeRota, planejar
     from parser.portas import DocumentoCanonico
 
     decisoes = planejar(str(arquivo), documento, vocabulario=vocabulario)
@@ -309,6 +309,7 @@ def _processar_por_pagina(
     registros: list[Registro] = []
     contagem: dict[str, int] = {}
     pendencias: list[str] = []
+    trilhas: list[str] = []
 
     for decisao in decisoes:
         contagem[decisao.rota] = contagem.get(decisao.rota, 0) + 1
@@ -321,13 +322,35 @@ def _processar_por_pagina(
             )
         except RotaNaoConfigurada as erro:
             pendencias.append(str(erro))
+            execucao = TentativaDeRota(
+                rota=decisao.rota, nivel=decisao.nivel, sucesso=False, motivo=str(erro)
+            )
+            trilhas.append(_formatar_trilha(decisao, execucao))
             continue
 
         documento_pagina = DocumentoCanonico(
             identificador=documento.identificador,
             paginas=[paginas_por_numero[decisao.pagina]],
         )
-        registros.extend(extrator.extrair(documento_pagina))
+        registros_da_pagina = extrator.extrair(documento_pagina)
+        registros.extend(registros_da_pagina)
+
+        # Só aqui se sabe se a rota escolhida no planejamento de fato
+        # resolveu — `decisao.motivo` explica por que ela foi *escolhida*,
+        # não se ela funcionou; essa é a metade que faltava (PLANO.md,
+        # "Diagnóstico da escada de escalada").
+        execucao = TentativaDeRota(
+            rota=decisao.rota,
+            nivel=decisao.nivel,
+            sucesso=bool(registros_da_pagina),
+            motivo=(
+                f"{len(registros_da_pagina)} registro(s)"
+                if registros_da_pagina
+                else "nenhum registro produzido"
+            ),
+            registros=len(registros_da_pagina),
+        )
+        trilhas.append(_formatar_trilha(decisao, execucao))
 
     # Uma página com imagem embutida gera duas decisões (principal + visão
     # complementar) — contar por decisão, não por página, denunciaria uma
@@ -341,7 +364,28 @@ def _processar_por_pagina(
     )
     if pendencias:
         nota += f" — {len(pendencias)} pendência(s) [{pendencias[0]}]"
+    if trilhas:
+        nota += "\n    " + "\n    ".join(trilhas)
     return registros, nota
+
+
+def _formatar_trilha(decisao, execucao) -> str:
+    """Uma linha de auditoria por página: cada ferramenta tentada antes,
+    sucesso ou falha, a decisão final e o desfecho real da execução —
+    não só a contagem agregada por rota que `nota` já trazia."""
+    partes = [f"pág {decisao.pagina}"]
+    if decisao.tentativas:
+        partes.append(
+            "; ".join(
+                f"{t.rota} {'sucesso' if t.sucesso else 'falhou'} ({t.motivo})"
+                for t in decisao.tentativas
+            )
+        )
+    partes.append(f"decisão: {decisao.rota} ({decisao.motivo})")
+    partes.append(
+        f"execução: {'sucesso' if execucao.sucesso else 'falhou'} ({execucao.motivo})"
+    )
+    return " → ".join(partes)
 
 
 def _converter_unidades(registros: list[Registro], perfil: Any) -> list[Registro]:

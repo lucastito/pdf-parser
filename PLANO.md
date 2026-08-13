@@ -17,12 +17,9 @@
 **Nesta ordem, e só estas quatro — o resto da lista de abertos continua
 depois delas, não em paralelo:**
 
-1. **Diagnóstico da escada de escalada** — seção própria, logo depois da
-   tabela "Mapa completo dos P0" mais abaixo (busque "Diagnóstico da escada
-   de escalada — registrado em 2026-08-12, não implementado"). Ainda **sem
-   desenho** — a primeira coisa a fazer é decidir onde o registro de
-   execução por página vive (estender `DecisaoDeRota`? um tipo novo?), não
-   sair escrevendo código.
+1. ✅ **Diagnóstico da escada de escalada** — **fechado em 2026-08-13.**
+   Seção própria, logo depois da tabela "Mapa completo dos P0" mais abaixo,
+   atualizada com o que foi implementado; detalhe completo em `ADR-0027`.
 2. **O resto do −1.4** — tabela P-1 mais abaixo e a seção "−1.4, o que
    foi fechado e o que continua aberto", bloco "Ainda aberto": taxonomia
    completa (só 5 de ~19 características têm detector), algoritmo de
@@ -275,37 +272,38 @@ pra uma classificação mais cara (`LLM_SIMPLES`) em vez de descartar direto
 - A correção do `triagem.Classe` grosseiro (parágrafo curto acima) —
   precisa de medição antes de mexer, não é para hoje.
 
-### Diagnóstico da escada de escalada — registrado em 2026-08-12, não implementado
+### Diagnóstico da escada de escalada — ✅ fechado em 2026-08-13
 
-**Pedido:** em produção, a cada página que sobe de nível na escada
-(determinístico → palavra-chave → llm → vlm), registrar **por que** subiu, e
-quando um nível resolve, fechar o registro com **por que os anteriores não
-resolveram e por que este resolveu**. Um caso de 3 níveis tentados (ex.:
-determinístico falhou, llm falhou, vlm funcionou) produz 3 informações úteis
-juntas: duas justificativas de falha + uma de sucesso — o log por
-documento/página vira uma trilha auditável, não só uma contagem.
+**Pedido original (2026-08-12):** em produção, a cada página que sobe de
+nível na escada, registrar **por que** subiu, e quando um nível resolve,
+fechar o registro com **por que os anteriores não resolveram e por que este
+resolveu**. Refinado em conversa com o usuário (2026-08-13): não só a rota
+final — **cada ferramenta/modelo testado** (posicional, pdfplumber, camelot,
+pymupdf, palavra-chave) deve gerar log, sucesso ou falha, por página e por
+documento.
 
-**O que já existe:** `DecisaoDeRota.motivo` (`planejador.py`) já é calculado
-por página e já explica *por que escalou* — "rotas determinísticas
-divergiram acima do limiar", "confiança insuficiente (X%)", "geometria não
-reconheceu estrutura", "sem camada de texto", etc. Isso cobre a metade
-"por que não resolveu antes".
+**Desenho e implementação — detalhe completo em `ADR-0027`:**
+- `planejador.TentativaDeRota` (rota, nível, sucesso, motivo, registros) —
+  uma entrada por ferramenta que **de fato executou** numa página.
+  `DecisaoDeRota` ganhou `tentativas: tuple[TentativaDeRota, ...]`, montada
+  dentro de `_planejar_pagina`/`_tentar_deterministicos`/
+  `_tentar_palavra_chave`, que deixaram de descartar falha em silêncio.
+- `lote.py::_processar_por_pagina` fecha a segunda metade: depois de
+  `extrator.extrair(...)` rodar de verdade, monta mais uma tentativa com o
+  desfecho real (sucesso e quantos registros, ou falha) e junta com a
+  trilha do planejamento numa linha de auditoria por página
+  (`_formatar_trilha`), anexada ao `nota` que já ia para `ResultadoLote.log`
+  → `.log` ao lado do CSV. Sem arquivo novo, sem schema novo.
+- Testes: `tests/test_planejador.py::TestTrilhaDeTentativas`,
+  `tests/test_lote.py::TestTrilhaDeAuditoriaPorPagina`.
 
-**O que falta, e é lacuna real:**
-1. `motivo` é calculado no **planejamento**, antes de qualquer rota rodar —
-   não sabe ainda se o nível escalado vai funcionar. Falta capturar o
-   **resultado de execução** (registros produzidos, ou erro) no nível que
-   de fato roda, não só a decisão de tentá-lo.
-2. `lote.py::_processar_por_pagina` **descarta `decisao.motivo`** ao montar
-   o log — hoje só conta `"posicional×5, llm×2"`, sem guardar o porquê de
-   nenhuma decisão individual.
-3. Não existe hoje a trilha encadeada por página — "nível 2 falhou por X,
-   nível 3 (llm) falhou por Y, nível 3 (vlm) funcionou e achou Z" — como um
-   registro só, consultável depois.
-
-**Não implementado hoje** — desenho novo, vale medir onde encaixa melhor
-(estender `DecisaoDeRota`? um `RegistroDeExecucao` novo, por página, que
-`lote.py` monta ao redor da decisão + resultado?) antes de escrever código.
+**Escopo confirmado com o usuário, e deliberadamente fora desta fatia:**
+nenhum fallback de execução foi construído (ex. llm falha em runtime →
+tenta outro llm ou vlm automaticamente). Qual modelo é "principal" e qual é
+"reserva" só se decide depois do experimento de avaliação de modelos do
+Cenário B (`ADR-0026`) — decidir agora seria ajuste no escuro. O formato de
+`tentativas` (uma sequência, não um enum de dois passos) foi pensado de
+propósito para caber esse fallback depois sem mudar de esquema.
 
 ### Mapa completo dos P0 da auditoria externa (`AUDITORIA_TECNICA_CIENTIFICA.md`)
 
@@ -517,10 +515,10 @@ Lista do que procurar: [CARACTERISTICAS.md](experimentos/pdf/CARACTERISTICAS.md)
 
 | | |
 |---|---|
-| Testes | **819 passando**, 10 saltados (`pytest -m "not experimento_a"`) — atualizado em 2026-08-12 após fechar P-1.1/P0.1, −1.3, (parcialmente) −1.4, auditoria de agnosticismo de domínio (`mapeamento`/`gabarito`), modelo de descoberta de característica (`MetodoDeDeteccao`, registro de sondas) e `CLI --vocabulario`. `pytest-randomly` ligado por padrão (ordem embaralhada a cada rodada) e gatilho automático de captura de instabilidade — ver −1.2 |
-| Estilo | `flake8` e `black` limpos — drift de formatação (versão de `black` mais nova) corrigido em 2026-08-12 |
+| Testes | **830 passando**, 10 saltados (`pytest -m "not experimento_a"`) — atualizado em 2026-08-13 após fechar o diagnóstico da escada de escalada (trilha de tentativas por página, `ADR-0027`) |
+| Estilo | `flake8` e `black` limpos |
 | Guarda de confidencialidade | 9/9 |
-| ADRs | **24** |
+| ADRs | **27** |
 | Ciclos de importação | **nenhum** (39 módulos) |
 | Rotas com resultado gravado | 7 de 8 — a de visão vive à parte |
 | Documentos-caso | **19**, cobrindo 19 características — ver [pdf/](experimentos/pdf/) |

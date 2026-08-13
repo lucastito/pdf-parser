@@ -11,6 +11,7 @@ from parser.modelo import Campo, Evidencia, Registro
 from parser.planejador import (
     CONFIANCA_MINIMA_DE_CALIBRACAO,
     LIMIAR_DE_CONCORDANCIA,
+    TentativaDeRota,
     _decidir_entre_deterministicos,
     planejar,
 )
@@ -268,6 +269,78 @@ class TestVlmComplementarPorImagemEmbutida:
 
     def test_pagina_sem_imagem_nao_ganha_decisao_extra(self, pdf_texto_corrido):
         assert len(_planejar(pdf_texto_corrido)) == 1
+
+
+class TestTrilhaDeTentativas:
+    """A escalada vira auditável: cada ferramenta que rodou fica registrada
+    em `DecisaoDeRota.tentativas`, sucesso ou falha — não só o vencedor.
+    Registrado no PLANO.md em 2026-08-12 ("Diagnóstico da escada de
+    escalada"), desenhado em 2026-08-13."""
+
+    def test_escalada_registra_as_deterministicas_que_divergiram(
+        self, pdf_tabela_sem_unidade_reconhecivel
+    ):
+        (decisao,) = _planejar(pdf_tabela_sem_unidade_reconhecivel)
+        assert decisao.rota == "llm"
+        rotas_tentadas = {t.rota for t in decisao.tentativas}
+        # pdfplumber e Camelot leem por geometria de espaço em branco, sem
+        # âncora de unidade — acham a tabela mesmo sem o "(kcal)" que a
+        # calibração exige; é exatamente por isso que divergem e escalam.
+        assert "pdfplumber" in rotas_tentadas
+        assert "camelot" in rotas_tentadas
+        assert "pymupdf" in rotas_tentadas
+        # posicional não é tentado aqui: sem calibração confiável, o nível
+        # nem chega a executar — não é falha, é pré-condição não satisfeita.
+        assert "posicional" not in rotas_tentadas
+
+    def test_tentativa_de_sucesso_traz_contagem_de_registros(
+        self, pdf_tabela_sem_unidade_reconhecivel
+    ):
+        (decisao,) = _planejar(pdf_tabela_sem_unidade_reconhecivel)
+        sucessos = [t for t in decisao.tentativas if t.sucesso]
+        assert sucessos
+        assert all(t.registros > 0 for t in sucessos)
+
+    def test_pagina_resolvida_no_nivel_2_tambem_registra_a_propria_tentativa(
+        self, pdf_tabela_calibravel
+    ):
+        """O vencedor também aparece na trilha — a trilha é "tudo que
+        rodou", não só "o que não deu certo"."""
+        (decisao,) = _planejar(pdf_tabela_calibravel)
+        assert decisao.rota == "posicional"
+        vencedoras = [t for t in decisao.tentativas if t.rota == "posicional"]
+        assert vencedoras
+        assert vencedoras[0].sucesso is True
+
+    def test_palavra_chave_sem_achado_registra_tentativa_de_falha(self, pdf_texto_corrido):
+        vocabulario = [CampoEsperado(nome="algo_que_nao_esta_la", sinonimos=("Xyzzy",))]
+        (decisao,) = _planejar(pdf_texto_corrido, vocabulario=vocabulario)
+        assert decisao.rota == "llm"
+        (tentativa,) = [t for t in decisao.tentativas if t.rota == "palavra_chave"]
+        assert tentativa.sucesso is False
+
+    def test_sem_vocabulario_nao_gera_tentativa_de_palavra_chave(self, pdf_texto_corrido):
+        """Sem vocabulário declarado, o nível 2b nem executa — não é uma
+        tentativa que falhou, é um nível que não se aplica."""
+        (decisao,) = _planejar(pdf_texto_corrido, vocabulario=None)
+        assert not any(t.rota == "palavra_chave" for t in decisao.tentativas)
+
+    def test_decidir_entre_deterministicos_propaga_tentativas_fornecidas(self):
+        tentativas = (TentativaDeRota(rota="pdfplumber", nivel=2, sucesso=False, motivo="x"),)
+        decisao = _decidir_entre_deterministicos(
+            1, {"camelot": [_registro("1 X", v=10.0)]}, None, None, tentativas
+        )
+        assert decisao is not None
+        assert decisao.tentativas == tentativas
+
+    def test_decidir_entre_deterministicos_sem_tentativas_fica_vazio_por_padrao(self):
+        """Chamada direta (como os testes acima desta classe) não é
+        obrigada a fornecer tentativas — `planejador.py` sempre fornece."""
+        decisao = _decidir_entre_deterministicos(
+            1, {"camelot": [_registro("1 X", v=10.0)]}, None, None
+        )
+        assert decisao is not None
+        assert decisao.tentativas == ()
 
 
 class TestDecisaoSempreTemMotivo:

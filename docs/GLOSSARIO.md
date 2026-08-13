@@ -92,6 +92,20 @@ Uma estratégia de extração: `posicional`, `pdfplumber`, `camelot`, `ocr`,
 `linear`, `pymupdf`, `llm`, `vlm`. Mais as variantes `-menor`, que rodam o mesmo
 extrator com um modelo menor.
 
+### tentativa (de rota)
+
+**Não é o mesmo que decisão.** Uma decisão (`DecisaoDeRota`) é a rota
+**escolhida** para uma página — uma só, mais o motivo. Uma tentativa
+(`TentativaDeRota`) é uma rota que **rodou de verdade**, tenha sido a
+vencedora ou não — uma página pode ter várias, quando mais de uma
+ferramenta determinística é testada antes de decidir entre elas (ADR-0027).
+
+Só existe tentativa para o que **executou**. Uma rota que nem chega a
+rodar por pré-condição não satisfeita (posicional sem confiança de
+calibração, palavra-chave sem vocabulário declarado) não gera tentativa —
+essa ausência já está explicada no `motivo` da decisão, não é uma falha
+registrável.
+
 ### denominador comum
 
 Os modelos que rodam em **todas** as máquinas. São o ponto de contato que torna a
