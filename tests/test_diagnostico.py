@@ -14,9 +14,12 @@ import pytest
 
 from parser.diagnostico import (
     Achado,
+    MetodoDeDeteccao,
     Severidade,
+    caracteristicas_do_documento,
     caracterizar_documento,
     caracterizar_pagina,
+    contagem_por_caracteristica,
     diagnosticar,
     paginas_por_caracteristica,
     validar_registros,
@@ -157,6 +160,114 @@ class TestCaracterizarPagina:
         assert "1" in achado.detalhe
 
 
+class TestMetodoDeDeteccao:
+    """Todo achado de característica declara **como** foi descoberto — a
+    mesma disciplina que o projeto já aplica ao valor extraído (proveniência
+    por campo, CLAUDE.md), aplicada agora à própria detecção da
+    característica.
+    """
+
+    def test_rotacao_e_metadado_nativo(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        pagina = documento.new_page()
+        pagina.insert_text((72, 72), "texto")
+        pagina.set_rotation(90)
+        caminho = tmp_path / "rot.pdf"
+        documento.save(str(caminho))
+        documento.close()
+
+        aberto = fitz.open(caminho)
+        try:
+            (achado,) = [
+                a for a in caracterizar_pagina(aberto, 1) if a.codigo == "pagina-rotacionada"
+            ]
+        finally:
+            aberto.close()
+        assert achado.metodo is MetodoDeDeteccao.METADADO_NATIVO
+
+    def test_sem_camada_de_texto_e_ferramenta_deterministica(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        documento.new_page()
+        caminho = tmp_path / "sem-texto.pdf"
+        documento.save(str(caminho))
+        documento.close()
+
+        aberto = fitz.open(caminho)
+        try:
+            (achado,) = [
+                a for a in caracterizar_pagina(aberto, 1) if a.codigo == "sem-camada-de-texto"
+            ]
+        finally:
+            aberto.close()
+        assert achado.metodo is MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA
+
+    def test_achado_de_validacao_de_saida_nao_declara_metodo(self):
+        """`validar_registros` examina resultado de extração, não
+        característica de página — `metodo` não se aplica."""
+        (achado,) = validar_registros([])
+        assert achado.metodo is None
+
+    def test_nenhum_achado_usa_llm_simples_ainda(self, pdf_exemplo):
+        """Gap real, declarado: nenhum detector de característica hoje usa
+        método 3. É o que falta pro eixo de domínio da taxonomia (ADR-0021)."""
+        achados = diagnosticar(str(pdf_exemplo))
+        assert not any(a.metodo is MetodoDeDeteccao.LLM_SIMPLES for a in achados)
+
+
+class TestRegistroDeSondas:
+    """`caracterizar_pagina` não verifica um catálogo fechado item a item —
+    roda um registro de sondas e reporta o que cada uma achar. Adicionar
+    característica nova é registrar uma sonda nova; esta suíte prova que
+    isso não exige tocar em `caracterizar_pagina`.
+    """
+
+    def test_registrar_uma_sonda_nova_aparece_sem_tocar_a_funcao(
+        self, pdf_exemplo, monkeypatch
+    ):
+        import parser.diagnostico as modulo
+
+        def _sonda_de_teste(documento, numero):
+            return Achado(
+                codigo="caracteristica-de-teste",
+                severidade=Severidade.NOTA,
+                detalhe="sonda de teste sempre dispara",
+                acao="nenhuma",
+                metodo=MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA,
+            )
+
+        monkeypatch.setattr(modulo, "_SONDAS", modulo._SONDAS + [_sonda_de_teste])
+
+        import fitz
+
+        aberto = fitz.open(pdf_exemplo)
+        try:
+            codigos = {a.codigo for a in modulo.caracterizar_pagina(aberto, 1)}
+        finally:
+            aberto.close()
+        assert "caracteristica-de-teste" in codigos
+
+    def test_sonda_que_devolve_none_nao_produz_achado(self, pdf_exemplo, monkeypatch):
+        import fitz
+
+        import parser.diagnostico as modulo
+
+        aberto = fitz.open(pdf_exemplo)
+        try:
+            antes = len(modulo.caracterizar_pagina(aberto, 1))
+
+            monkeypatch.setattr(
+                modulo, "_SONDAS", modulo._SONDAS + [lambda documento, numero: None]
+            )
+            depois = len(modulo.caracterizar_pagina(aberto, 1))
+        finally:
+            aberto.close()
+        assert depois == antes
+
+
 class TestCaracterizarDocumento:
     """`caracterizar_pagina` já existe página a página, mas só serve a quem
     já sabe qual página perguntar (o roteador, um número por vez). Falta a
@@ -253,6 +364,83 @@ class TestPaginasPorCaracteristica:
             caracterizar_documento(str(pdf_exemplo))
         )
         assert por_caracteristica == {}
+
+
+class TestCaracteristicasDoDocumento:
+    """A característica do PDF é a **soma** das características das
+    páginas — pedido direto: "o pdf tem uma ou mais características que é a
+    soma das características das páginas"."""
+
+    def test_soma_das_paginas_e_um_conjunto(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        normal = documento.new_page()
+        normal.insert_text((72, 72), "texto")
+        rotacionada = documento.new_page()
+        rotacionada.insert_text((72, 72), "texto")
+        rotacionada.set_rotation(90)
+        caminho = tmp_path / "mista.pdf"
+        documento.save(str(caminho))
+        documento.close()
+
+        assert caracteristicas_do_documento(str(caminho)) == {"pagina-rotacionada"}
+
+    def test_documento_sem_nenhuma_caracteristica_devolve_conjunto_vazio(self, pdf_exemplo):
+        assert caracteristicas_do_documento(str(pdf_exemplo)) == set()
+
+    def test_arquivo_inexistente_falha_claro(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            caracteristicas_do_documento(str(tmp_path / "nao-existe.pdf"))
+
+
+class TestContagemPorCaracteristica:
+    """ "Quais são as maiores características de um PDF" — quantas páginas
+    cada uma tem, da maior pra menor."""
+
+    def _documento_com_tres_rotacionadas_e_uma_imagem(self, tmp_path):
+        import fitz
+
+        documento = fitz.open()
+        for _ in range(3):
+            pagina = documento.new_page()
+            pagina.insert_text((72, 72), "texto")
+            pagina.set_rotation(90)
+
+        pagina = documento.new_page()
+        pagina.insert_text((72, 72), "texto")
+        pixmap = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 4, 4))
+        pixmap.set_rect(pixmap.irect, (255, 0, 0))
+        pagina.insert_image(
+            fitz.Rect(0, 0, pagina.rect.width, pagina.rect.height * 0.5), pixmap=pixmap
+        )
+
+        caminho = tmp_path / "documento.pdf"
+        documento.save(str(caminho))
+        documento.close()
+        return caminho
+
+    def test_conta_paginas_por_caracteristica(self, tmp_path):
+        caminho = self._documento_com_tres_rotacionadas_e_uma_imagem(tmp_path)
+
+        contagem = contagem_por_caracteristica(str(caminho))
+
+        assert contagem["pagina-rotacionada"] == 3
+        assert contagem["imagem-embutida"] == 1
+
+    def test_ordena_da_maior_para_a_menor(self, tmp_path):
+        caminho = self._documento_com_tres_rotacionadas_e_uma_imagem(tmp_path)
+
+        contagem = contagem_por_caracteristica(str(caminho))
+
+        assert list(contagem.keys())[0] == "pagina-rotacionada"
+
+    def test_documento_sem_nenhuma_caracteristica_devolve_dicionario_vazio(self, pdf_exemplo):
+        assert contagem_por_caracteristica(str(pdf_exemplo)) == {}
+
+    def test_arquivo_inexistente_falha_claro(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            contagem_por_caracteristica(str(tmp_path / "nao-existe.pdf"))
 
 
 class TestImagemEmbutida:

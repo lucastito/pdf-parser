@@ -164,6 +164,71 @@ class TestIngestao:
         assert "Rótulo X" in erro
 
 
+class TestVocabularioNaCli:
+    """`--vocabulario` era só parâmetro Python de `ingerir()` — sem CLI, quem
+    for rodar o Cenário B em produção não tinha como declarar vocabulário
+    sem escrever um script próprio (gap registrado em `PLANO.md`).
+    """
+
+    def _planilha(self, tmp_path):
+        import openpyxl
+
+        caminho = tmp_path / "schema.xlsx"
+        workbook = openpyxl.Workbook()
+        planilha = workbook.active
+        planilha.title = "DADOS"
+        planilha.append(("MODULE", "SUBGROUP", "PARAMETER", "DESCRIPTION"))
+        planilha.append(("Geral", "Local", "Profundidade", "Profundidade de referência."))
+        workbook.save(caminho)
+        return caminho
+
+    def test_sem_abas_vira_mensagem(self, tmp_path, capsys):
+        entrada = tmp_path / "vazia"
+        entrada.mkdir()
+        planilha = self._planilha(tmp_path)
+
+        codigo = main(["ingerir", str(entrada), "--vocabulario", str(planilha)])
+
+        assert codigo == 2
+        assert "--vocabulario-abas" in capsys.readouterr().err
+
+    def test_planilha_inexistente_vira_mensagem(self, tmp_path, capsys):
+        entrada = tmp_path / "vazia"
+        entrada.mkdir()
+
+        codigo = main(
+            [
+                "ingerir",
+                str(entrada),
+                "--vocabulario",
+                str(tmp_path / "nao-existe.xlsx"),
+                "--vocabulario-abas",
+                "DADOS",
+            ]
+        )
+
+        assert codigo == 2
+        assert "vocabulário" in capsys.readouterr().err.lower()
+
+    def test_vocabulario_valido_nao_quebra_a_ingestao(self, tmp_path, capsys):
+        entrada = tmp_path / "vazia"
+        entrada.mkdir()
+        planilha = self._planilha(tmp_path)
+
+        codigo = main(
+            [
+                "ingerir",
+                str(entrada),
+                "--vocabulario",
+                str(planilha),
+                "--vocabulario-abas",
+                "DADOS",
+            ]
+        )
+
+        assert codigo == 0
+
+
 class TestVarreduraNoExperimento:
     """O comando de experimento roda todos os degraus, não só até o primeiro.
 

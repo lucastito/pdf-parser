@@ -26,14 +26,18 @@ from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Any, Callable
 
 from parser.modelo import Registro
 
 __all__ = [
     "Achado",
+    "MetodoDeDeteccao",
     "Severidade",
+    "caracteristicas_do_documento",
     "caracterizar_documento",
     "caracterizar_pagina",
+    "contagem_por_caracteristica",
     "diagnosticar",
     "paginas_por_caracteristica",
     "relatorio",
@@ -62,14 +66,49 @@ class Severidade(Enum):
         return self is Severidade.BLOQUEIA
 
 
+class MetodoDeDeteccao(Enum):
+    """Como uma característica foi descoberta — do mais barato ao mais caro.
+
+    A pergunta não é "esta página tem tabela? tem rotação?" (verificar item a
+    item de um catálogo fechado) — é "que método de descoberta achou o quê,
+    nesta página?". A característica é a **resposta**, não uma pergunta fixa
+    que o código já sabe fazer. O catálogo de características conhecidas
+    (ADR-0021) cresce por decisão de quem desenvolve, ao encontrar algo novo
+    num documento real — não em tempo de execução, no servidor do cliente.
+    """
+
+    METADADO_NATIVO = "metadado-nativo"
+    """Propriedade que o PDF já expõe, lida direto da estrutura do arquivo —
+    sem calcular nada (ex.: atributo de rotação da página, contagem de
+    marcadores `/BaseFont`/`/ToUnicode`)."""
+
+    FERRAMENTA_DETERMINISTICA = "ferramenta-deterministica"
+    """Heurística ou cálculo sobre o conteúdo — determinístico (mesmo PDF,
+    mesmo resultado sempre), sem chamar rede nem modelo (ex.: tentativa de
+    extração de texto, geometria de linha, área de imagem embutida)."""
+
+    LLM_SIMPLES = "llm-simples"
+    """Classificação por um modelo pequeno/rápido, para o que geometria e
+    heurística não alcançam — ex. domínio do documento ("é relatório
+    financeiro ou manual técnico?"), impossível de responder só com
+    coordenada. **Nenhum achado usa este método ainda** — é o que falta pro
+    eixo C da taxonomia (ADR-0021)."""
+
+
 @dataclass(frozen=True)
 class Achado:
-    """Uma característica detectada, com o que fazer a respeito."""
+    """Uma característica detectada, com o que fazer a respeito.
+
+    `metodo` é `None` só para os achados de `validar_registros` (validação
+    de saída, não característica de página) — todo achado de característica
+    declara o método que o descobriu.
+    """
 
     codigo: str
     severidade: Severidade
     detalhe: str
     acao: str
+    metodo: MetodoDeDeteccao | None = None
 
 
 def diagnosticar(caminho: str | Path) -> list[Achado]:
@@ -148,6 +187,49 @@ def paginas_por_caracteristica(
     return paginas
 
 
+def caracteristicas_do_documento(caminho: str | Path) -> set[str]:
+    """A característica do documento é a **soma** das características das
+    páginas — só se apareceu em alguma, sem dizer onde nem quantas vezes.
+
+    Levanta:
+        FileNotFoundError: arquivo inexistente.
+    """
+    return set(paginas_por_caracteristica(caracterizar_documento(caminho)))
+
+
+def contagem_por_caracteristica(caminho: str | Path) -> dict[str, int]:
+    """Quantas páginas do documento têm cada característica — "quais são as
+    maiores características de um PDF", da mais frequente pra menos.
+
+    Levanta:
+        FileNotFoundError: arquivo inexistente.
+    """
+    por_pagina = paginas_por_caracteristica(caracterizar_documento(caminho))
+    return dict(
+        sorted(
+            ((codigo, len(paginas)) for codigo, paginas in por_pagina.items()),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+    )
+
+
+_SONDAS: list[Callable[[Any, int], Achado | None]] = []
+"""Registro de sondas de característica — cada uma roda e reporta o que
+achar, ou `None`. Adicionar característica nova é registrar uma sonda nova
+com `@_sonda`; `caracterizar_pagina` nunca precisa mudar. É a diferença
+entre "verificar item a item de um catálogo fechado" e "descobrir o que
+houver, do jeito mais barato ao mais caro" — a pergunta é "que
+característica tem aqui", a resposta (rotação? imagem? o que for) vem da
+sonda, não da pergunta.
+"""
+
+
+def _sonda(fn: Callable[[Any, int], Achado | None]) -> Callable[[Any, int], Achado | None]:
+    _SONDAS.append(fn)
+    return fn
+
+
 def caracterizar_pagina(documento, numero: int) -> list[Achado]:
     """Os mesmos achados de `diagnosticar`, restritos a **uma** página.
 
@@ -159,40 +241,57 @@ def caracterizar_pagina(documento, numero: int) -> list[Achado]:
     Não inclui `_checar_fontes`: mapa de caracteres é propriedade do dicionário
     de fontes do PDF, não de uma página isolada.
     """
-    achados: list[Achado] = []
-    if _pagina_rotacionada(documento, numero):
-        achados.append(_achado_rotacao(paginas=[numero], total=documento.page_count))
-    if not _pagina_tem_texto(documento, numero):
-        achados.append(
-            Achado(
-                codigo="sem-camada-de-texto",
-                severidade=Severidade.BLOQUEIA,
-                detalhe=f"página {numero} não tem texto extraível",
-                acao=(
-                    "Documento digitalizado: use a rota por reconhecimento óptico. "
-                    "As rotas que dependem da camada de texto não têm o que ler."
-                ),
-            )
-        )
+    return [achado for sonda in _SONDAS if (achado := sonda(documento, numero)) is not None]
+
+
+@_sonda
+def _sonda_rotacao(documento, numero: int) -> Achado | None:
+    if not _pagina_rotacionada(documento, numero):
+        return None
+    return _achado_rotacao(paginas=[numero], total=documento.page_count)
+
+
+@_sonda
+def _sonda_sem_camada_de_texto(documento, numero: int) -> Achado | None:
+    if _pagina_tem_texto(documento, numero):
+        return None
+    return Achado(
+        codigo="sem-camada-de-texto",
+        severidade=Severidade.BLOQUEIA,
+        detalhe=f"página {numero} não tem texto extraível",
+        acao=(
+            "Documento digitalizado: use a rota por reconhecimento óptico. "
+            "As rotas que dependem da camada de texto não têm o que ler."
+        ),
+        metodo=MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA,
+    )
+
+
+@_sonda
+def _sonda_texto_vertical(documento, numero: int) -> Achado | None:
     verticais, horizontais = _orientacao_da_pagina(documento, numero)
     total_linhas = verticais + horizontais
-    if total_linhas and verticais / total_linhas >= 0.30:
-        achados.append(
-            Achado(
-                codigo="texto-vertical",
-                severidade=Severidade.ALERTA,
-                detalhe=f"página {numero}: {verticais} de {total_linhas} linhas verticais",
-                acao=(
-                    "Provável tabela rotacionada, em que cada faixa horizontal traz um "
-                    "atributo de todos os itens em vez de todos os atributos de um item. "
-                    "Alinhar por posição, não por cabeçalho: o cabeçalho detectado será "
-                    "lixo, mas as linhas de dados costumam estar íntegras."
-                ),
-            )
-        )
-    if _pagina_tem_imagem(documento, numero):
-        achados.append(_achado_imagem_embutida(numero))
-    return achados
+    if not total_linhas or verticais / total_linhas < 0.30:
+        return None
+    return Achado(
+        codigo="texto-vertical",
+        severidade=Severidade.ALERTA,
+        detalhe=f"página {numero}: {verticais} de {total_linhas} linhas verticais",
+        acao=(
+            "Provável tabela rotacionada, em que cada faixa horizontal traz um "
+            "atributo de todos os itens em vez de todos os atributos de um item. "
+            "Alinhar por posição, não por cabeçalho: o cabeçalho detectado será "
+            "lixo, mas as linhas de dados costumam estar íntegras."
+        ),
+        metodo=MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA,
+    )
+
+
+@_sonda
+def _sonda_imagem_embutida(documento, numero: int) -> Achado | None:
+    if not _pagina_tem_imagem(documento, numero):
+        return None
+    return _achado_imagem_embutida(numero)
 
 
 def _pagina_rotacionada(documento, numero: int) -> bool:
@@ -222,9 +321,9 @@ como achado.
 
 Sem este piso, `imagem-embutida` disparava em **toda** página de dois
 documentos reais de um cenário corporativo usados para testar isto — o
-"conteúdo visual" era
-sempre o mesmo logotipo de cabeçalho, repetido. Medido nos dois: o logotipo
-ocupa entre 0,1% e 0,6% da página, sempre na mesma razão página após página;
+"conteúdo visual" era sempre o mesmo logotipo de cabeçalho, repetido.
+Medido nos dois: o logotipo ocupa entre 0,1% e 0,6% da página, sempre na
+mesma razão página após página;
 o conteúdo real (diagrama, gráfico, mapa) começa a partir de ~2%, com margem
 folgada entre as duas faixas — nenhuma imagem caiu no meio.
 
@@ -264,6 +363,7 @@ def _achado_imagem_embutida(numero: int) -> Achado:
             "trazer informação diferente na mesma página, e uma rota não "
             "substitui a outra aqui."
         ),
+        metodo=MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA,
     )
 
 
@@ -296,6 +396,7 @@ def _checar_imagem_embutida(documento) -> list[Achado]:
                 "uma leitura complementar por visão (VLM) nessas páginas, mesmo "
                 "quando o texto já foi extraído por outra rota."
             ),
+            metodo=MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA,
         )
     ]
 
@@ -316,6 +417,7 @@ def _achado_rotacao(*, paginas: list[int], total: int) -> Achado:
             "converta as coordenadas de volta ao espaço não rotacionado — a "
             "renderização aplica a rotação, a extração de texto não."
         ),
+        metodo=MetodoDeDeteccao.METADADO_NATIVO,
     )
 
 
@@ -351,6 +453,7 @@ def _checar_camada_de_texto(documento) -> list[Achado]:
                     "Documento digitalizado: use a rota por reconhecimento óptico. "
                     "As rotas que dependem da camada de texto não têm o que ler."
                 ),
+                metodo=MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA,
             )
         ]
     if com_texto < len(list(amostra)):
@@ -363,6 +466,7 @@ def _checar_camada_de_texto(documento) -> list[Achado]:
                     "Documento misto. Triar por página e rotear cada uma para a "
                     "estratégia adequada, em vez de aplicar uma só ao documento todo."
                 ),
+                metodo=MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA,
             )
         ]
     return []
@@ -392,6 +496,7 @@ def _checar_orientacao_do_texto(documento) -> list[Achado]:
                 "Alinhar por posição, não por cabeçalho: o cabeçalho detectado será "
                 "lixo, mas as linhas de dados costumam estar íntegras."
             ),
+            metodo=MetodoDeDeteccao.FERRAMENTA_DETERMINISTICA,
         )
     ]
 
@@ -418,6 +523,7 @@ def _checar_fontes(documento) -> list[Achado]:
                     "Não leia o fluxo de conteúdo diretamente: sem o mapa, os bytes "
                     "não são o texto. Use biblioteca que aplique ToUnicode."
                 ),
+                metodo=MetodoDeDeteccao.METADADO_NATIVO,
             )
         ]
     return []

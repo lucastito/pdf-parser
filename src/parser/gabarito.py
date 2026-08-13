@@ -24,8 +24,6 @@ from parser.modelo import Registro
 
 __all__ = ["Gabarito", "GabaritoInvalido", "medir_acuracia"]
 
-MACROS = ["energia_kcal", "proteina_g", "lipideos_g", "carboidrato_g", "fibra_g"]
-
 MARCAS_DE_CONFERIDO = {"ok", "x", "sim", "v", "true"}
 """Marcações que significam "confere". Qualquer outro texto é o valor corrigido."""
 
@@ -87,7 +85,7 @@ class Gabarito:
                 f"gabarito {arquivo.name} precisa das colunas 'numero' e 'descricao'"
             )
 
-        alvos = campos or [c for c in MACROS if c in colunas]
+        alvos = campos or _colunas_de_valor(colunas)
         if not alvos:
             raise GabaritoInvalido(f"gabarito {arquivo.name} não tem nenhum campo de valor")
 
@@ -122,6 +120,30 @@ class Gabarito:
     ) -> ResultadoExtrator:
         """Compara os registros de uma estratégia com o gabarito."""
         return medir_acuracia("", registros, self, tolerancia=tolerancia)
+
+
+def _colunas_de_valor(colunas: set[str]) -> list[str]:
+    """Infere quais colunas são campo de valor, sem presumir nome de campo.
+
+    O núcleo não sabe nome de domínio (CLAUDE.md) — uma lista fixa tipo
+    `["energia_kcal", "proteina_g", ...]` faria o gabarito só funcionar pra
+    tabela nutricional, e qualquer outro domínio (financeiro, técnico, o que
+    for) exigiria passar `campos` na mão só pra contornar uma suposição que
+    não deveria existir.
+
+    **Formato de conferência** (alguma coluna termina em `_ok`): só entra
+    quem tem uma companheira `_ok` — é o sinal estrutural de que existe
+    conferência humana daquele campo, não o nome dele. Sem essa distinção,
+    uma coluna de metadado como `pagina_pdf` (sem `_ok` companheira) seria
+    tratada como campo a medir, só por não ser `numero`/`descricao`.
+
+    **Formato simples** (nenhuma coluna `_ok` no arquivo): não há esse sinal
+    estrutural, então toda coluna além de `numero`/`descricao` é valor.
+    """
+    tem_conferencia = any(c.endswith("_ok") for c in colunas)
+    if tem_conferencia:
+        return sorted(c for c in colunas if f"{c}_ok" in colunas)
+    return sorted(c for c in colunas if c not in ("numero", "descricao"))
 
 
 def _identificador(linha: dict) -> str:

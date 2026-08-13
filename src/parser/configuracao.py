@@ -201,13 +201,21 @@ class Perfil:
 
     campos_na_ordem: list[str] = field(default_factory=list)
     paginas: list[int] | None = None
-    paginas_de_triagem_declaradas: dict[str, list[int]] = field(default_factory=dict)
-    """Páginas de triagem, por característica — característica → páginas.
+    paginas_de_referencia_por_caracteristica: dict[str, list[int]] = field(
+        default_factory=dict
+    )
+    """Páginas de referência, por característica — característica → páginas.
+
+    O nome evita "triagem", que já nomeia `parser.triagem` (o módulo de
+    classificação por densidade, sem relação nenhuma com isto além da
+    palavra) — colisão que o `GLOSSARIO.md` registra. "Referência" reaproveita
+    o termo que o projeto já usa pro mesmo conceito (`GLOSSARIO.md`, "página
+    de referência": a página fixa usada em toda medição comparável).
 
     Separado de `paginas` porque os propósitos são diferentes — ver
-    `paginas_de_triagem`. A chave é livre: código de achado
+    `paginas_de_referencia`. A chave é livre: código de achado
     (`parser.diagnostico.Achado.codigo`), combinação de vários (o que o
-    ADR-0021 chama de unidade real de triagem — "tabela sem grade +
+    ADR-0021 chama de unidade real de referência — "tabela sem grade +
     digitalizada torta", por exemplo) ou rótulo curado à mão. Este módulo
     não impõe vocabulário de característica, só guarda a relação.
     """
@@ -239,12 +247,12 @@ class Perfil:
             )
         return range(*self.paginas)
 
-    def paginas_de_triagem(self, caracteristica: str = "") -> list[int]:
-        """As páginas de triagem de uma característica — não as de avaliação.
+    def paginas_de_referencia(self, caracteristica: str = "") -> list[int]:
+        """As páginas de referência de uma característica — não as de avaliação.
 
         **São propósitos diferentes, e confundi-los custa caro.** As páginas
         declaradas em `paginas` servem ao gabarito e ao conjunto de reserva, onde
-        amostra maior mede generalização. A triagem mede **configuração de
+        amostra maior mede generalização. A referência mede **configuração de
         modelo** por característica, e para isso uma página por característica
         basta — desde que seja a mesma em todas as máquinas.
 
@@ -261,7 +269,7 @@ class Perfil:
         documento: rodar o documento inteiro por omissão seria o oposto do
         pretendido.
         """
-        declaradas = self.paginas_de_triagem_declaradas.get(caracteristica)
+        declaradas = self.paginas_de_referencia_por_caracteristica.get(caracteristica)
         if declaradas:
             return list(declaradas)
         paginas = self.paginas_do_documento()
@@ -324,7 +332,7 @@ def carregar_perfil(caminho: str | Path) -> Perfil:
         esquema=dados.get("esquema", {}),
         campos_na_ordem=dados.get("campos_na_ordem", []),
         paginas=dados.get("paginas"),
-        paginas_de_triagem_declaradas=dados.get("paginas_de_triagem", {}),
+        paginas_de_referencia_por_caracteristica=dados.get("paginas_de_referencia", {}),
         tolerancia=dados.get("tolerancia", _default("tolerancia")),
         gabarito=dados.get("gabarito"),
         holdout=dados.get("holdout"),

@@ -53,19 +53,46 @@ def _layout_de_candidato(dados: dict) -> LayoutTabela:
     )
 
 
+VARIAVEL_DE_AMBIENTE_TESSERACT = "PARSER_TESSERACT_PATH"
+"""Override explícito do caminho do binário — a prioridade mais alta.
+
+Existe porque `CAMINHOS_CONHECIDOS` abaixo é uma lista de palpites (instalação
+padrão do Windows/Linux), não uma garantia: o produto vai ser instalado em
+servidores variados, da empresa ou de clientes, com Tesseract em qualquer
+lugar — distribuição Linux diferente, ambiente conda, Homebrew no macOS,
+contêiner com layout próprio. Sem essa variável, a única saída pra um caminho
+fora da lista seria editar este arquivo por máquina.
+"""
+
 CAMINHOS_CONHECIDOS = (
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
     r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
     "/usr/bin/tesseract",
     "/usr/local/bin/tesseract",
 )
+"""Só conveniência de último recurso — não é garantia. `PATH` do sistema
+(via `shutil.which`) é o mecanismo correto na maioria dos casos; esta lista
+cobre só os locais de instalação mais comuns do instalador padrão."""
 
 
 def _localizar_tesseract() -> str | None:
-    """Procura o binário no PATH e nos locais usuais de instalação."""
+    """Procura o binário do Tesseract, do mais flexível pro menos.
+
+    1. `PARSER_TESSERACT_PATH` — override explícito, necessário sempre que a
+       instalação não seguir nem o `PATH` nem um dos caminhos comuns abaixo.
+    2. `PATH` do sistema (`shutil.which`) — o caminho correto quando a
+       instalação já expõe o binário do jeito usual do SO.
+    3. `CAMINHOS_CONHECIDOS` — só os locais de instalação mais comuns; nunca
+       o único mecanismo, e sempre contornável pelo item 1 sem editar código.
+    """
+    variavel = os.environ.get(VARIAVEL_DE_AMBIENTE_TESSERACT)
+    if variavel and Path(variavel).exists():
+        return variavel
+
     achado = shutil.which("tesseract")
     if achado:
         return achado
+
     for caminho in CAMINHOS_CONHECIDOS:
         if Path(caminho).exists():
             return caminho

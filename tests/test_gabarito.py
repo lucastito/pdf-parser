@@ -76,6 +76,42 @@ class TestCarga:
             Gabarito.de_arquivo(_csv(tmp_path, "numero,descricao\n1,Arroz\n"))
 
 
+class TestInferenciaDeColunaAgnosticaDeDominio:
+    """O núcleo não pode presumir nome de campo (CLAUDE.md) — sem passar
+    `campos`, a inferência de "qual coluna é valor" tem de funcionar pra
+    **qualquer** domínio, não só pra tabela nutricional.
+
+    Achado real (auditoria de 2026-08-12): existia uma lista fixa
+    `MACROS = ["energia_kcal", "proteina_g", ...]` — um gabarito de domínio
+    diferente (financeiro, técnico, o que fosse) simplesmente não funcionava
+    sem passar `campos` na mão, contornando uma suposição que não deveria
+    estar no núcleo.
+    """
+
+    def test_funciona_sem_passar_campos_em_dominio_nao_nutricional(self, tmp_path):
+        cabecalho = "numero,descricao,receita_mensal,receita_mensal_ok"
+        g = Gabarito.de_arquivo(_csv(tmp_path, f"{cabecalho}\n1,Filial Norte,50000,ok\n"))
+
+        assert g.campos == ["receita_mensal"]
+        assert g.itens["1 Filial Norte"]["receita_mensal"] == "50000"
+
+    def test_metadado_sem_ok_companheira_nao_vira_campo_de_valor(self, tmp_path):
+        """`pagina_pdf` não tem `pagina_pdf_ok` — é metadado, não valor a
+        medir. Incluí-la infla comparações com um campo que nenhum extrator
+        preenche, e o resultado pareceria pior do que é."""
+        g = Gabarito.de_arquivo(_csv(tmp_path, f"{CABECALHO}\n1,Arroz,29,2.6,ok\n"))
+
+        assert g.campos == ["proteina_g"]
+        assert "pagina_pdf" not in g.campos
+
+    def test_formato_simples_aceita_qualquer_nome_de_coluna(self, tmp_path):
+        g = Gabarito.de_arquivo(
+            _csv(tmp_path, "numero,descricao,temperatura_c\n1,Sensor A,36.5\n")
+        )
+
+        assert g.campos == ["temperatura_c"]
+
+
 class TestCorrecaoDoRevisor:
     """A parte que mais importa: a correção precisa virar o valor de referência."""
 
@@ -172,13 +208,15 @@ class TestGabaritoReal:
 
         g = Gabarito.de_arquivo(caminho, gerado_por="posicional")
         assert len(g.itens) == 40
-        assert g.campos == [
+        # Ordem não importa — a inferência é alfabética, não a ordem de uma
+        # lista de domínio declarada à mão (ver TestInferenciaDeColunaAgnosticaDeDominio).
+        assert set(g.campos) == {
             "energia_kcal",
             "proteina_g",
             "lipideos_g",
             "carboidrato_g",
             "fibra_g",
-        ]
+        }
         assert g.total == 200
         assert g.completo
 

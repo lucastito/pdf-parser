@@ -185,6 +185,25 @@ def _ingerir(opcoes: argparse.Namespace) -> int:
         print(f"perfil inválido: {erro}", file=sys.stderr)
         return 2
 
+    vocabulario = None
+    if opcoes.vocabulario:
+        if not opcoes.vocabulario_abas:
+            print(
+                "informe --vocabulario-abas (uma ou mais abas da planilha)",
+                file=sys.stderr,
+            )
+            return 2
+
+        from parser.vocabulario import carregar_campos_do_xlsx
+
+        try:
+            vocabulario = carregar_campos_do_xlsx(
+                opcoes.vocabulario, abas=opcoes.vocabulario_abas
+            )
+        except (FileNotFoundError, ValueError) as erro:
+            print(f"vocabulário inválido: {erro}", file=sys.stderr)
+            return 2
+
     esperados = opcoes.campos or (list(perfil.mapeamento) if perfil else None)
 
     try:
@@ -194,6 +213,7 @@ def _ingerir(opcoes: argparse.Namespace) -> int:
             perfil=perfil,
             campos_esperados=esperados,
             calibrar_por_arquivo=not opcoes.sem_calibrar,
+            vocabulario=vocabulario,
         )
     except FileNotFoundError as erro:
         print(f"{erro}", file=sys.stderr)
@@ -583,6 +603,20 @@ def main(argv: list[str] | None = None) -> int:
     lote.add_argument("--saida", help="caminho do CSV consolidado")
     lote.add_argument("--perfil", type=Path)
     lote.add_argument("--campos", nargs="*", help="campos que o destino exige")
+    lote.add_argument(
+        "--vocabulario",
+        type=Path,
+        help=(
+            "planilha .xlsx com os campos esperados (nome, unidade, opções, faixa) — "
+            "o roteador tenta achar valor por palavra-chave em página sem tabela antes "
+            "de escalar para o modelo"
+        ),
+    )
+    lote.add_argument(
+        "--vocabulario-abas",
+        nargs="*",
+        help="abas da planilha de --vocabulario a mesclar; omitido, lê a única aba",
+    )
     lote.add_argument(
         "--sem-calibrar",
         action="store_true",

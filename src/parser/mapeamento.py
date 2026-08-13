@@ -23,7 +23,7 @@ import unicodedata
 
 from parser.modelo import Campo, Registro
 
-__all__ = ["MAPEAMENTO_NUTRICIONAL", "Mapeamento", "MapeamentoInvalido"]
+__all__ = ["Mapeamento", "MapeamentoInvalido"]
 
 
 class MapeamentoInvalido(ValueError):
@@ -110,18 +110,3 @@ class Mapeamento:
 
     def aplicar_todos(self, registros: list[Registro]) -> list[Registro]:
         return [self.aplicar(r) for r in registros]
-
-
-MAPEAMENTO_NUTRICIONAL: dict[str, list[str]] = {
-    "energia_kcal": ["Energia (kcal)"],
-    "proteina_g": ["Proteína (g)"],
-    "lipideos_g": ["Lipídeos (g)"],
-    "carboidrato_g": ["Carboidrato (g)", "Carbo- idrato (g)"],
-    "fibra_g": ["Fibra Alimentar (g)", "Alimentar Fibra (g)"],
-}
-"""Rótulos observados no documento-caso.
-
-`Carbo- idrato` está aqui porque o nome vem hifenizado em duas linhas no PDF, e
-`Alimentar Fibra` porque a reconstrução posicional pode inverter a ordem. Ambos
-são fatos do documento, não hipóteses.
-"""

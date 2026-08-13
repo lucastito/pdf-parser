@@ -171,7 +171,7 @@ def _entrada_do_ensaio(perfil, de_visao: bool) -> tuple[str, list[str] | None]:
     """
     rota = perfil.rotas["vlm" if de_visao else "llm"]
     documento = RAIZ / perfil.documento
-    pagina = perfil.paginas_de_triagem("pagina-rotacionada")[0]
+    pagina = perfil.paginas_de_referencia("pagina-rotacionada")[0]
 
     prompt = carregar_prompt(RAIZ / rota.prompt).texto()
     colunas = "\n".join(f"{i}. {n}" for i, n in enumerate(perfil.campos_na_ordem, 1))
@@ -243,7 +243,7 @@ def main() -> int:
     perfil = carregar_perfil(RAIZ / "perfis" / "nutricional.json")
 
     print(
-        f"ensaio previo - pagina {perfil.paginas_de_triagem('pagina-rotacionada')[0]}",
+        f"ensaio previo - pagina {perfil.paginas_de_referencia('pagina-rotacionada')[0]}",
         flush=True,
     )
     print(f"{len(MODELOS_DO_EXPERIMENTO)} modelos, saida de {TOKENS_DO_ENSAIO} tokens")

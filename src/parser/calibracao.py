@@ -57,8 +57,15 @@ PASSO = 5.0
 MIN_COLUNAS_DE_VALOR = 8
 """Menos colunas que isto não caracteriza tabela de muitos itens."""
 
-MIN_PROPORCAO_NUMERICA = 0.55
-"""Fração de tokens numéricos que caracteriza faixa de valores."""
+PROPORCAO_NUMERICA_MINIMA_POR_COLUNA = 0.55
+"""Fração de tokens numéricos que caracteriza faixa de valores.
+
+Nome distinto de propósito de `PROPORCAO_NUMERICA_MINIMA_DA_PAGINA`
+(`triagem.py`) — a semelhança dos nomes já causou dúvida se eram a mesma
+constante duplicada. Não são: esta mede uma **coluna** isolada, dentro da
+descoberta de geometria de tabela; aquela mede a **página inteira**, para
+decidir `Classe.DADOS`. Escopos e valores calibrados separadamente.
+"""
 
 
 class CalibracaoFalhou(ValueError):
@@ -264,7 +271,8 @@ def _inicio_dos_valores(
         x
         for x, ps in sorted(por_coluna.items())
         if len(ps) >= 3
-        and sum(1 for p in ps if _numerico(p.texto)) / len(ps) >= MIN_PROPORCAO_NUMERICA
+        and sum(1 for p in ps if _numerico(p.texto)) / len(ps)
+        >= PROPORCAO_NUMERICA_MINIMA_POR_COLUNA
     ]
 
     if len(numericas) < MIN_COLUNAS_DE_VALOR:
@@ -278,8 +286,9 @@ def _inicio_dos_valores(
     # seguro — a faixa de unidades já delimita o outro lado.
     inicio = min(numericas) - PASSO * 3
     evidencias.append(
-        f"x_valores_min {inicio:.1f}: {len(numericas)} colunas com ≥"
-        f"{MIN_PROPORCAO_NUMERICA:.0%} de tokens numéricos, a partir de x≈{min(numericas):.0f}"
+        f"x_valores_min {inicio:.1f}: {len(numericas)} colunas com "
+        f"≥{PROPORCAO_NUMERICA_MINIMA_POR_COLUNA:.0%} de tokens numéricos, "
+        f"a partir de x≈{min(numericas):.0f}"
     )
     return max(inicio, x_unidades[1])
 

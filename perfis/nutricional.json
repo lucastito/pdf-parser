@@ -6,7 +6,7 @@
     45,
     2
   ],
-  "paginas_de_triagem": {
+  "paginas_de_referencia": {
     "pagina-rotacionada": [29]
   },
   "gabarito": "experimentos/golden/taco.csv",

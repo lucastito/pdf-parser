@@ -14,11 +14,22 @@
 > devia) virar conjunto, e a característica como conjunto de códigos de
 > achado já roda em produção desde `planejador.py:132`. O que faltava era só
 > a forma consultável do documento inteiro (`diagnostico.caracterizar_documento`
-> + `diagnostico.paginas_por_caracteristica`, novos) e o `Perfil` comportar N
-> páginas de triagem por característica (`paginas_de_triagem_declaradas`,
-> substitui o escalar `pagina_de_triagem_declarada`). Ver o detalhe completo
-> — inclusive o que continua fora de escopo — em `PLANO.md`, seção "−1.4, o
-> que foi fechado e o que continua aberto".
+> + `diagnostico.paginas_por_caracteristica` + `diagnostico.caracteristicas_do_documento`
+> + `diagnostico.contagem_por_caracteristica`, novos) e o `Perfil` comportar N
+> páginas de referência por característica
+> (`paginas_de_referencia_por_caracteristica` — nome escolhido para não
+> colidir com `triagem.py`; substitui o escalar `pagina_de_triagem_declarada`).
+> Ver o detalhe completo — inclusive o que continua fora de escopo — em
+> `PLANO.md`, seção "−1.4, o que foi fechado e o que continua aberto".
+>
+> **Segunda retificação, mesma sessão: descoberta é aberta, não verificação
+> de catálogo fechado.** Ver a seção "Descoberta de característica: aberta
+> no desenvolvimento, fechada em produção" abaixo — formaliza
+> `diagnostico.MetodoDeDeteccao` (3 métodos, do mais barato ao mais caro) e
+> corrige uma armadilha de enquadramento: a pergunta certa não é "esta
+> página tem característica N?" pra cada N do catálogo — é "que
+> característica(s) esta página tem?", com a resposta vindo da sonda, não
+> de uma lista fixa sendo conferida item a item.
 
 ## Contexto
 
@@ -54,6 +65,21 @@ misto tem páginas nativas e páginas digitalizadas. Um rótulo por arquivo apag
 a distinção justamente no caso que a literatura considera mais difícil — e
 "documento misto" é uma das classes que se quer medir.
 
+> **Limite declarado sobre `triagem.Classe`, não sobre a taxonomia em si
+> (2026-08-12).** Ortogonal não quer dizer preciso. `Classe` decide por dois
+> limiares grosseiros — contagem de palavra e densidade numérica — e os dois
+> têm caso real de erro: uma página com **um parágrafo curto** (a conclusão
+> que "vazou" da página anterior por quebra de formatação, por exemplo) pode
+> cair abaixo de `PALAVRAS_MINIMAS` e virar `DESCARTAVEL`. Isso é mais grave
+> que um erro comum de classe: `DESCARTAVEL` vira `rota="nenhuma"` no
+> roteador — a página é pulada, **zero tentativa de extração**, sem a rede
+> de segurança que protege `DADOS`/`CONTEXTO` errados (a tentativa
+> determinística seguinte falha limpo e escala pro modelo). Conteúdo real
+> pode desaparecer em silêncio. Corrigir isso exige medição — mais sinal que
+> só contagem de palavra, ou escalar o caso ambíguo para uma classificação
+> mais cara (método 3, ver abaixo) em vez de descartar direto — não um
+> número ajustado no escuro. Ver `PLANO.md`, item aberto correspondente.
+
 ## Decisão
 
 **A taxonomia é um segundo eixo de classificação da página**, ao lado de
@@ -63,6 +89,38 @@ Consequências práticas: menos código, e a fonte já existe. `diagnostico.py`
 detecta hoje **cinco** características estruturais, cada uma com severidade e
 ação recomendada — a estrutura `Achado(codigo, severidade, detalhe, acao)` já é o
 encaixe da taxonomia.
+
+## Descoberta de característica: aberta no desenvolvimento, fechada em produção
+
+**A pergunta certa não é "esta página tem tabela? tem rotação?"** — verificar
+item a item um catálogo fixo. É **"que característica(s) esta página tem?"**,
+com a resposta vindo de quem descobre, não da pergunta. `caracterizar_pagina`
+(`diagnostico.py`) reflete isso desde 2026-08-12: não é uma função com um
+`if` por característica catalogada, é um **registro de sondas**
+(`_SONDAS`/`@_sonda`) — cada sonda roda, e reporta um achado ou nada.
+Adicionar característica nova ao código é registrar uma sonda nova; a função
+central nunca muda.
+
+**Três métodos de descoberta, do mais barato ao mais caro** — cada achado
+declara qual usou (`Achado.metodo`, `diagnostico.MetodoDeDeteccao`):
+
+| Método | O que é | Exemplo hoje |
+|---|---|---|
+| `METADADO_NATIVO` | Propriedade que o PDF já expõe, lida direto da estrutura — sem calcular nada | `pagina-rotacionada` (atributo de rotação), `mapa-de-caracteres-incompleto` (contagem de marcadores no arquivo bruto) |
+| `FERRAMENTA_DETERMINISTICA` | Heurística ou cálculo sobre o conteúdo — determinístico, sem rede nem modelo | `sem-camada-de-texto`, `texto-vertical`, `imagem-embutida` |
+| `LLM_SIMPLES` | Classificação por modelo pequeno/rápido, pro que geometria não alcança | **nenhum achado usa ainda** — é o que falta pro eixo C (domínio) |
+
+**O catálogo de características conhecidas cresce por decisão de quem
+desenvolve, não em tempo de execução.** Rodar um LLM livre (ou uma
+ferramenta determinística nova) sobre um documento real pode revelar uma
+característica que não está nas 19 de hoje — isso é trabalho de
+**desenvolvimento**: a pessoa nota, decide se entra no catálogo, e só então
+alguém escreve a sonda (com o método adequado) que a detecta daí em diante.
+**A aplicação instalada no servidor do cliente não faz esse trabalho** — ela
+aplica os métodos já desenvolvidos para as características já catalogadas,
+sejam 19 ou quantas estiverem no código naquele momento. Um ponto de
+extensão pra isso acontecer também em produção é desejável no futuro, mas
+não é frequente o bastante hoje para justificar construir agora.
 
 ## O que já é detectável, medido no código
 
@@ -181,9 +239,10 @@ Marcado por custo de detecção, que é o que decide o que entra primeiro.
 característica exercita, não por parecer variado. Documento que só repete
 característica já coberta não acrescenta informação e custa tempo de execução.
 
-**Na triagem (ADR-0016):** uma página por característica, a mesma em todas as
-máquinas. É o que torna "melhor configuração" uma afirmação por classe, e não uma
-média sobre um conjunto arbitrário.
+**Na página de referência (ADR-0016; nome escolhido para não colidir com
+`triagem.Classe` — ver `GLOSSARIO.md`):** uma página por característica, a
+mesma em todas as máquinas. É o que torna "melhor configuração" uma
+afirmação por classe, e não uma média sobre um conjunto arbitrário.
 
 **No diagnóstico:** hoje ele **descreve**; o roteiro exige que **recomende**. A
 evolução para prescritivo depende de haver medição por característica — e é por

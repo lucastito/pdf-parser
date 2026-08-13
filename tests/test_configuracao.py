@@ -254,20 +254,25 @@ class TestPerfisDoProjeto:
         assert perfil.paginas_do_documento() == []
 
     def test_uma_caracteristica_tem_uma_so_pagina_declarada(self):
-        """Triagem mede configuração; avaliação mede generalização.
+        """Página de referência mede configuração; avaliação mede generalização.
+
+        (Nome escolhido de propósito para não colidir com `parser.triagem`,
+        o módulo de classificação por densidade — mesma palavra, conceito
+        diferente. Ver `GLOSSARIO.md`.)
 
         As 9 páginas do perfil são **estruturalmente idênticas** — medido:
         rotação 90°, densidade numérica entre 0,65 e 0,76, sem imagem. Para
         gabarito e conjunto de reserva isso é certo, porque amostra maior mede
         generalização dentro da característica.
 
-        Para **triagem** dessa mesma característica não acrescenta nada: nove
+        Para a referência dessa mesma característica não acrescenta nada: nove
         medições dela custam 9× e informam 1×. Medido: seis modelos numa
         página levam ~2 h; nas nove, ~18 h.
 
-        E a triagem tem de ser **idêntica entre máquinas** — mesma página, mesmos
-        modelos, mesma configuração. Sem isso, tempo e qualidade não são
-        comparáveis, que é o propósito inteiro do experimento multimáquina.
+        E a página de referência tem de ser **idêntica entre máquinas** — mesma
+        página, mesmos modelos, mesma configuração. Sem isso, tempo e qualidade
+        não são comparáveis, que é o propósito inteiro do experimento
+        multimáquina.
 
         Por isso o perfil declara as duas coisas separadamente — e por
         característica, não um escalar geral: outra característica ganha sua
@@ -278,18 +283,18 @@ class TestPerfisDoProjeto:
         raiz = Path(__file__).resolve().parent.parent
         perfil = carregar_perfil(raiz / "perfis" / "nutricional.json")
 
-        assert perfil.paginas_de_triagem("pagina-rotacionada") == [29]
-        assert perfil.paginas_de_triagem("pagina-rotacionada")[0] in (
+        assert perfil.paginas_de_referencia("pagina-rotacionada") == [29]
+        assert perfil.paginas_de_referencia("pagina-rotacionada")[0] in (
             perfil.paginas_do_documento()
         )
 
-    def test_sem_pagina_de_triagem_declarada_usa_a_primeira(self, tmp_path):
+    def test_sem_pagina_de_referencia_declarada_usa_a_primeira(self, tmp_path):
         """Perfil que não declara cai na primeira página avaliada — nunca em
-        nenhuma, que faria a triagem rodar o documento inteiro por engano."""
+        nenhuma, que faria a medição rodar o documento inteiro por engano."""
         dados = {**PERFIL_MINIMO, "paginas": [28, 45, 2]}
         perfil = carregar_perfil(_escrever(tmp_path, dados))
 
-        assert perfil.paginas_de_triagem("qualquer-caracteristica") == [29]
+        assert perfil.paginas_de_referencia("qualquer-caracteristica") == [29]
 
     def test_a_declaracao_vence_o_padrao(self, tmp_path):
         """Declarar tem de mudar o resultado — senão a declaração é decorativa.
@@ -302,12 +307,12 @@ class TestPerfisDoProjeto:
         dados = {
             **PERFIL_MINIMO,
             "paginas": [28, 45, 2],
-            "paginas_de_triagem": {"pagina-rotacionada": [35]},
+            "paginas_de_referencia": {"pagina-rotacionada": [35]},
         }
         perfil = carregar_perfil(_escrever(tmp_path, dados))
 
-        assert perfil.paginas_de_triagem("pagina-rotacionada") == [35]
-        assert perfil.paginas_de_triagem("pagina-rotacionada")[0] in (
+        assert perfil.paginas_de_referencia("pagina-rotacionada") == [35]
+        assert perfil.paginas_de_referencia("pagina-rotacionada")[0] in (
             perfil.paginas_do_documento()
         )
 
@@ -316,26 +321,26 @@ class TestPerfisDoProjeto:
         lacuna que um campo escalar não permitia fechar."""
         dados = {
             **PERFIL_MINIMO,
-            "paginas_de_triagem": {
+            "paginas_de_referencia": {
                 "pagina-rotacionada": [29],
                 "imagem-embutida": [7],
             },
         }
         perfil = carregar_perfil(_escrever(tmp_path, dados))
 
-        assert perfil.paginas_de_triagem("pagina-rotacionada") == [29]
-        assert perfil.paginas_de_triagem("imagem-embutida") == [7]
+        assert perfil.paginas_de_referencia("pagina-rotacionada") == [29]
+        assert perfil.paginas_de_referencia("imagem-embutida") == [7]
 
     def test_uma_caracteristica_pode_declarar_mais_de_uma_pagina(self, tmp_path):
         """N cresce dentro da própria característica quando isso for decidido
         — o campo é uma lista, não mais um escalar de página única."""
         dados = {
             **PERFIL_MINIMO,
-            "paginas_de_triagem": {"tabela-sem-grade": [10, 22, 40]},
+            "paginas_de_referencia": {"tabela-sem-grade": [10, 22, 40]},
         }
         perfil = carregar_perfil(_escrever(tmp_path, dados))
 
-        assert perfil.paginas_de_triagem("tabela-sem-grade") == [10, 22, 40]
+        assert perfil.paginas_de_referencia("tabela-sem-grade") == [10, 22, 40]
 
     def test_caracteristica_nao_declarada_cai_no_padrao(self, tmp_path):
         """Só a característica pedida sem declaração cai no padrão — as
@@ -343,11 +348,11 @@ class TestPerfisDoProjeto:
         dados = {
             **PERFIL_MINIMO,
             "paginas": [28, 45, 2],
-            "paginas_de_triagem": {"pagina-rotacionada": [29]},
+            "paginas_de_referencia": {"pagina-rotacionada": [29]},
         }
         perfil = carregar_perfil(_escrever(tmp_path, dados))
 
-        assert perfil.paginas_de_triagem("caracteristica-nunca-declarada") == [29]
+        assert perfil.paginas_de_referencia("caracteristica-nunca-declarada") == [29]
 
     def test_o_denominador_comum_e_um_par_de_tamanhos(self):
         """Duas rotas de visão da mesma família, só o tamanho mudando.

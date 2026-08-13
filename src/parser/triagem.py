@@ -27,10 +27,37 @@ from parser.portas import DocumentoCanonico, Pagina
 __all__ = ["Classe", "ResultadoTriagem", "Triagem", "triar"]
 
 PALAVRAS_MINIMAS = 20
-"""Abaixo disto a página não carrega conteúdo aproveitável (capa, folha de rosto)."""
+"""Abaixo disto a página não carrega conteúdo aproveitável (capa, folha de rosto).
 
-PROPORCAO_NUMERICA_MINIMA = 0.45
-"""A partir desta fração de tokens numéricos a página é tratada como tabela."""
+**Limite declarado, não medido.** Uma página com um parágrafo curto — a
+conclusão que "vazou" da página anterior por quebra de formatação, por
+exemplo — pode ficar abaixo deste piso e virar `Classe.DESCARTAVEL`. Isso é
+mais grave do que parece: `DESCARTAVEL` vira `rota="nenhuma"` no roteador
+(`parser.planejador`) — a página é pulada, zero tentativa de extração,
+sem rede de segurança nenhuma (diferente de `DADOS`/`CONTEXTO` errados, que
+ainda escalam para o modelo quando a tentativa determinística falha limpo).
+Conteúdo real pode desaparecer em silêncio. Corrigir isso exige medição
+(mais sinal que só contagem de palavra, ou escalar o caso ambíguo para uma
+classificação mais cara em vez de descartar direto) — não um número ajustado
+no escuro; ver `PLANO.md`.
+"""
+
+PROPORCAO_NUMERICA_MINIMA_DA_PAGINA = 0.45
+"""A partir desta fração de tokens numéricos a página é tratada como tabela.
+
+Nome distinto de propósito de `PROPORCAO_NUMERICA_MINIMA_POR_COLUNA`
+(`calibracao.py`) — a semelhança dos nomes já causou dúvida se eram a mesma
+constante duplicada. Não são: esta mede a página inteira (`Classe.DADOS`),
+aquela mede uma coluna isolada, dentro da descoberta de geometria de
+tabela. Escopos e valores calibrados separadamente.
+
+**Limite declarado, não medido**: densidade numérica é um proxy grosseiro
+para "isto é uma tabela" — um parágrafo cheio de estatística tem densidade
+alta sem ser tabela, e uma tabela de texto (nomes, categorias) tem
+densidade baixa sem deixar de ser tabela. A rede de segurança é a escalada
+do roteador (tentativa determinística falha limpo quando a classificação
+está errada), não a precisão desta heurística.
+"""
 
 
 class Classe(StrEnum):
@@ -64,7 +91,7 @@ def triar(
     pagina: Pagina,
     *,
     palavras_minimas: int = PALAVRAS_MINIMAS,
-    proporcao_numerica_minima: float = PROPORCAO_NUMERICA_MINIMA,
+    proporcao_numerica_minima: float = PROPORCAO_NUMERICA_MINIMA_DA_PAGINA,
 ) -> ResultadoTriagem:
     """Classifica uma página pelo perfil do seu conteúdo."""
     if palavras_minimas < 0:

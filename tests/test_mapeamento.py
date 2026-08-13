@@ -126,7 +126,16 @@ class TestAplicarEmLote:
 
 
 class TestMapeamentoReal:
-    """Contra os rótulos que o extrator realmente produz no documento-caso."""
+    """Contra rótulos do jeito que um extrator de tabela real os produz —
+    hifenizados, com ordem de palavra invertida.
+
+    O exemplo é do domínio nutricional (documento-caso do Cenário A) só
+    porque é o caso real medido — mas o dicionário é **local a este
+    teste**, não do núcleo (`parser.mapeamento`), que não deve conhecer
+    nome de campo de domínio nenhum (achado da auditoria de 2026-08-12:
+    havia um `MAPEAMENTO_NUTRICIONAL` exportado do módulo de produção,
+    nunca referenciado em código de execução — só aqui).
+    """
 
     ROTULOS_REAIS = [
         "Umidade (%)",
@@ -142,10 +151,19 @@ class TestMapeamentoReal:
         "Magnésio (mg)",
     ]
 
-    def test_mapeamento_do_perfil_cobre_os_cinco_macros(self):
-        from parser.mapeamento import MAPEAMENTO_NUTRICIONAL
+    MAPEAMENTO_DE_EXEMPLO = {
+        "energia_kcal": ["Energia (kcal)"],
+        "proteina_g": ["Proteína (g)"],
+        "lipideos_g": ["Lipídeos (g)"],
+        "carboidrato_g": ["Carboidrato (g)", "Carbo- idrato (g)"],
+        "fibra_g": ["Fibra Alimentar (g)", "Alimentar Fibra (g)"],
+    }
+    """`Carbo- idrato` porque o nome vem hifenizado em duas linhas no PDF, e
+    `Alimentar Fibra` porque a reconstrução posicional pode inverter a
+    ordem. Ambos são fatos do documento medido, não hipóteses."""
 
-        m = Mapeamento(MAPEAMENTO_NUTRICIONAL)
+    def test_mapeamento_cobre_os_cinco_macros(self):
+        m = Mapeamento(self.MAPEAMENTO_DE_EXEMPLO)
         registro = Registro(
             campos={
                 "identificador": Campo[str].extraido(valor="1 Arroz", evidencia=EV),
@@ -168,8 +186,17 @@ class TestMapeamentoReal:
 
     def test_energia_em_kj_nao_e_confundida_com_kcal(self):
         """As duas unidades coexistem na tabela; trocá-las erraria por fator ~4."""
-        from parser.mapeamento import MAPEAMENTO_NUTRICIONAL
-
-        m = Mapeamento(MAPEAMENTO_NUTRICIONAL)
+        m = Mapeamento(self.MAPEAMENTO_DE_EXEMPLO)
         saida = m.aplicar(_registro(**{"Energia (kcal)": 124.0, "Energia (kJ)": 517.0}))
         assert saida.campos["energia_kcal"].valor == 124.0
+
+
+class TestNucleoAgnosticoDeDominio:
+    """`parser.mapeamento` não pode exportar vocabulário de domínio nenhum
+    (CLAUDE.md, "núcleo agnóstico") — nem nutricional, nem de qualquer
+    outro. O mapeamento real vem sempre de `perfil.mapeamento`."""
+
+    def test_modulo_nao_exporta_vocabulario_de_dominio(self):
+        import parser.mapeamento as modulo
+
+        assert not hasattr(modulo, "MAPEAMENTO_NUTRICIONAL")

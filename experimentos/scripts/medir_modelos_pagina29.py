@@ -42,23 +42,24 @@ from parser.contexto import aferir  # noqa: E402
 from parser.degraus import Uso  # noqa: E402
 
 
-def _pagina_de_triagem() -> int:
+def _pagina_de_referencia() -> int:
     """A página vem do perfil, não de uma constante neste script.
 
-    Triagem mede **configuração**, e para isso uma página basta — desde que seja
-    a mesma em todas as máquinas. As 9 páginas que o perfil avalia são
-    estruturalmente idênticas (medido: rotação 90°, densidade de 0,65 a 0,76, sem
-    imagem): rodar as nove custaria ~18 h contra ~2 h, para a mesma informação.
+    A página de referência mede **configuração**, e para isso uma basta —
+    desde que seja a mesma em todas as máquinas. As 9 páginas que o perfil
+    avalia são estruturalmente idênticas (medido: rotação 90°, densidade de
+    0,65 a 0,76, sem imagem): rodar as nove custaria ~18 h contra ~2 h, para
+    a mesma informação.
 
     A amostra só cresce quando entra **outra característica**, nunca por
     quantidade (ADR-0016).
     """
-    return carregar_perfil(RAIZ / "perfis" / "nutricional.json").paginas_de_triagem(
+    return carregar_perfil(RAIZ / "perfis" / "nutricional.json").paginas_de_referencia(
         "pagina-rotacionada"
     )[0]
 
 
-PAGINA = _pagina_de_triagem()
+PAGINA = _pagina_de_referencia()
 
 CAMPOS = ["energia_kcal", "proteina_g", "lipideos_g", "carboidrato_g", "fibra_g"]
 

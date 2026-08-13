@@ -170,6 +170,52 @@ class TestExtratorOcr:
             modulo.ExtratorOCR(str(pdf_exemplo)).extrair(doc)
 
 
+class TestLocalizarTesseract:
+    """O produto vai ser instalado em servidores variados (da empresa ou de
+    clientes), com Tesseract em qualquer lugar. `CAMINHOS_CONHECIDOS` é só
+    palpite de instalação padrão — a variável de ambiente é o mecanismo que
+    não exige editar código pra apontar pra um caminho fora da lista.
+    """
+
+    def test_variavel_de_ambiente_tem_prioridade_sobre_o_path(self, tmp_path, monkeypatch):
+        from parser.extratores import ocr as modulo
+
+        binario = tmp_path / "tesseract-customizado"
+        binario.write_text("", encoding="utf-8")
+        monkeypatch.setenv("PARSER_TESSERACT_PATH", str(binario))
+        monkeypatch.setattr(modulo.shutil, "which", lambda nome: "/usr/bin/tesseract-do-path")
+
+        assert modulo._localizar_tesseract() == str(binario)
+
+    def test_variavel_apontando_pra_caminho_inexistente_e_ignorada(self, monkeypatch):
+        """Override errado não pode travar tudo — cai pro mecanismo normal."""
+        from parser.extratores import ocr as modulo
+
+        monkeypatch.setenv("PARSER_TESSERACT_PATH", "/caminho/que/nao/existe/tesseract")
+        monkeypatch.setattr(modulo.shutil, "which", lambda nome: "/usr/bin/tesseract-do-path")
+
+        assert modulo._localizar_tesseract() == "/usr/bin/tesseract-do-path"
+
+    def test_sem_variavel_usa_o_path_do_sistema(self, monkeypatch):
+        from parser.extratores import ocr as modulo
+
+        monkeypatch.delenv("PARSER_TESSERACT_PATH", raising=False)
+        monkeypatch.setattr(modulo.shutil, "which", lambda nome: "/usr/bin/tesseract-do-path")
+
+        assert modulo._localizar_tesseract() == "/usr/bin/tesseract-do-path"
+
+    def test_sem_variavel_e_sem_path_nao_quebra(self, monkeypatch):
+        """Sem nenhum dos três mecanismos, devolve `None` — quem chama já
+        trata isso como "Tesseract não encontrado", não uma exceção aqui."""
+        from parser.extratores import ocr as modulo
+
+        monkeypatch.delenv("PARSER_TESSERACT_PATH", raising=False)
+        monkeypatch.setattr(modulo.shutil, "which", lambda nome: None)
+        monkeypatch.setattr(modulo, "CAMINHOS_CONHECIDOS", ())
+
+        assert modulo._localizar_tesseract() is None
+
+
 class TestRotacaoDePagina:
     """Regressão: página com rotação declarada.
 

@@ -155,7 +155,7 @@ Também **não faz parte deste item**, ainda que relacionado: fazer
 é a outra metade do **P0.5** ("fechado só para o Cenário B"), rastreada à
 parte, não duplicada aqui.
 
-**Fechado:**
+**Fechado (primeira rodada):**
 - `diagnostico.caracterizar_documento(caminho)` — `caracterizar_pagina`
   para todas as páginas do documento, de forma estruturada
   (`{página: [Achado, ...]}`), em vez de só por-página isolada ou agregada
@@ -163,16 +163,71 @@ parte, não duplicada aqui.
   `detalhe`, não como dado consultável).
 - `diagnostico.paginas_por_caracteristica(...)` — a relação inversa,
   código de achado → páginas que o têm; a forma que escolher página de
-  triagem por característica precisa.
-- `Perfil.paginas_de_triagem_declaradas: dict[str, list[int]]` substitui o
-  escalar `pagina_de_triagem_declarada: int | None` — N páginas **por
-  característica**, não um valor só pro documento inteiro.
-  `perfis/nutricional.json` migrado (`"pagina_de_triagem": 29` →
-  `"paginas_de_triagem": {"pagina-rotacionada": [29]}`); os dois scripts
-  que liam o campo antigo (`medir_modelos_pagina29.py`, `ensaio_previo.py`)
-  atualizados.
+  referência por característica precisa.
 - Validado contra documento real do corpus (36 páginas,
   `NARA_JFK_104-10095-10314_skew.pdf`), não só sintético — rodou limpo.
+
+**Fechado (segunda rodada, mesma sessão — reflexão conjunta sobre a
+taxonomia antes de codar mais):**
+- **Auditoria de agnosticismo de domínio, achados reais corrigidos:**
+  `mapeamento.MAPEAMENTO_NUTRICIONAL` (vocabulário nutricional exportado do
+  núcleo, nunca chamado em produção) removido; `gabarito.MACROS` (lista
+  fixa de campo nutricional como *default* de "qual coluna é valor")
+  substituído por inferência estrutural agnóstica de domínio
+  (`_colunas_de_valor`, baseada em companheira `_ok`, não em nome de
+  campo). Achado por leitura completa do código (não busca por
+  palavra-chave), a pedido explícito — a primeira busca por palavra-chave
+  não tinha achado isso.
+- **Nomes de parâmetro que pareciam sobrepostos, mas media coisas
+  diferentes** — `calibracao.MIN_PROPORCAO_NUMERICA` (por coluna) e
+  `triagem.PROPORCAO_NUMERICA_MINIMA` (por página) renomeados pra
+  `PROPORCAO_NUMERICA_MINIMA_POR_COLUNA`/`_DA_PAGINA`, deixando o escopo
+  explícito no nome.
+- **Caminho de instalação do Tesseract hardcoded** (`ocr.CAMINHOS_CONHECIDOS`)
+  — não é hardcoding de domínio, mas é hardcoding de implantação: variável
+  de ambiente `PARSER_TESSERACT_PATH` adicionada como prioridade mais alta,
+  necessária porque o produto será instalado em servidores variados.
+- **Modelo de descoberta formalizado**: `diagnostico.MetodoDeDeteccao`
+  (`METADADO_NATIVO`/`FERRAMENTA_DETERMINISTICA`/`LLM_SIMPLES`) — todo
+  achado de característica agora declara como foi descoberto, mesma
+  disciplina que já existia pra proveniência de campo extraído.
+  `caracterizar_pagina` deixou de ser uma função com um `if` por
+  característica catalogada e virou um **registro de sondas**
+  (`_SONDAS`/`@_sonda`) — adicionar característica nova é registrar sonda
+  nova, a função central nunca muda. Formalizado também: a descoberta de
+  característica **nova** (fora do catálogo de 19) é atividade de
+  desenvolvimento, não algo que a aplicação faz sozinha instalada no
+  servidor do cliente.
+- `diagnostico.caracteristicas_do_documento(caminho) -> set[str]` — a
+  soma das características das páginas — e
+  `diagnostico.contagem_por_caracteristica(caminho) -> dict[str, int]` —
+  "quais são as maiores características de um PDF", ordenado da mais
+  frequente pra menos.
+- `Perfil.paginas_de_referencia_por_caracteristica: dict[str, list[int]]`
+  substitui o escalar `pagina_de_triagem_declarada: int | None` — N páginas
+  **por característica**. Renomeado de "página de triagem" para "página de
+  referência" de propósito: elimina a colisão de nome com o módulo
+  `triagem.py` **por construção**, reaproveitando o termo que o
+  `GLOSSARIO.md` já usava pro mesmo conceito. Perfil real e os scripts que
+  liam o campo antigo, atualizados.
+- `ADR-0021` e `GLOSSARIO.md` atualizados com tudo isso, inclusive uma nova
+  entrada "triagem" no glossário disambiguando os 3 sentidos que
+  colidiam (módulo, página de referência, fase do experimento).
+
+**Achado novo, registrado, não corrigido — precisa de medição, não de
+ajuste no escuro:** `triagem.Classe` decide por dois limiares grosseiros
+(contagem de palavra, densidade numérica), e ao menos um caso real de erro
+é conhecido: uma página com **um parágrafo curto** (a conclusão que "vazou"
+da página anterior por quebra de formatação) pode cair abaixo de
+`PALAVRAS_MINIMAS` e virar `DESCARTAVEL` — que é `rota="nenhuma"` no
+roteador, **zero tentativa de extração**, sem a rede de segurança que
+protege `DADOS`/`CONTEXTO` errados (a tentativa determinística seguinte
+falha limpo e escala pro modelo nesses dois casos; `DESCARTAVEL` não tem
+esse recurso). Conteúdo real pode desaparecer em silêncio. Corrigir exige
+medição — mais sinal que só contagem de palavra, ou escalar o caso ambíguo
+pra uma classificação mais cara (`LLM_SIMPLES`) em vez de descartar direto
+— não um número ajustado sem dado. Ver `ADR-0021`, "Limite declarado sobre
+`triagem.Classe`", e `docs/GLOSSARIO.md`, entrada "classe de conteúdo".
 
 **Ainda aberto, de propósito, fora do escopo de hoje:**
 - Os achados estruturais cobrem só 5 características (rotação, ausência de
@@ -186,6 +241,8 @@ parte, não duplicada aqui.
   fechada — o `ADR-0021` só fixa o princípio ("1 por combinação relevante,
   sem duplicar coleta"), não o "quantas". `Perfil` agora **comporta** N; o
   "como escolher N" ainda é decisão de quem monta o perfil, não automação.
+- A correção do `triagem.Classe` grosseiro (parágrafo curto acima) —
+  precisa de medição antes de mexer, não é para hoje.
 
 ### Mapa completo dos P0 da auditoria externa (`AUDITORIA_TECNICA_CIENTIFICA.md`)
 
@@ -397,7 +454,7 @@ Lista do que procurar: [CARACTERISTICAS.md](experimentos/pdf/CARACTERISTICAS.md)
 
 | | |
 |---|---|
-| Testes | **795 passando**, 10 saltados (`pytest -m "not experimento_a"`) — atualizado em 2026-08-12 após fechar P-1.1/P0.1, −1.3 e (parcialmente) −1.4, cobrir `cli.py::_comparar`, branches de erro de `_avaliar`, e um teste de integração ponta a ponta contra um documento real do corpus. `pytest-randomly` ligado por padrão (ordem embaralhada a cada rodada) e gatilho automático de captura de instabilidade — ver −1.2 |
+| Testes | **819 passando**, 10 saltados (`pytest -m "not experimento_a"`) — atualizado em 2026-08-12 após fechar P-1.1/P0.1, −1.3, (parcialmente) −1.4, auditoria de agnosticismo de domínio (`mapeamento`/`gabarito`), modelo de descoberta de característica (`MetodoDeDeteccao`, registro de sondas) e `CLI --vocabulario`. `pytest-randomly` ligado por padrão (ordem embaralhada a cada rodada) e gatilho automático de captura de instabilidade — ver −1.2 |
 | Estilo | `flake8` e `black` limpos — drift de formatação (versão de `black` mais nova) corrigido em 2026-08-12 |
 | Guarda de confidencialidade | 9/9 |
 | ADRs | **24** |
