@@ -46,6 +46,19 @@ Material sensível vive **apenas** em caminhos ignorados pelo git:
 Em texto versionado, prefira formulações neutras: "o consumidor A / B",
 "o perfil corporativo", "um domínio de aplicação".
 
+**Regra separada, sobre dado pessoal (LGPD), ao usar documento real de um
+cenário corporativo** (fora deste repositório, ver `CLAUDE.local.md`): a
+linha não é "citar nome ou não", é a **natureza do dado**.
+- **Proibido, sem exceção, nem local**: dado de saúde de colaborador,
+  endereço residencial, telefone pessoal de colaborador comum.
+- **Aceitável**: contato profissional (telefone/e-mail comercial) de um
+  cargo em contexto de contrato/proposta/projeto — intrínseco ao modelo de
+  negócio, não dado pessoal no sentido que a LGPD protege. Nome+cargo+
+  assinatura em bloco de aprovação/revisão de documento técnico também
+  conta como padrão profissional.
+Na dúvida sobre qual categoria um achado novo cai, perguntar antes de
+usar — uma resposta anterior sobre um tipo de dado não libera outro tipo.
+
 Dois hooks aplicam isso (`.githooks/pre-commit` e `.githooks/commit-msg`).
 **Nunca** use `--no-verify` neste repositório. Se um hook bloquear, o termo sai —
 não o hook. Ver [.githooks/README.md](.githooks/README.md).
@@ -112,3 +125,25 @@ LLM/VLM é camada **opcional e medida**, nunca o caminho padrão.
 - **Proveniência por campo.** Todo valor carrega se foi extraído, derivado ou inferido, com confiança.
 - **Sem eval, sem produção.** Nenhum dado real em produção sem avaliação medida por campo.
 - **Núcleo agnóstico.** Adicionar formato de entrada ou destino não altera o núcleo.
+
+## Convenções pra quem for trabalhar aqui (agente ou pessoa)
+
+- **Responder em português.** Todo o código, comentário, documentação, ADR e
+  mensagem de commit deste repositório já está em português — manter
+  consistência, inclusive em conversa com quem estiver operando o agente.
+- **Verificar de verdade, não por busca de palavra-chave.** Confirmar
+  ausência de hardcoding, agnosticismo de domínio ou qualquer alegação sobre
+  "o código não faz X" exige ler o arquivo inteiro (ou um agente dedicado
+  fazendo isso) — `grep` por termo adivinhado já deixou passar constante
+  exportada e *default* silencioso que não continham o termo buscado.
+- **Disciplina de escopo.** Itens de backlog que parecem relacionados
+  tematicamente podem ser itens **rastreados separadamente** em
+  [PLANO.md](PLANO.md) — conferir lá antes de expandir o escopo de uma
+  tarefa pra incluir algo "relacionado", em vez de resolver os dois juntos
+  só por conveniência de estar mexendo no mesmo lugar.
+- **`PLANO.md` é a única fonte durável de pendência entre sessões.** Um
+  plano de tarefa (modo de planejamento) é rascunho descartável — o próximo
+  ciclo de planejamento reescreve o arquivo do zero. Qualquer bloqueio,
+  achado ou decisão que precise sobreviver além da tarefa atual tem que ser
+  escrito em `PLANO.md` **antes** de considerar a tarefa fechada, nunca
+  deixado só no plano temporário.
