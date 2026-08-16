@@ -104,11 +104,19 @@ texto+visão custa qualidade, ou não?** `qwen3`/`qwen3-vl` continuam na escada
 como referência — é a família com mais medição acumulada no projeto — e
 `qwen3.5` entra ao lado, não no lugar.
 
+> **Fonte de verdade: `src/parser/escada.py`.** As três tabelas abaixo
+> registram o raciocínio (por quê cada modelo entra); a lista, o nome exato
+> da tag e a rota vivem só no código — se divergir daqui, o código manda.
+> Conferido em 2026-08-16: faltavam 3 modelos nestas tabelas (`qwen3:30b`,
+> `qwen3-vl:30b`, `minicpm-v4.5:8b` — existiam só nas tabelas numeradas mais
+> antigas, abaixo) e `minicpm-v4.6` estava sem a tag exata; corrigido.
+
 ### Escada final de texto (LLM) — 2026-08-13
 
 | Modelo | Fabricante | Tamanho | Pergunta |
 |---|---|---|---|
 | `qwen3:1.7b`/`4b`/`8b`/`14b` | Alibaba | 1,4 / 2,5 / 5,2 / 9,3 GB | referência, mais medida no projeto |
+| `qwen3:30b` | Alibaba | 19 GB | teto de texto — existe pra falhar e marcar o limite |
 | `qwen3.5:0.8b`/`4b`/`9b` | Alibaba | 1,0 / 3,4 / 6,6 GB | unificação texto+visão custa qualidade? |
 | `deepseek-r1:7b`/`8b` | DeepSeek | 4,7 / 5,2 GB | raciocínio dedicado, destilado |
 | `nemotron-3-nano:4b` | NVIDIA | 2,8 GB | fabricante novo |
@@ -123,8 +131,10 @@ como referência — é a família com mais medição acumulada no projeto — e
 | Modelo | Fabricante | Tamanho | Pergunta |
 |---|---|---|---|
 | `qwen3-vl:2b`/`4b`/`8b` | Alibaba | 1,9 / 3,3 / 6,1 GB | referência, mais medida no projeto |
+| `qwen3-vl:30b` | Alibaba | 20 GB | teto de visão — mesma lógica do teto de texto |
 | `qwen3.5:0.8b`/`4b`/`9b` | Alibaba | 1,0 / 3,4 / 6,6 GB | mesma pergunta da escada de texto |
-| `minicpm-v4.6` | OpenBMB | 1,6 GB | piso da escada |
+| `minicpm-v4.6:1b` | OpenBMB | 1,6 GB | piso da escada — tag exata, sem ela o Ollama resolve outro checkpoint |
+| `minicpm-v4.5:8b` | OpenBMB | ~5,5 GB | codificador visual diferente sobre outra base de linguagem |
 | `granite3.2-vision:2b` | IBM | 2,4 GB | reintegrado — ver acima |
 | `gemma4:12b` | Google | ~7,6 GB | controle de independência |
 | `ministral-3:3b` | Mistral AI | 3,0 GB | fabricante europeu, porte de edge |

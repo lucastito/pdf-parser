@@ -54,10 +54,11 @@ antes de rodar `parser ingerir` ou a suíte completa.
 Precisa de um servidor compatível com a API do [Ollama](https://ollama.com)
 no ar (local ou remoto — `url` é parâmetro de rota no perfil).
 
-- **Cenário A** (comparar modelos): a escada completa de 14 modelos vive em
-  código, em `src/parser/escada.py` — é a fonte única, não repita a lista em
-  documentação solta. `experimentos/scripts/1-preparar-maquina.ps1` instala a
-  escada inteira (~93 GB) e é idempotente.
+- **Cenário A** (comparar modelos): a escada vive em código, em
+  `src/parser/escada.py` — é a fonte única; não repita a lista nem a
+  contagem em documentação solta, os dois já mudaram antes.
+  `experimentos/scripts/1-preparar-maquina.ps1` instala a escada inteira e é
+  idempotente.
 - **Cenário B** (uso corporativo): só o modelo que o perfil de produção
   declarar em `rotas.llm.modelo`/`rotas.vlm.modelo` — mantido fora deste
   repositório.

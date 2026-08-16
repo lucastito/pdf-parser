@@ -31,6 +31,25 @@ Sem `denylist.txt`, os hooks avisam e deixam passar — falha aberta, de propós
 um hook que quebra todo commit num clone novo seria desabilitado no primeiro dia.
 A proteção real de conteúdo é o `.gitignore`; os hooks são a segunda camada.
 
+## Falso positivo: `.githooks/allowlist.txt`
+
+Comparação por substring gera falso positivo (ex.: um termo do denylist que também
+aparece dentro de uma palavra legítima, sem relação com o que a lista protege). Pra
+esses casos, sem editar a denylist, crie `.githooks/allowlist.txt` (mesmo formato,
+**um por linha, não versionado**, mesma razão da denylist) com a expressão exata que
+bloqueou:
+
+```sh
+cat > .githooks/allowlist.txt <<'EOF'
+expressão-liberada-aqui
+EOF
+```
+
+Qualquer trecho que bata com uma linha da allowlist deixa de contar como achado —
+é a exceção pensada de que fala o item abaixo, não um jeito de desligar a guarda
+por inteiro. Se o hook bloquear um termo genuinamente sensível, a resposta é
+reescrever a frase, não popular a allowlist.
+
 ## Teste
 
 ```sh
